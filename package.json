@@ -4,6 +4,9 @@
   "description": "Multi-agent ACP client with real-time communication",
   "type": "module",
   "main": "server.js",
+  "bin": {
+    "gmgui": "./bin/gmgui.js"
+  },
   "scripts": {
     "start": "node server.js",
     "start:bun": "bun run server-bun.js",
