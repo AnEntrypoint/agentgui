@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-02-01T11:14:15.474Z",
+  "results": {
+    "passed": 4,
+    "failed": 2,
+    "skipped": 0,
+    "tests": [
+      {
+        "name": "Page loads and displays title",
+        "status": "passed",
+        "duration": 79
+      },
+      {
+        "name": "Static assets load correctly",
+        "status": "passed",
+        "duration": 27
+      },
+      {
+        "name": "API endpoint returns agents list",
+        "status": "passed",
+        "duration": 3
+      },
+      {
+        "name": "WebSocket connects successfully",
+        "status": "passed",
+        "duration": 9
+      },
+      {
+        "name": "Message sending via API works",
+        "status": "failed",
+        "error": "Send failed: 404"
+      },
+      {
+        "name": "Agent connection is tracked",
+        "status": "failed",
+        "error": "Agent not in list"
+      }
+    ]
+  },
+  "environment": {
+    "node": "v24.13.0",
+    "platform": "linux",
+    "url": "http://localhost:3000"
+  }
+}
