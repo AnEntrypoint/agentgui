@@ -294,9 +294,6 @@ class GMGUIApp {
     const messagesDiv = document.getElementById('chatMessages');
     if (!messagesDiv) return;
 
-    // Reset selected agent when switching conversations
-    this.selectedAgent = null;
-
     let headerHtml = '';
     if (conversation.folderPath) {
       headerHtml = `
