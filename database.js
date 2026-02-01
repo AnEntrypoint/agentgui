@@ -15,7 +15,8 @@ let dbData = {
   conversations: {},
   messages: {},
   sessions: {},
-  events: {}
+  events: {},
+  idempotencyKeys: {}
 };
 
 function loadDatabase() {
@@ -23,6 +24,9 @@ function loadDatabase() {
     try {
       const content = fs.readFileSync(dbFilePath, 'utf-8');
       dbData = JSON.parse(content);
+      if (!dbData.idempotencyKeys) {
+        dbData.idempotencyKeys = {};
+      }
       console.log('Database loaded successfully');
     } catch (e) {
       console.error('Error loading database:', e.message);
@@ -31,7 +35,8 @@ function loadDatabase() {
         conversations: {},
         messages: {},
         sessions: {},
-        events: {}
+        events: {},
+        idempotencyKeys: {}
       };
       saveDatabase();
     }
@@ -64,6 +69,36 @@ loadDatabase();
 // Generate unique IDs
 function generateId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+// Idempotency and atomicity helpers
+function setIdempotencyKey(key, value) {
+  dbData.idempotencyKeys[key] = {
+    value,
+    created_at: Date.now(),
+    ttl: 24 * 60 * 60 * 1000
+  };
+}
+
+function getIdempotencyKey(key) {
+  const entry = dbData.idempotencyKeys[key];
+  if (!entry) return null;
+  const isExpired = Date.now() - entry.created_at > entry.ttl;
+  if (isExpired) {
+    delete dbData.idempotencyKeys[key];
+    return null;
+  }
+  return entry.value;
+}
+
+function clearExpiredIdempotencyKeys() {
+  const now = Date.now();
+  for (const key in dbData.idempotencyKeys) {
+    const entry = dbData.idempotencyKeys[key];
+    if (now - entry.created_at > entry.ttl) {
+      delete dbData.idempotencyKeys[key];
+    }
+  }
 }
 
 // Query helpers
@@ -109,8 +144,13 @@ export const queries = {
     return conversation;
   },
 
-  // Messages
-  createMessage(conversationId, role, content) {
+  // Messages with idempotency support
+  createMessage(conversationId, role, content, idempotencyKey = null) {
+    if (idempotencyKey) {
+      const cached = getIdempotencyKey(idempotencyKey);
+      if (cached) return cached;
+    }
+
     const id = generateId('msg');
     const now = Date.now();
     const message = {
@@ -128,6 +168,11 @@ export const queries = {
     }
 
     saveDatabase();
+
+    if (idempotencyKey) {
+      setIdempotencyKey(idempotencyKey, message);
+    }
+
     return message;
   },
 
@@ -173,21 +218,41 @@ export const queries = {
     const session = dbData.sessions[id];
     if (!session) return null;
 
-    if (data.status !== undefined) {
-      session.status = data.status;
-    }
-    if (data.response !== undefined) {
-      session.response = data.response;
-    }
-    if (data.error !== undefined) {
-      session.error = data.error;
-    }
-    if (data.completed_at !== undefined) {
-      session.completed_at = data.completed_at;
-    }
+    const original = JSON.parse(JSON.stringify(session));
 
-    saveDatabase();
-    return session;
+    try {
+      if (data.status !== undefined) {
+        session.status = data.status;
+      }
+      if (data.response !== undefined) {
+        session.response = data.response;
+      }
+      if (data.error !== undefined) {
+        session.error = data.error;
+      }
+      if (data.completed_at !== undefined) {
+        session.completed_at = data.completed_at;
+      }
+
+      saveDatabase();
+      return session;
+    } catch (e) {
+      Object.assign(session, original);
+      throw e;
+    }
+  },
+
+  getLatestSession(conversationId) {
+    const sessions = Object.values(dbData.sessions)
+      .filter(s => s.conversationId === conversationId)
+      .sort((a, b) => b.started_at - a.started_at);
+    return sessions[0] || null;
+  },
+
+  getSessionsByStatus(conversationId, status) {
+    return Object.values(dbData.sessions)
+      .filter(s => s.conversationId === conversationId && s.status === status)
+      .sort((a, b) => b.started_at - a.started_at);
   },
 
   // Events (event sourcing)
@@ -257,6 +322,13 @@ export const queries = {
       }
     }
 
+    clearExpiredIdempotencyKeys();
+
+    saveDatabase();
+  },
+
+  clearIdempotencyKey(key) {
+    delete dbData.idempotencyKeys[key];
     saveDatabase();
   }
 };

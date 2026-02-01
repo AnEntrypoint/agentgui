@@ -87,6 +87,8 @@ class GMGUIApp {
     this.syncWs = null;
     this.broadcastChannel = null;
     this.settings = { autoScroll: true, connectTimeout: 30000 };
+    this.pendingMessages = new Map();
+    this.idempotencyKeys = new Map();
     this.init();
   }
 
@@ -148,7 +150,6 @@ class GMGUIApp {
   handleSyncEvent(event, fromBroadcast = false) {
     switch (event.type) {
       case 'sync_connected':
-        // Just connection confirmation
         break;
 
       case 'conversation_created':
@@ -184,7 +185,21 @@ class GMGUIApp {
         break;
 
       case 'message_created':
-        // Could fetch messages if watching this conversation
+        if (!fromBroadcast && this.broadcastChannel) {
+          this.broadcastChannel.postMessage(event);
+        }
+        break;
+
+      case 'session_updated':
+        if (event.status === 'completed' && event.message) {
+          if (this.currentConversation === event.conversationId) {
+            this.addMessageToDisplay(event.message);
+            if (this.settings.autoScroll) {
+              const div = document.getElementById('chatMessages');
+              if (div) div.scrollTop = div.scrollHeight;
+            }
+          }
+        }
         if (!fromBroadcast && this.broadcastChannel) {
           this.broadcastChannel.postMessage(event);
         }
@@ -417,10 +432,14 @@ class GMGUIApp {
     if (conv.agentId && !this.selectedAgent) {
       this.selectedAgent = conv.agentId;
     }
+
     const messages = await this.fetchMessages(id);
+    const latestSession = await this.fetchLatestSession(id);
+
     const div = document.getElementById('chatMessages');
     if (!div) return;
     div.innerHTML = '';
+
     if (messages.length === 0 && !this.selectedAgent) {
       div.innerHTML = `
         <div class="welcome-section">
@@ -433,12 +452,29 @@ class GMGUIApp {
       this.renderAgentCards();
     } else {
       messages.forEach(msg => this.addMessageToDisplay(msg));
+
+      if (latestSession && latestSession.status === 'processing') {
+        this.addSystemMessage('Resuming previous session...');
+        this.streamResponse(id);
+      }
+
       if (this.settings.autoScroll) {
         div.scrollTop = div.scrollHeight;
       }
     }
     this.renderChatHistory();
     this.renderAgentCards();
+  }
+
+  async fetchLatestSession(conversationId) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/conversations/${conversationId}/sessions/latest`);
+      const data = await res.json();
+      return data.session || null;
+    } catch (e) {
+      console.error('fetchLatestSession:', e);
+      return null;
+    }
   }
 
   parseAndRenderContent(content) {
@@ -573,9 +609,12 @@ class GMGUIApp {
     }
     if (!this.currentConversation) return;
     const conv = this.conversations.get(this.currentConversation);
+
+    const idempotencyKey = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     this.addMessageToDisplay({ role: 'user', content: message });
     input.value = '';
     this.updateSendButtonState();
+
     try {
       const folderPath = conv?.folderPath || localStorage.getItem('gmgui-home') || '/config';
       const res = await fetch(`${BASE_URL}/api/conversations/${this.currentConversation}/messages`, {
@@ -585,6 +624,7 @@ class GMGUIApp {
           content: message,
           agentId: this.selectedAgent,
           folderContext: { path: folderPath, isFolder: true },
+          idempotencyKey,
         }),
       });
       if (!res.ok) {
@@ -592,6 +632,8 @@ class GMGUIApp {
         this.addMessageToDisplay({ role: 'system', content: `Error: ${err.error || 'Request failed'}` });
         return;
       }
+      const data = await res.json();
+      this.idempotencyKeys.set(idempotencyKey, data.session.id);
       this.streamResponse(this.currentConversation);
     } catch (e) {
       this.addMessageToDisplay({ role: 'system', content: `Error: ${e.message}` });

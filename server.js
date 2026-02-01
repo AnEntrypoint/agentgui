@@ -143,13 +143,14 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'POST') {
         const conversationId = messagesMatch[1];
         const body = await parseBody(req);
-        const message = queries.createMessage(conversationId, 'user', body.content);
-        queries.createEvent('message.created', { role: 'user' }, conversationId);
+        const idempotencyKey = body.idempotencyKey || null;
+        const message = queries.createMessage(conversationId, 'user', body.content, idempotencyKey);
+        queries.createEvent('message.created', { role: 'user', messageId: message.id }, conversationId);
         broadcastSync({ type: 'message_created', conversationId, message });
         const session = queries.createSession(conversationId);
-        queries.createEvent('session.created', { messageId: message.id }, conversationId, session.id);
+        queries.createEvent('session.created', { messageId: message.id, sessionId: session.id }, conversationId, session.id);
         res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ message, session }));
+        res.end(JSON.stringify({ message, session, idempotencyKey }));
         processMessage(conversationId, message.id, session.id, body.content, body.agentId, body.folderContext);
         return;
       }
@@ -171,6 +172,20 @@ const server = http.createServer(async (req, res) => {
       const events = queries.getSessionEvents(sessionMatch[1]);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ session: sess, events }));
+      return;
+    }
+
+    if (routePath.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/) && req.method === 'GET') {
+      const convId = routePath.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/)[1];
+      const latestSession = queries.getLatestSession(convId);
+      if (!latestSession) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ session: null }));
+        return;
+      }
+      const events = queries.getSessionEvents(latestSession.id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ session: latestSession, events }));
       return;
     }
 
@@ -275,7 +290,8 @@ function serveFile(filePath, res) {
 async function processMessage(conversationId, messageId, sessionId, content, agentId, folderContext) {
   try {
     queries.updateSession(sessionId, { status: 'processing' });
-    queries.createEvent('session.processing', {}, conversationId, sessionId);
+    queries.createEvent('session.processing', { sessionId }, conversationId, sessionId);
+    broadcastSync({ type: 'session_updated', sessionId, status: 'processing' });
     broadcastStream(conversationId, { type: 'status', status: 'processing' });
 
     const cwd = folderContext?.path || '/config';
@@ -313,15 +329,19 @@ async function processMessage(conversationId, messageId, sessionId, content, age
 
     const responseText = fullText || (result?.stopReason ? `Completed: ${result.stopReason}` : 'No response.');
     const messageContent = blocks.length > 0 ? { text: responseText, blocks } : responseText;
-    queries.createMessage(conversationId, 'assistant', messageContent);
-    queries.updateSession(sessionId, { status: 'completed', response: { text: responseText }, completed_at: Date.now() });
-    queries.createEvent('session.completed', {}, conversationId, sessionId);
+
+    const assistantMessage = queries.createMessage(conversationId, 'assistant', messageContent);
+    queries.updateSession(sessionId, { status: 'completed', response: { text: responseText, messageId: assistantMessage.id }, completed_at: Date.now() });
+    queries.createEvent('session.completed', { messageId: assistantMessage.id }, conversationId, sessionId);
+
+    broadcastSync({ type: 'session_updated', sessionId, status: 'completed', message: assistantMessage });
     broadcastStream(conversationId, { type: 'done', stopReason: result?.stopReason || 'end_turn' });
   } catch (e) {
     console.error('processMessage error:', e.message);
     queries.createMessage(conversationId, 'assistant', `Error: ${e.message}`);
     queries.updateSession(sessionId, { status: 'error', error: e.message, completed_at: Date.now() });
     queries.createEvent('session.error', { error: e.message }, conversationId, sessionId);
+    broadcastSync({ type: 'session_updated', sessionId, status: 'error', error: e.message });
     broadcastStream(conversationId, { type: 'error', message: e.message });
     acpPool.delete(agentId || 'claude-code');
   }
