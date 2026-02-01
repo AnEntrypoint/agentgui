@@ -20,9 +20,22 @@ class GMGUIApp {
   async init() {
     this.loadSettings();
     this.setupEventListeners();
+    await this.fetchHome();
     this.fetchAgents();
     this.loadConversations();
     this.renderAgentCards();
+  }
+
+  async fetchHome() {
+    try {
+      const res = await fetch('/api/home');
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('gmgui-home', data.home);
+      }
+    } catch (e) {
+      console.error('Failed to fetch home directory:', e);
+    }
   }
 
   loadSettings() {
@@ -384,14 +397,11 @@ class GMGUIApp {
         content: message,
         agentId: this.selectedAgent,
         timestamp: Date.now(),
-      };
-
-      if (conversation.folderPath) {
-        payload.folderContext = {
-          path: conversation.folderPath,
+        folderContext: {
+          path: conversation.folderPath || (localStorage.getItem('gmgui-home') || '/config'),
           isFolder: true,
-        };
-      }
+        },
+      };
 
       const response = await fetch(`/api/agents/${this.selectedAgent}`, {
         method: 'POST',

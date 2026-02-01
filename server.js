@@ -119,17 +119,19 @@ class ACPSessionManager {
       }
 
       const sessionInfo = await launcher.createSession(cwd, sessionId);
-      
+
+      const apcSessionId = sessionInfo.sessionId;
       this.sessions.set(sessionId, {
         agentId,
         cwd,
         sessionId,
+        apcSessionId,
         launcher,
         createdAt: Date.now(),
         lastActivity: Date.now(),
       });
 
-      return { sessionId, ...sessionInfo };
+      return { sessionId, apcSessionId, ...sessionInfo };
     } catch (err) {
       console.error(`Failed to create ACP session: ${err.message}`);
       throw err;
@@ -143,7 +145,7 @@ class ACPSessionManager {
     }
 
     try {
-      const result = await session.launcher.sendPrompt(sessionId, messages);
+      const result = await session.launcher.sendPrompt(session.apcSessionId, messages);
       session.lastActivity = Date.now();
       return result;
     } catch (err) {
@@ -424,6 +426,13 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/agents' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ agents: agentManager.getAllAgents() }));
+    return;
+  }
+
+  // Home directory endpoint
+  if (req.url === '/api/home' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ home: process.env.HOME || '/config' }));
     return;
   }
 

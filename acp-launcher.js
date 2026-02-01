@@ -132,10 +132,13 @@ export class ACPLauncher extends EventEmitter {
       }, 120000);
 
       const handleMessage = (msg) => {
-        if (msg.result?.sessionId === sessionId) {
+        // Match by request id (2) and check for sessionId in response
+        // The ACP bridge generates its own sessionId, not the one we pass in
+        if (msg.id === 2 && msg.result?.sessionId) {
           clearTimeout(timeout);
           this.removeListener('message', handleMessage);
-          this.sessionMap.set(sessionId, { cwd, active: true });
+          const apcSessionId = msg.result.sessionId;
+          this.sessionMap.set(apcSessionId, { cwd, active: true, clientSessionId: sessionId });
           resolve(msg.result);
         }
       };
