@@ -1,54 +1,4 @@
 const BASE_URL = window.__BASE_URL || '';
-let authToken = localStorage.getItem('gmgui-token');
-
-function setAuthToken(token) {
-  authToken = token;
-  if (token) {
-    localStorage.setItem('gmgui-token', token);
-  } else {
-    localStorage.removeItem('gmgui-token');
-  }
-}
-
-function getAuthHeader() {
-  return authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
-}
-
-async function handleAuthError() {
-  setAuthToken(null);
-  window.location.href = BASE_URL + '/login.html';
-}
-
-async function login(userId) {
-  try {
-    const res = await fetch(BASE_URL + '/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: userId || 'default-user' })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setAuthToken(data.token);
-      return true;
-    }
-  } catch (e) {
-    console.error('Login failed:', e);
-  }
-  return false;
-}
-
-async function logout() {
-  try {
-    await fetch(BASE_URL + '/api/logout', {
-      method: 'POST',
-      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' }
-    });
-  } catch (e) {
-    console.error('Logout error:', e);
-  }
-  setAuthToken(null);
-  window.location.href = BASE_URL + '/login.html';
-}
 
 // Auto-reconnecting WebSocket wrapper
 class ReconnectingWebSocket {
@@ -141,10 +91,6 @@ class GMGUIApp {
   }
 
   async init() {
-    if (!authToken) {
-      window.location.href = BASE_URL + '/login.html';
-      return;
-    }
     this.loadSettings();
     this.setupEventListeners();
     await this.fetchHome();
@@ -158,7 +104,7 @@ class GMGUIApp {
   connectSyncWebSocket() {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     this.syncWs = new ReconnectingWebSocket(
-      `${proto}//${location.host}${BASE_URL}/sync?token=${authToken}`
+      `${proto}//${location.host}${BASE_URL}/sync`
     );
 
     this.syncWs.on('open', () => {
@@ -261,8 +207,7 @@ class GMGUIApp {
 
   async fetchHome() {
     try {
-      const res = await fetch(BASE_URL + '/api/home', { headers: getAuthHeader() });
-      if (res.status === 401) { handleAuthError(); return; }
+      const res = await fetch(BASE_URL + '/api/home');
       if (res.ok) {
         const data = await res.json();
         localStorage.setItem('gmgui-home', data.home);
@@ -320,8 +265,7 @@ class GMGUIApp {
 
   async fetchAgents() {
     try {
-      const res = await fetch(BASE_URL + '/api/agents', { headers: getAuthHeader() });
-      if (res.status === 401) { handleAuthError(); return; }
+      const res = await fetch(BASE_URL + '/api/agents');
       const data = await res.json();
       if (data.agents) {
         data.agents.forEach(a => this.agents.set(a.id, a));
@@ -333,8 +277,7 @@ class GMGUIApp {
 
   async fetchConversations() {
     try {
-      const res = await fetch(BASE_URL + '/api/conversations', { headers: getAuthHeader() });
-      if (res.status === 401) { handleAuthError(); return; }
+      const res = await fetch(BASE_URL + '/api/conversations');
       const data = await res.json();
       if (data.conversations) {
         this.conversations.clear();
@@ -347,8 +290,7 @@ class GMGUIApp {
 
   async fetchMessages(conversationId) {
     try {
-      const res = await fetch(`${BASE_URL}/api/conversations/${conversationId}/messages`, { headers: getAuthHeader() });
-      if (res.status === 401) { handleAuthError(); return; }
+      const res = await fetch(`${BASE_URL}/api/conversations/${conversationId}/messages`);
       const data = await res.json();
       return data.messages || [];
     } catch (e) {
@@ -437,8 +379,7 @@ class GMGUIApp {
 
   async deleteConversation(id) {
     try {
-      const res = await fetch(`${BASE_URL}/api/conversations/${id}`, { method: 'DELETE', headers: getAuthHeader() });
-      if (res.status === 401) { handleAuthError(); return; }
+      const res = await fetch(`${BASE_URL}/api/conversations/${id}`, { method: 'DELETE' });
     } catch (e) {
       console.error('deleteConversation:', e);
     }
@@ -601,10 +542,9 @@ class GMGUIApp {
     try {
       const res = await fetch(BASE_URL + '/api/conversations', {
         method: 'POST',
-        headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentId: this.selectedAgent || 'claude-code', title }),
       });
-      if (res.status === 401) { handleAuthError(); return; }
       const data = await res.json();
       if (data.conversation) {
         const conv = data.conversation;
@@ -639,14 +579,13 @@ class GMGUIApp {
       const folderPath = conv?.folderPath || localStorage.getItem('gmgui-home') || '/config';
       const res = await fetch(`${BASE_URL}/api/conversations/${this.currentConversation}/messages`, {
         method: 'POST',
-        headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: message,
           agentId: this.selectedAgent,
           folderContext: { path: folderPath, isFolder: true },
         }),
       });
-      if (res.status === 401) { handleAuthError(); return; }
       if (!res.ok) {
         const err = await res.json();
         this.addMessageToDisplay({ role: 'system', content: `Error: ${err.error || 'Request failed'}` });
@@ -694,7 +633,7 @@ class GMGUIApp {
     };
 
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${proto}//${location.host}${BASE_URL}/stream?conversationId=${conversationId}&token=${authToken}`);
+    const ws = new WebSocket(`${proto}//${location.host}${BASE_URL}/stream?conversationId=${conversationId}`);
     this.activeStream = ws;
 
     ws.onmessage = (e) => {
@@ -887,10 +826,9 @@ class GMGUIApp {
     try {
       const res = await fetch(BASE_URL + '/api/folders', {
         method: 'POST',
-        headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: folderPath }),
       });
-      if (res.status === 401) { handleAuthError(); return; }
       if (res.ok) {
         const data = await res.json();
         this.renderFolderList(data.folders, folderPath);

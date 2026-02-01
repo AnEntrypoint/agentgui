@@ -6,7 +6,6 @@ import { WebSocketServer } from 'ws';
 import os from 'os';
 import { execSync } from 'child_process';
 import { queries } from './database.js';
-import { auth } from './auth.js';
 import ACPConnection from './acp-launcher.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -65,12 +64,6 @@ function parseBody(req) {
   });
 }
 
-function requireAuth(req, url) {
-  const token = auth.extractToken(req, url);
-  const tokenData = auth.verifyToken(token);
-  return tokenData;
-}
-
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -86,46 +79,13 @@ const server = http.createServer(async (req, res) => {
   const routePath = req.url.slice(BASE_URL.length) || '/';
 
   try {
-    if (routePath === '/api/login' && req.method === 'POST') {
-      const body = await parseBody(req);
-      const sessionToken = auth.createSessionToken(body.userId || 'default-user');
-      res.writeHead(201, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ token: sessionToken.token, userId: sessionToken.userId, type: 'session' }));
-      return;
-    }
-
-    if (routePath === '/api/logout' && req.method === 'POST') {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
-      auth.revokeToken(tokenData.token);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
-      return;
-    }
-
     if (routePath === '/api/conversations' && req.method === 'GET') {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ conversations: queries.getAllConversations() }));
       return;
     }
 
     if (routePath === '/api/conversations' && req.method === 'POST') {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       const body = await parseBody(req);
       const conversation = queries.createConversation(body.agentId, body.title);
       queries.createEvent('conversation.created', { agentId: body.agentId }, conversation.id);
@@ -137,12 +97,6 @@ const server = http.createServer(async (req, res) => {
 
     const convMatch = routePath.match(/^\/api\/conversations\/([^/]+)$/);
     if (convMatch) {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       if (req.method === 'GET') {
         const conv = queries.getConversation(convMatch[1]);
         if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
@@ -172,12 +126,6 @@ const server = http.createServer(async (req, res) => {
 
     const messagesMatch = routePath.match(/^\/api\/conversations\/([^/]+)\/messages$/);
     if (messagesMatch) {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       if (req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ messages: queries.getConversationMessages(messagesMatch[1]) }));
@@ -201,12 +149,6 @@ const server = http.createServer(async (req, res) => {
 
     const messageMatch = routePath.match(/^\/api\/conversations\/([^/]+)\/messages\/([^/]+)$/);
     if (messageMatch && req.method === 'GET') {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       const msg = queries.getMessage(messageMatch[2]);
       if (!msg || msg.conversationId !== messageMatch[1]) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -216,12 +158,6 @@ const server = http.createServer(async (req, res) => {
 
     const sessionMatch = routePath.match(/^\/api\/sessions\/([^/]+)$/);
     if (sessionMatch && req.method === 'GET') {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       const sess = queries.getSession(sessionMatch[1]);
       if (!sess) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
       const events = queries.getSessionEvents(sessionMatch[1]);
@@ -231,36 +167,18 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (routePath === '/api/agents' && req.method === 'GET') {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ agents: discoveredAgents }));
       return;
     }
 
     if (routePath === '/api/home' && req.method === 'GET') {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ home: process.env.HOME || '/config' }));
       return;
     }
 
     if (routePath === '/api/folders' && req.method === 'POST') {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       const body = await parseBody(req);
       const folderPath = body.path || '/config';
       try {
@@ -281,12 +199,6 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (routePath.startsWith('/api/image/')) {
-      const tokenData = requireAuth(req, req.url);
-      if (!tokenData) {
-        res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Unauthorized' }));
-        return;
-      }
       const imagePath = routePath.slice('/api/image/'.length);
       const decodedPath = decodeURIComponent(imagePath);
       const expandedPath = decodedPath.startsWith('~') ?
@@ -314,13 +226,6 @@ const server = http.createServer(async (req, res) => {
     filePath = path.join(staticDir, filePath);
     const normalizedPath = path.normalize(filePath);
     if (!normalizedPath.startsWith(staticDir)) { res.writeHead(403); res.end('Forbidden'); return; }
-
-    const tokenData = requireAuth(req, req.url);
-    if (!tokenData) {
-      res.writeHead(401, { 'Content-Type': 'text/html' });
-      res.end('<html><body><h1>401 Unauthorized</h1><p>Please <a href="' + BASE_URL + '/login.html">login</a> first.</p></body></html>');
-      return;
-    }
 
     fs.stat(filePath, (err, stats) => {
       if (err) { res.writeHead(404); res.end('Not found'); return; }
@@ -426,8 +331,6 @@ wss.on('connection', (ws, req) => {
     hotReloadClients.push(ws);
     ws.on('close', () => { const i = hotReloadClients.indexOf(ws); if (i > -1) hotReloadClients.splice(i, 1); });
   } else if (wsPath === '/stream') {
-    const tokenData = requireAuth(req, req.url);
-    if (!tokenData) { ws.close(1008, 'Unauthorized'); return; }
     const convId = url.searchParams.get('conversationId');
     if (!convId) { ws.close(); return; }
     if (!streamClients.has(convId)) streamClients.set(convId, new Set());
@@ -437,8 +340,6 @@ wss.on('connection', (ws, req) => {
       if (set) { set.delete(ws); if (set.size === 0) streamClients.delete(convId); }
     });
   } else if (wsPath === '/sync') {
-    const tokenData = requireAuth(req, req.url);
-    if (!tokenData) { ws.close(1008, 'Unauthorized'); return; }
     syncClients.add(ws);
     ws.isAlive = true;
     ws.send(JSON.stringify({ type: 'sync_connected' }));
