@@ -105,7 +105,7 @@ class GMGUIApp {
     list.innerHTML = '';
 
     if (this.agents.size === 0) {
-      list.innerHTML = '<p style="color: #9ca3af; font-size: 0.875rem; padding: 1rem; text-align: center;">No agents connected</p>';
+      list.innerHTML = '<p style="color: #9ca3af; font-size: 0.875rem; padding: 1rem; text-align: center;">No agents found</p>';
       return;
     }
 
@@ -113,16 +113,21 @@ class GMGUIApp {
       const item = document.createElement('div');
       item.className = `agent-item ${this.selectedAgent === id ? 'active' : ''}`;
 
-      const statusClass = agent.status === 'connected' ? 'connected' : 'disconnected';
+      const statusClass = agent.status === 'connected' ? 'connected' : (agent.type === 'cli' ? 'available' : 'disconnected');
+      const statusText = agent.type === 'cli' ? 'available' : (agent.status || 'disconnected');
+      const icon = agent.icon || '🤖';
+      const displayName = agent.name || agent.id;
 
       item.innerHTML = `
         <div class="agent-item-header">
-          <span class="agent-id">${escapeHtml(agent.id)}</span>
-          <span class="agent-status ${statusClass}">${agent.status}</span>
+          <span class="agent-icon">${icon}</span>
+          <span class="agent-id">${escapeHtml(displayName)}</span>
+          <span class="agent-status ${statusClass}">${statusText}</span>
         </div>
-        <div class="agent-endpoint">${escapeHtml(agent.endpoint || 'N/A')}</div>
+        <div class="agent-type">${agent.type === 'cli' ? 'CLI Agent' : 'WebSocket Agent'}</div>
+        ${agent.endpoint ? `<div class="agent-endpoint">${escapeHtml(agent.endpoint)}</div>` : ''}
         <div class="agent-actions">
-          <button onclick="app.selectAgent('${escapeHtml(agent.id)}')">Select</button>
+          ${agent.type === 'cli' ? `<button onclick="app.launchCLIAgent('${escapeHtml(agent.id)}')">Launch</button>` : `<button onclick="app.selectAgent('${escapeHtml(agent.id)}')">Select</button>`}
           <button onclick="app.disconnectAgent('${escapeHtml(agent.id)}')">Remove</button>
         </div>
       `;
@@ -622,6 +627,36 @@ class GMGUIApp {
       }
     }
   }
+
+  launchCLIAgent(agentId) {
+    const agent = this.agents.get(agentId);
+    if (!agent || agent.type !== 'cli') {
+      this.logMessage('error', 'Invalid CLI agent');
+      return;
+    }
+
+    this.showLoading(true);
+    fetch(`/api/cli-agents/${agentId}/launch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId })
+    })
+      .then(res => {
+        this.showLoading(false);
+        if (res.ok) {
+          this.logMessage('info', `Launching ${agent.name}...`);
+          setTimeout(() => {
+            this.selectAgent(agentId);
+          }, 1000);
+        } else {
+          this.logMessage('error', `Failed to launch ${agent.name}`);
+        }
+      })
+      .catch(err => {
+        this.showLoading(false);
+        this.logMessage('error', `Launch error: ${err.message}`);
+      });
+  }
 }
 
 // Global helper functions
@@ -694,6 +729,10 @@ function handleFileUpload() {
 
 function refreshFileList() {
   app.refreshFileList();
+}
+
+function launchCLIAgent(agentId) {
+  app.launchCLIAgent(agentId);
 }
 
 // Initialize app

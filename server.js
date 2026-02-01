@@ -55,7 +55,7 @@ class AgentManager {
     this.messageQueue = [];
   }
 
-  registerAgent(id, endpoint) {
+  registerAgent(id, endpoint, agentData = {}) {
     this.agents.set(id, {
       id,
       endpoint,
@@ -63,6 +63,7 @@ class AgentManager {
       ws: null,
       status: 'disconnected',
       lastMessage: null,
+      ...agentData,
     });
   }
 
@@ -101,12 +102,23 @@ class AgentDiscoveryService {
     this.agentManager = agentManager;
     this.discoveryInterval = null;
     this.discoveredAgents = new Set();
+    this.popularAgents = [
+      { name: 'claude', display: 'Claude', icon: '🤖' },
+      { name: 'code', display: 'Claude Code', icon: '💻' },
+      { name: 'gemini', display: 'Google Gemini', icon: '✨' },
+      { name: 'opencode', display: 'OpenCode', icon: '🔧' },
+      { name: 'goose', display: 'Goose', icon: '🦆' },
+      { name: 'qwen', display: 'Qwen', icon: '🧠' },
+      { name: 'gpt', display: 'GPT CLI', icon: '🤖' },
+      { name: 'anthropic', display: 'Anthropic CLI', icon: '📡' },
+    ];
   }
 
   async discoverAgents() {
     const agents = [];
 
     agents.push(...this.discoverFromEnv());
+    agents.push(...await this.discoverCLIAgents());
     agents.push(...await this.scanPorts());
     agents.push(...await this.loadConfigFile());
 
@@ -137,6 +149,43 @@ class AgentDiscoveryService {
       } catch (e) {
         console.error('Error parsing GMGUI_AGENTS:', e.message);
       }
+    }
+
+    return agents;
+  }
+
+  async discoverCLIAgents() {
+    const agents = [];
+    const pathEntries = (process.env.PATH || '').split(path.delimiter);
+
+    for (const agentInfo of this.popularAgents) {
+      try {
+        let found = false;
+
+        for (const pathEntry of pathEntries) {
+          const agentPath = path.join(pathEntry, agentInfo.name);
+          if (fs.existsSync(agentPath)) {
+            found = true;
+            agents.push({
+              id: agentInfo.name,
+              name: agentInfo.display,
+              icon: agentInfo.icon,
+              type: 'cli',
+              path: agentPath,
+              discoveryMethod: 'cli-scan',
+              timestamp: Date.now(),
+            });
+            console.log(`✅ Found CLI agent: ${agentInfo.display} at ${agentPath}`);
+            break;
+          }
+        }
+      } catch (e) {
+        // Agent not found, continue
+      }
+    }
+
+    if (agents.length > 0) {
+      console.log(`✅ Discovered ${agents.length} CLI agents from PATH`);
     }
 
     return agents;
@@ -209,7 +258,7 @@ class AgentDiscoveryService {
     const seen = new Map();
 
     return agents.filter(agent => {
-      const key = `${agent.endpoint}`;
+      const key = agent.type === 'cli' ? agent.id : `${agent.endpoint}`;
 
       if (seen.has(key)) {
         return false;
@@ -222,9 +271,24 @@ class AgentDiscoveryService {
 
   registerDiscoveredAgents(agents) {
     agents.forEach(agent => {
-      if (!this.discoveredAgents.has(agent.endpoint)) {
-        this.agentManager.registerAgent(agent.id, agent.endpoint);
-        this.discoveredAgents.add(agent.endpoint);
+      const key = agent.type === 'cli' ? agent.id : (agent.endpoint || agent.id);
+
+      if (!this.discoveredAgents.has(key)) {
+        const agentData = {
+          type: agent.type || 'websocket',
+          discoveryMethod: agent.discoveryMethod,
+        };
+
+        if (agent.type === 'cli') {
+          agentData.name = agent.name;
+          agentData.icon = agent.icon;
+          agentData.path = agent.path;
+          agentData.status = 'available';
+          agentData.connected = false;
+        }
+
+        this.agentManager.registerAgent(agent.id, agent.endpoint || null, agentData);
+        this.discoveredAgents.add(key);
         console.log(`✅ Registered discovered agent: ${agent.id}`);
       }
     });
@@ -272,6 +336,34 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/agents' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ agents: agentManager.getAllAgents() }));
+    return;
+  }
+
+  // CLI agent launch endpoint
+  if (req.url.match(/^\/api\/cli-agents\/(.+)\/launch$/) && req.method === 'POST') {
+    const agentId = req.url.split('/')[3];
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const agent = agentManager.getAgent(agentId);
+        if (agent && agent.type === 'cli') {
+          console.log(`Launching CLI agent: ${agentId}`);
+          execAsync(`${agent.path} &`).catch(e => {
+            console.error(`Error launching ${agentId}:`, e.message);
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: `CLI agent ${agentId} launched` }));
+        } else {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Agent not found or not a CLI agent' }));
+        }
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
