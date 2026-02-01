@@ -5,7 +5,8 @@
   "type": "module",
   "main": "server.js",
   "bin": {
-    "gmgui": "./bin/gmgui.js"
+    "gmgui": "./bin/gmgui.js",
+    "start": "./bin/gmgui.js"
   },
   "scripts": {
     "start": "node server.js",
