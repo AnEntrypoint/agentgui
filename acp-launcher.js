@@ -159,18 +159,18 @@ export default class ACPConnection {
     const skillDescriptions = {
       'html_rendering': {
         name: 'HTML Rendering',
-        description: 'Render custom HTML sections in the chat interface',
-        capability: 'Send sessionUpdate with type:html_content to display HTML'
+        description: 'Render styled HTML blocks directly in the chat interface',
+        capability: 'Send a sessionUpdate with this exact format:\n{\n  "sessionUpdate": "html_content",\n  "content": {\n    "html": "<div style=\\"padding:1rem; border:1px solid #ccc; border-radius:0.5rem; background:#f9f9f9\\">Your HTML content here</div>",\n    "title": "Optional title for the block",\n    "id": "optional-unique-id"\n  }\n}\nThe HTML will render as a styled square/box block in the conversation.'
       },
       'image_display': {
         name: 'Image Display',
-        description: 'Display images from the filesystem in the chat',
-        capability: 'Send sessionUpdate with type:image_content with path to image'
+        description: 'Display images from the filesystem in styled blocks',
+        capability: 'Send a sessionUpdate with this exact format:\n{\n  "sessionUpdate": "image_content",\n  "content": {\n    "path": "/path/to/image.png",\n    "title": "Optional image title",\n    "alt": "Alt text for accessibility"\n  }\n}\nSupported formats: PNG, JPEG, GIF, WebP, SVG. The image will render in a styled block.'
       },
       'scrot': {
         name: 'Screenshot Utility',
         description: 'Capture screenshots of the desktop or specific windows',
-        capability: 'Use scrot command-line tool to capture and save images'
+        capability: 'Use scrot command-line tool to capture and save images to filesystem, then display using image_display skill'
       },
       'fs_access': {
         name: 'Filesystem Access',
@@ -188,7 +188,7 @@ export default class ACPConnection {
     const prompt = [
       {
         type: 'text',
-        text: `You have the following skills available:\n\n${skillsToInject.map(s => `• ${s.name}: ${s.description}\n  Capability: ${s.capability}`).join('\n\n')}\n\nYou can use these skills in your responses.`
+        text: `You have the following skills available:\n\n${skillsToInject.map(s => `• ${s.name}: ${s.description}\n  Format: ${s.capability}`).join('\n\n')}\n\nUse these skills to render formatted content directly in your responses. When you want to display HTML or images, send the exact sessionUpdate format shown above.`
       }
     ];
 
