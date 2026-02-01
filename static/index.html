@@ -54,17 +54,21 @@
             <textarea 
               id="messageInput" 
               class="chat-input" 
-              placeholder="Send a message, upload files, or open a folder..."
+              placeholder="Send message, upload files (📎), or open folder (📁)..."
               rows="1"
             ></textarea>
             <div class="input-actions">
               <button class="action-btn" onclick="triggerFileUpload()" title="Upload files">
                 <span class="icon">📎</span>
               </button>
+              <button class="action-btn" onclick="triggerFolderOpen()" title="Open folder">
+                <span class="icon">📁</span>
+              </button>
               <button class="action-btn send-btn" id="sendBtn" onclick="sendMessage()" title="Send message">
                 <span class="icon">→</span>
               </button>
               <input type="file" id="fileInput" style="display: none;" onchange="handleFileUpload()" multiple />
+              <input type="file" id="folderInput" style="display: none;" webkitdirectory directory multiple onchange="handleFolderOpen()" />
             </div>
           </div>
         </div>

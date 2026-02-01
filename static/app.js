@@ -195,10 +195,53 @@ class GMGUIApp {
     sorted.forEach(conv => {
       const item = document.createElement('button');
       item.className = `chat-item ${this.currentConversation === conv.id ? 'active' : ''}`;
-      item.textContent = conv.title;
+      
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'chat-item-title';
+      titleSpan.textContent = conv.title;
+      
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'chat-item-delete';
+      deleteBtn.textContent = '✕';
+      deleteBtn.title = 'Delete chat';
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        this.deleteConversation(conv.id);
+      };
+      
+      item.appendChild(titleSpan);
+      item.appendChild(deleteBtn);
       item.onclick = () => this.displayConversation(conv.id);
       list.appendChild(item);
     });
+  }
+
+  deleteConversation(id) {
+    if (confirm('Are you sure you want to delete this chat?')) {
+      this.conversations.delete(id);
+      this.saveConversations();
+      if (this.currentConversation === id) {
+        this.currentConversation = null;
+        const firstChat = Array.from(this.conversations.values())[0];
+        if (firstChat) {
+          this.displayConversation(firstChat.id);
+        } else {
+          const messagesDiv = document.getElementById('chatMessages');
+          if (messagesDiv) {
+            messagesDiv.innerHTML = `
+              <div class="welcome-section">
+                <h2>Hi, what's your plan for today?</h2>
+                <div class="agent-selection">
+                  <div id="agentCards" class="agent-cards"></div>
+                </div>
+              </div>
+            `;
+            this.renderAgentCards();
+          }
+        }
+      }
+      this.renderChatHistory();
+    }
   }
 
   displayConversation(id) {
@@ -429,6 +472,10 @@ class GMGUIApp {
     document.getElementById('fileInput').click();
   }
 
+  triggerFolderOpen() {
+    document.getElementById('folderInput').click();
+  }
+
   async handleFileUpload() {
     const input = document.getElementById('fileInput');
     const files = input.files;
@@ -458,6 +505,43 @@ class GMGUIApp {
       }
     } catch (error) {
       this.logMessage('system', `Upload error: ${error.message}`);
+    } finally {
+      this.showLoading(false);
+    }
+  }
+
+  async handleFolderOpen() {
+    const input = document.getElementById('folderInput');
+    const files = input.files;
+
+    if (files.length === 0) return;
+
+    this.showLoading(true);
+
+    try {
+      const formData = new FormData();
+      const folderPath = files[0].webkitRelativePath?.split('/')[0] || 'folder';
+      
+      for (const file of files) {
+        formData.append('files', file);
+      }
+      formData.append('folderPath', folderPath);
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        this.logMessage('system', `Opened folder "${folderPath}" with ${data.files.length} file(s)`);
+        input.value = '';
+      } else {
+        const error = await response.json();
+        this.logMessage('system', `Folder open failed: ${error.error}`);
+      }
+    } catch (error) {
+      this.logMessage('system', `Folder error: ${error.message}`);
     } finally {
       this.showLoading(false);
     }
@@ -563,6 +647,14 @@ function triggerFileUpload() {
 
 function handleFileUpload() {
   app.handleFileUpload();
+}
+
+function triggerFolderOpen() {
+  app.triggerFolderOpen();
+}
+
+function handleFolderOpen() {
+  app.handleFolderOpen();
 }
 
 // Initialize app

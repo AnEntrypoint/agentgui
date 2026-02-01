@@ -184,9 +184,40 @@ html, body {
   text-align: left;
   color: var(--text-secondary);
   font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.chat-item-title {
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.chat-item-delete {
+  background: none;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  transition: var(--transition-smooth);
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  opacity: 0;
+}
+
+.chat-item:hover .chat-item-delete {
+  opacity: 1;
+  color: var(--color-danger);
+}
+
+.chat-item-delete:hover {
+  background: rgba(239, 68, 68, 0.1);
 }
 
 .chat-item:hover {
@@ -242,6 +273,7 @@ html, body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-height: 0;
 }
 
 .chat-messages {
