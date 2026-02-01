@@ -485,6 +485,7 @@ class GMGUIApp {
     if (!div) return;
     const el = document.createElement('div');
     el.className = `message ${msg.role}`;
+    el.dataset.messageId = msg.id;
 
     if (typeof msg.content === 'string') {
       const parsed = this.parseAndRenderContent(msg.content);
