@@ -26,10 +26,23 @@ function loadDatabase() {
       console.log('Database loaded successfully');
     } catch (e) {
       console.error('Error loading database:', e.message);
+      console.error('Reinitializing database with fresh state...');
+      dbData = {
+        conversations: {},
+        messages: {},
+        sessions: {},
+        events: {}
+      };
+      saveDatabase();
     }
   } else {
-    saveDatabase();
-    console.log('Database initialized successfully');
+    try {
+      saveDatabase();
+      console.log('Database initialized successfully');
+    } catch (e) {
+      console.error('Fatal: Could not initialize database:', e.message);
+      throw new Error(`Database initialization failed: ${e.message}`);
+    }
   }
 }
 
@@ -38,6 +51,11 @@ function saveDatabase() {
     fs.writeFileSync(dbFilePath, JSON.stringify(dbData, null, 2), 'utf-8');
   } catch (e) {
     console.error('Error saving database:', e.message);
+    if (e.code === 'EACCES') {
+      console.error('Permission denied writing to', dbFilePath);
+      console.error('Check file permissions and directory ownership');
+    }
+    throw e;
   }
 }
 

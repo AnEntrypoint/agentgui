@@ -25,14 +25,22 @@ async function getACP(agentId, cwd) {
 
   conn = new ACPConnection();
   const agentType = agentId === 'opencode' ? 'opencode' : 'claude-code';
-  await conn.connect(agentType, cwd);
-  await conn.initialize();
-  await conn.newSession(cwd);
-  await conn.setSessionMode('bypassPermissions');
-  await conn.injectSkills(['html_rendering', 'image_display', 'scrot', 'fs_access']);
-  acpPool.set(agentId, conn);
-  console.log(`ACP connection ready for ${agentId} in ${cwd}`);
-  return conn;
+  
+  try {
+    await conn.connect(agentType, cwd);
+    await conn.initialize();
+    await conn.newSession(cwd);
+    await conn.setSessionMode('bypassPermissions');
+    await conn.injectSkills(['html_rendering', 'image_display', 'scrot', 'fs_access']);
+    acpPool.set(agentId, conn);
+    console.log(`ACP connection ready for ${agentId} in ${cwd}`);
+    return conn;
+  } catch (err) {
+    console.error(`Failed to initialize ACP connection for ${agentId}: ${err.message}`);
+    acpPool.delete(agentId);
+    if (conn) await conn.terminate();
+    throw new Error(`ACP initialization failed for ${agentId}: ${err.message}`);
+  }
 }
 
 function discoverAgents() {
@@ -396,8 +404,22 @@ process.on('SIGTERM', async () => {
   wss.close(() => server.close(() => process.exit(0)));
 });
 
-server.listen(PORT, () => {
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} already in use. Waiting 3 seconds before retry...`);
+    setTimeout(() => {
+      server.listen(PORT, onServerReady);
+    }, 3000);
+  } else {
+    console.error('Server error:', err.message);
+    process.exit(1);
+  }
+});
+
+function onServerReady() {
   console.log(`GMGUI running on http://localhost:${PORT}${BASE_URL}/`);
   console.log(`Agents: ${discoveredAgents.map(a => a.name).join(', ') || 'none'}`);
   console.log(`Hot reload: ${watch ? 'on' : 'off'}`);
-});
+}
+
+server.listen(PORT, onServerReady);

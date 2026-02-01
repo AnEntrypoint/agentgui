@@ -17,40 +17,62 @@ export default class ACPConnection {
     delete env.NODE_INSPECT;
     delete env.NODE_DEBUG;
 
-    if (agentType === 'opencode') {
-      this.child = spawn('opencode', ['acp'], { cwd, stdio: ['pipe', 'pipe', 'pipe'], env, shell: false });
-    } else {
-      this.child = spawn('claude-code-acp', [], { cwd, stdio: ['pipe', 'pipe', 'pipe'], env, shell: false });
-    }
-
-    this.child.stderr.on('data', d => console.error(`[ACP:${agentType}:stderr]`, d.toString().trim()));
-    this.child.on('error', err => console.error(`[ACP:${agentType}:error]`, err.message));
-    this.child.on('exit', (code, signal) => {
-      console.log(`[ACP:${agentType}] exited code=${code} signal=${signal}`);
-      this.child = null;
-      for (const [id, req] of this.pendingRequests) {
-        req.reject(new Error('ACP process exited'));
-        clearTimeout(req.timeoutId);
-      }
-      this.pendingRequests.clear();
-    });
-
-    this.child.stdout.setEncoding('utf8');
-    this.child.stdout.on('data', data => {
-      this.buffer += data;
-      const lines = this.buffer.split('\n');
-      this.buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          this.handleMessage(JSON.parse(line));
-        } catch (e) {
-          console.error('[ACP:parse]', line.substring(0, 200), e.message);
+    return new Promise((resolve, reject) => {
+      let spawned = false;
+      try {
+        if (agentType === 'opencode') {
+          this.child = spawn('opencode', ['acp'], { cwd, stdio: ['pipe', 'pipe', 'pipe'], env, shell: false });
+        } else {
+          this.child = spawn('claude-code-acp', [], { cwd, stdio: ['pipe', 'pipe', 'pipe'], env, shell: false });
         }
+        spawned = true;
+      } catch (err) {
+        reject(new Error(`Failed to spawn ACP process (${agentType}): ${err.message}`));
+        return;
       }
-    });
 
-    await new Promise(r => setTimeout(r, 500));
+      const timeoutId = setTimeout(() => {
+        reject(new Error(`ACP process (${agentType}) failed to initialize within 2 seconds`));
+      }, 2000);
+
+      this.child.stderr.on('data', d => console.error(`[ACP:${agentType}:stderr]`, d.toString().trim()));
+      this.child.on('error', err => {
+        clearTimeout(timeoutId);
+        console.error(`[ACP:${agentType}:error]`, err.message);
+        reject(new Error(`ACP process error (${agentType}): ${err.message}`));
+      });
+      this.child.on('exit', (code, signal) => {
+        clearTimeout(timeoutId);
+        console.log(`[ACP:${agentType}] exited code=${code} signal=${signal}`);
+        this.child = null;
+        for (const [id, req] of this.pendingRequests) {
+          req.reject(new Error('ACP process exited'));
+          clearTimeout(req.timeoutId);
+        }
+        this.pendingRequests.clear();
+        if (!spawned) {
+          reject(new Error(`ACP process (${agentType}) exited before connection established`));
+        }
+      });
+
+      this.child.stdout.setEncoding('utf8');
+      this.child.stdout.on('data', data => {
+        clearTimeout(timeoutId);
+        this.buffer += data;
+        const lines = this.buffer.split('\n');
+        this.buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            this.handleMessage(JSON.parse(line));
+          } catch (e) {
+            console.error('[ACP:parse]', line.substring(0, 200), e.message);
+          }
+        }
+      });
+
+      setTimeout(() => resolve(), 500);
+    });
   }
 
   handleMessage(msg) {
