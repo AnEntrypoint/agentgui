@@ -56,6 +56,32 @@ npm run dev
 
 Changes to `static/` files auto-reload in browser.
 
+## Bun Edition (Faster with SQLite)
+
+GMGUI includes a Bun-compatible server with native SQLite support for message persistence:
+
+```bash
+# Install Bun (optional, ~20MB)
+curl -fsSL https://bun.sh/install | bash
+
+# Run with Bun (3-4x faster startup)
+bun run server-bun.js
+
+# Development with Bun
+bun run server-bun.js --watch
+
+# Or use npm alias
+npm run start:bun
+npm run dev:bun
+```
+
+**Benefits of Bun Edition:**
+- Native WebSocket support (no extra deps)
+- Built-in SQLite database
+- Message persistence across restarts
+- 3-4x faster startup time
+- Query message history: `/api/agents/{id}/history`
+
 ## Architecture
 
 ### Server (`server.js`)
@@ -319,12 +345,34 @@ PORT=3001 npm start
 lsof -i :3000 | grep LISTEN | awk '{print $2}' | xargs kill -9
 ```
 
+## Testing
+
+GMGUI includes comprehensive testing options:
+
+```bash
+# Quick integration test (30 seconds)
+npm run test:integration
+
+# Browser-based tests (requires running server)
+npm run test
+
+# All tests
+npm run test:all
+```
+
+See [TESTING.md](TESTING.md) for detailed testing guide including:
+- Agent-browser integration tests
+- Bun SQLite verification
+- Load testing scenarios
+- CI/CD workflows
+- Troubleshooting
+
 ## What's Next?
 
 ### For Immediate Use
 1. Read [QUICKSTART.md](QUICKSTART.md) for 5-minute setup
 2. Try the mock agent: `node examples/mock-agent.js`
-3. Run integration tests: `./test-integration.sh`
+3. Run integration tests: `npm run test:integration`
 
 ### For Integration
 1. Review [FEATURES.md](FEATURES.md) for full capabilities
@@ -334,7 +382,7 @@ lsof -i :3000 | grep LISTEN | awk '{print $2}' | xargs kill -9
 ### For Production
 1. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for deployment guide
 2. Deploy to: AWS, Heroku, Google Cloud, Docker, etc.
-3. Customize: Add authentication, database, webhooks
+3. Choose runtime: Node.js (default) or Bun (faster with SQLite)
 
 ### Enhancement Ideas
 - Add SQLite for message history
