@@ -95,6 +95,166 @@ class AgentManager {
 
 const agentManager = new AgentManager();
 
+// Agent Auto-Discovery Service
+class AgentDiscoveryService {
+  constructor(agentManager) {
+    this.agentManager = agentManager;
+    this.discoveryInterval = null;
+    this.discoveredAgents = new Set();
+  }
+
+  async discoverAgents() {
+    const agents = [];
+
+    agents.push(...this.discoverFromEnv());
+    agents.push(...await this.scanPorts());
+    agents.push(...await this.loadConfigFile());
+
+    return this.deduplicateAgents(agents);
+  }
+
+  discoverFromEnv() {
+    const agents = [];
+    const envVar = process.env.GMGUI_AGENTS || '';
+
+    if (envVar) {
+      try {
+        const entries = envVar.split(',').map(e => e.trim()).filter(Boolean);
+        for (const entry of entries) {
+          const [id, endpoint] = entry.split(':').map(s => s.trim());
+          if (id && endpoint) {
+            agents.push({
+              id,
+              endpoint,
+              discoveryMethod: 'env',
+              timestamp: Date.now(),
+            });
+          }
+        }
+        if (agents.length > 0) {
+          console.log(`✅ Discovered ${agents.length} agents from GMGUI_AGENTS`);
+        }
+      } catch (e) {
+        console.error('Error parsing GMGUI_AGENTS:', e.message);
+      }
+    }
+
+    return agents;
+  }
+
+  async scanPorts() {
+    const agents = [];
+    const ports = process.env.GMGUI_SCAN_PORTS
+      ? process.env.GMGUI_SCAN_PORTS.split(',').map(p => parseInt(p.trim()))
+      : [3001, 3002, 3003, 3004, 3005, 3006, 3007, 3008, 3009, 3010];
+
+    console.log(`🔍 Scanning ports for agents: ${ports.join(', ')}`);
+
+    for (const port of ports) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 1000);
+
+        const response = await fetch(`http://localhost:${port}/health`, {
+          signal: controller.signal,
+          timeout: 1000,
+        }).catch(() => null);
+
+        clearTimeout(timeout);
+
+        if (response && response.ok) {
+          agents.push({
+            id: `agent-${port}`,
+            endpoint: `ws://localhost:${port}`,
+            port,
+            discoveryMethod: 'port-scan',
+            timestamp: Date.now(),
+          });
+          console.log(`✅ Found agent on port ${port}`);
+        }
+      } catch (e) {
+        // Port not responding
+      }
+    }
+
+    return agents;
+  }
+
+  async loadConfigFile() {
+    const agents = [];
+    const configPath = path.join(os.homedir(), '.config', 'gmgui', 'agents.json');
+
+    try {
+      if (fs.existsSync(configPath)) {
+        const data = fs.readFileSync(configPath, 'utf-8');
+        const config = JSON.parse(data);
+
+        if (Array.isArray(config)) {
+          agents.push(...config.map(a => ({
+            ...a,
+            discoveryMethod: 'config-file',
+            timestamp: Date.now(),
+          })));
+          console.log(`✅ Loaded ${agents.length} agents from config file`);
+        }
+      }
+    } catch (e) {
+      console.error('Error loading config file:', e.message);
+    }
+
+    return agents;
+  }
+
+  deduplicateAgents(agents) {
+    const seen = new Map();
+
+    return agents.filter(agent => {
+      const key = `${agent.endpoint}`;
+
+      if (seen.has(key)) {
+        return false;
+      }
+
+      seen.set(key, agent);
+      return true;
+    });
+  }
+
+  registerDiscoveredAgents(agents) {
+    agents.forEach(agent => {
+      if (!this.discoveredAgents.has(agent.endpoint)) {
+        this.agentManager.registerAgent(agent.id, agent.endpoint);
+        this.discoveredAgents.add(agent.endpoint);
+        console.log(`✅ Registered discovered agent: ${agent.id}`);
+      }
+    });
+  }
+
+  startMonitoring(interval = 30000) {
+    if (this.discoveryInterval) return;
+
+    this.discoveryInterval = setInterval(async () => {
+      try {
+        const agents = await this.discoverAgents();
+        this.registerDiscoveredAgents(agents);
+      } catch (e) {
+        console.error('Error during agent discovery monitoring:', e.message);
+      }
+    }, interval);
+
+    console.log(`🔄 Agent discovery monitoring started (interval: ${interval}ms)`);
+  }
+
+  stopMonitoring() {
+    if (this.discoveryInterval) {
+      clearInterval(this.discoveryInterval);
+      this.discoveryInterval = null;
+    }
+  }
+}
+
+const discoveryService = new AgentDiscoveryService(agentManager);
+
 // HTTP server
 const server = http.createServer((req, res) => {
   // CORS headers
@@ -466,6 +626,7 @@ if (watch) {
 // Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('Shutting down gracefully...');
+  discoveryService.stopMonitoring();
   wss.close(() => {
     server.close(() => {
       process.exit(0);
@@ -473,7 +634,15 @@ process.on('SIGTERM', () => {
   });
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Hot reload: ${watch ? 'enabled' : 'disabled'}`);
+
+  try {
+    const agents = await discoveryService.discoverAgents();
+    discoveryService.registerDiscoveredAgents(agents);
+    discoveryService.startMonitoring();
+  } catch (e) {
+    console.error('Failed to initialize agent discovery:', e.message);
+  }
 });

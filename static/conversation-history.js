@@ -1,6 +1,7 @@
 /**
  * Conversation History Management
  * Stores and retrieves conversations, drafts, and message history
+ * Uses file references instead of binary content for scalability
  */
 
 class ConversationHistory {
@@ -8,11 +9,12 @@ class ConversationHistory {
     this.db = null;
     this.currentConversationId = null;
     this.messageCache = [];
+    this.contentCache = new Map();
   }
 
   async init() {
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('gmgui-conversations', 1);
+      const request = indexedDB.open('gmgui-conversations', 2);
 
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
@@ -31,7 +33,7 @@ class ConversationHistory {
           store.createIndex('agentId', 'agentId', { unique: false });
         }
 
-        // Messages table
+        // Messages table - stores metadata and text only
         if (!db.objectStoreNames.contains('messages')) {
           const store = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
           store.createIndex('conversationId', 'conversationId', { unique: false });
@@ -84,7 +86,7 @@ class ConversationHistory {
     });
   }
 
-  async addMessage(content, direction = 'out', agentId = null) {
+  async addMessage(content, direction = 'out', agentId = null, attachments = []) {
     const message = {
       conversationId: this.currentConversationId,
       content,
@@ -95,6 +97,13 @@ class ConversationHistory {
         type: 'text',
         edited: false,
       },
+      attachments: attachments.map(att => ({
+        type: att.type,
+        path: att.path,
+        mime: att.mime,
+        filename: att.filename,
+        size: att.size,
+      })),
     };
 
     return new Promise((resolve, reject) => {
@@ -298,6 +307,60 @@ class ConversationHistory {
 
     const lowerQuery = query.toLowerCase();
     return messages.filter((m) => m.content.toLowerCase().includes(lowerQuery));
+  }
+
+  async loadFileReference(reference) {
+    if (!reference || !reference.path) {
+      return null;
+    }
+
+    if (this.contentCache.has(reference.path)) {
+      return this.contentCache.get(reference.path);
+    }
+
+    try {
+      const response = await fetch(reference.path);
+      if (!response.ok) {
+        console.warn(`Failed to load file reference: ${reference.path}`);
+        return null;
+      }
+
+      const blob = await response.blob();
+      const data = {
+        blob,
+        url: reference.path,
+        mime: reference.mime || response.headers.get('content-type'),
+        filename: reference.filename,
+        loadedAt: Date.now(),
+      };
+
+      this.contentCache.set(reference.path, data);
+      return data;
+    } catch (error) {
+      console.error(`Error loading file reference ${reference.path}:`, error);
+      return null;
+    }
+  }
+
+  createFileReference(path, mime, filename, size = 0) {
+    return {
+      type: 'file',
+      path,
+      mime,
+      filename,
+      size,
+      createdAt: Date.now(),
+    };
+  }
+
+  createScreenshotReference(path, filename) {
+    return {
+      type: 'screenshot',
+      path,
+      filename,
+      mime: 'image/png',
+      createdAt: Date.now(),
+    };
   }
 
   async exportConversation(conversationId) {

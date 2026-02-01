@@ -304,7 +304,11 @@ class GMGUIApp {
         const data = await response.json();
         this.lastScreenshot = data;
         this.showScreenshotModal(data.path);
-        this.logMessage('success', 'Screenshot captured');
+        this.logMessage('success', 'Screenshot captured', '', [{
+          type: 'screenshot',
+          path: data.path,
+          filename: data.filename,
+        }]);
       } else {
         const error = await response.json();
         this.logMessage('error', 'Screenshot failed', error.error);
@@ -314,6 +318,10 @@ class GMGUIApp {
     } finally {
       this.showLoading(false);
     }
+  }
+
+  async regenerateScreenshot() {
+    await this.captureScreenshot();
   }
 
   showScreenshotModal(path) {
@@ -359,7 +367,12 @@ class GMGUIApp {
       });
 
       if (response.ok) {
-        this.logMessage('info', `You (to ${this.selectedAgent})`, message);
+        const attachments = [{
+          type: 'screenshot',
+          path: this.lastScreenshot.path,
+          filename: this.lastScreenshot.filename,
+        }];
+        this.logMessage('info', `You (to ${this.selectedAgent})`, message, attachments);
         this.closeScreenshotModal();
       } else {
         const error = await response.json();
@@ -482,7 +495,13 @@ class GMGUIApp {
       });
 
       if (response.ok) {
-        this.logMessage('info', `You (to ${this.selectedAgent})`, message);
+        const attachments = [{
+          type: 'file',
+          path: file.path,
+          filename: file.filename,
+          mime: 'application/octet-stream',
+        }];
+        this.logMessage('info', `You (to ${this.selectedAgent})`, message, attachments);
       } else {
         const error = await response.json();
         this.logMessage('error', 'Send failed', error.error);
@@ -492,7 +511,66 @@ class GMGUIApp {
     }
   }
 
-  logMessage(type, title, content = '') {
+  async renderContentWithReferences(content, attachments = []) {
+    let html = `<div class="console-text">${escapeHtml(content)}</div>`;
+
+    if (attachments && attachments.length > 0) {
+      html += '<div class="attachments-container">';
+
+      for (const att of attachments) {
+        if (att.type === 'file') {
+          html += this.renderFileReference(att);
+        } else if (att.type === 'screenshot') {
+          html += await this.renderScreenshotReference(att);
+        }
+      }
+
+      html += '</div>';
+    }
+
+    return html;
+  }
+
+  renderFileReference(att) {
+    return `
+      <div class="attachment file-reference">
+        <span class="attachment-icon">📄</span>
+        <div class="attachment-info">
+          <a href="${att.path}" download="${att.filename || 'file'}" class="attachment-name">${escapeHtml(att.filename || 'File')}</a>
+          <div class="attachment-meta">${att.mime || 'application/octet-stream'}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  async renderScreenshotReference(att) {
+    try {
+      const response = await fetch(att.path);
+      if (response.ok) {
+        return `
+          <div class="attachment screenshot-reference">
+            <img src="${att.path}" alt="Screenshot" class="attachment-image" loading="lazy" />
+            <button onclick="app.regenerateScreenshot()" class="btn btn-secondary btn-xs">Regenerate</button>
+          </div>
+        `;
+      }
+    } catch (e) {
+      console.warn(`Failed to load screenshot reference: ${att.path}`);
+    }
+
+    return `
+      <div class="attachment content-unavailable">
+        <span class="attachment-icon">⚠️</span>
+        <div class="attachment-info">
+          <div class="attachment-name">Screenshot unavailable</div>
+          <div class="attachment-meta">File not found: ${escapeHtml(att.path)}</div>
+        </div>
+        <button onclick="app.regenerateScreenshot()" class="btn btn-secondary btn-xs">Regenerate</button>
+      </div>
+    `;
+  }
+
+  async logMessage(type, title, content = '', attachments = []) {
     const output = document.getElementById('consoleOutput');
     if (!output) return;
 
@@ -500,7 +578,7 @@ class GMGUIApp {
     msg.className = `console-message ${type}`;
 
     const time = new Date().toLocaleTimeString();
-    const contentHtml = content ? `<div class="console-text">${escapeHtml(content)}</div>` : '';
+    const contentHtml = content ? await this.renderContentWithReferences(content, attachments) : '';
 
     msg.innerHTML = `
       <div class="console-timestamp">${time}</div>
