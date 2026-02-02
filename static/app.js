@@ -107,9 +107,12 @@ class GMGUIApp {
   }
 
   startPeriodicSync() {
+    // Rapid sync every 10 seconds: check for new Claude Code conversations and sync
     setInterval(() => {
-      this.fetchConversations().then(() => this.renderChatHistory());
-    }, 30000);
+      this.autoImportClaudeCode().then(() => {
+        this.fetchConversations().then(() => this.renderChatHistory());
+      });
+    }, 10000);
   }
 
   async autoImportClaudeCode() {
@@ -276,7 +279,9 @@ class GMGUIApp {
 
   setupEventListeners() {
     window.addEventListener('focus', () => {
-      this.fetchConversations().then(() => this.renderChatHistory());
+      this.autoImportClaudeCode().then(() => {
+        this.fetchConversations().then(() => this.renderChatHistory());
+      });
     });
     const input = document.getElementById('messageInput');
     if (input) {

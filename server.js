@@ -11,7 +11,7 @@ import ACPConnection from './acp-launcher.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const BASE_URL = (process.env.BASE_URL || '/gm').replace(/\/+$/, '');
-const watch = process.argv.includes('--watch');
+const watch = process.argv.includes('--no-watch') ? false : (process.argv.includes('--watch') || process.env.HOT_RELOAD !== 'false');
 
 const staticDir = path.join(__dirname, 'static');
 if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
