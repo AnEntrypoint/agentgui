@@ -195,6 +195,20 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (routePath === '/api/import/claude-code' && req.method === 'GET') {
+      const result = queries.importClaudeCodeConversations();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ imported: result }));
+      return;
+    }
+
+    if (routePath === '/api/discover/claude-code' && req.method === 'GET') {
+      const discovered = queries.discoverClaudeCodeConversations();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ discovered }));
+      return;
+    }
+
     if (routePath === '/api/home' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ home: process.env.HOME || '/config' }));

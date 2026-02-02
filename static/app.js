@@ -886,6 +886,44 @@ function createChatInFolder() {
   app.openFolderBrowser();
 }
 
+async function importClaudeCodeConversations() {
+  closeNewChatModal();
+  try {
+    const res = await fetch(BASE_URL + '/api/import/claude-code');
+    const data = await res.json();
+
+    if (!data.imported) {
+      alert('No Claude Code conversations found to import.');
+      return;
+    }
+
+    const imported = data.imported.filter(r => r.status === 'imported');
+    const skipped = data.imported.filter(r => r.status === 'skipped');
+    const errors = data.imported.filter(r => r.status === 'error');
+
+    let message = `Import complete!\n\n`;
+    if (imported.length > 0) {
+      message += `✓ Imported: ${imported.length} conversation(s)\n`;
+    }
+    if (skipped.length > 0) {
+      message += `⊘ Skipped: ${skipped.length} (already imported)\n`;
+    }
+    if (errors.length > 0) {
+      message += `✗ Errors: ${errors.length}\n`;
+    }
+
+    alert(message.trim());
+
+    if (imported.length > 0) {
+      await app.fetchConversations();
+      app.renderAll();
+    }
+  } catch (e) {
+    console.error('Import error:', e);
+    alert('Failed to import Claude Code conversations: ' + e.message);
+  }
+}
+
 function sendMessage() { app.sendMessage(); }
 
 function toggleSidebar() {

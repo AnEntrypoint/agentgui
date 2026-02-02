@@ -441,6 +441,86 @@ export const queries = {
 
   clearIdempotencyKey(key) {
     db.run('DELETE FROM idempotencyKeys WHERE key = ?', [key]);
+  },
+
+  discoverClaudeCodeConversations() {
+    const claudeHomeDir = path.join(os.homedir(), '.claude-code');
+    const conversationsDir = path.join(claudeHomeDir, 'conversations');
+
+    if (!fs.existsSync(conversationsDir)) {
+      return [];
+    }
+
+    const discovered = [];
+    try {
+      const items = fs.readdirSync(conversationsDir, { withFileTypes: true });
+      for (const item of items) {
+        if (!item.isDirectory()) continue;
+
+        const metadataPath = path.join(conversationsDir, item.name, 'metadata.json');
+        const messagesPath = path.join(conversationsDir, item.name, 'messages.json');
+
+        if (!fs.existsSync(metadataPath) || !fs.existsSync(messagesPath)) continue;
+
+        try {
+          const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+          const messages = JSON.parse(fs.readFileSync(messagesPath, 'utf-8'));
+
+          discovered.push({
+            id: item.name,
+            metadata,
+            messages,
+            source: 'claude-code'
+          });
+        } catch (e) {
+          console.error(`Error reading Claude Code conversation ${item.name}:`, e.message);
+        }
+      }
+    } catch (e) {
+      console.error('Error discovering Claude Code conversations:', e.message);
+    }
+
+    return discovered;
+  },
+
+  importClaudeCodeConversations() {
+    const discovered = this.discoverClaudeCodeConversations();
+    const imported = [];
+
+    for (const conv of discovered) {
+      try {
+        const existingConv = db.prepare('SELECT id FROM conversations WHERE id = ?').get(conv.id);
+        if (existingConv) {
+          imported.push({ id: conv.id, status: 'skipped', reason: 'Already imported' });
+          continue;
+        }
+
+        const title = conv.metadata?.title || 'Claude Code Conversation';
+        const createdAt = conv.metadata?.created_at || Date.now();
+        const updatedAt = conv.metadata?.updated_at || Date.now();
+
+        db.prepare(
+          `INSERT INTO conversations (id, agentId, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?)`
+        ).run(conv.id, 'claude-code', title, createdAt, updatedAt, 'active');
+
+        for (const msg of (conv.messages || [])) {
+          try {
+            db.prepare(
+              `INSERT INTO messages (id, conversationId, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
+            ).run(msg.id || generateId('msg'), conv.id, msg.role || 'user', msg.content || '', msg.created_at || Date.now());
+          } catch (e) {
+            console.error(`Error importing message in conversation ${conv.id}:`, e.message);
+          }
+        }
+
+        imported.push({ id: conv.id, status: 'imported', title });
+      } catch (e) {
+        console.error(`Error importing Claude Code conversation ${conv.id}:`, e.message);
+        imported.push({ id: conv.id, status: 'error', error: e.message });
+      }
+    }
+
+    return imported;
   }
 };
 
