@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { createRequire } from 'module';
 
+const require = createRequire(import.meta.url);
 const dbDir = path.join(os.homedir(), '.gmgui');
 const dbFilePath = path.join(dbDir, 'data.db');
 const oldJsonPath = path.join(dbDir, 'data.json');
