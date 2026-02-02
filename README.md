@@ -20,17 +20,14 @@ A buildless, hot-reloading web client for managing multiple Claude Agent Protoco
 
 ### One-Liner (Recommended)
 
-**For Bun users:**
-```bash
-bun run gh:AnEntrypoint/gmgui
-```
-
-**For Node.js users:**
 ```bash
 npx gmgui
 ```
 
-Both download and run directly from GitHub with zero setup required.
+This works with both Bun and Node.js:
+- **Bun users:** Automatically detected and used (3-4x faster)
+- **Node.js users:** Runs with standard Node.js runtime
+- **Zero setup required** - just run the command from any directory
 
 ### Traditional Installation
 
@@ -216,18 +213,18 @@ See [TESTING.md](TESTING.md) for detailed testing instructions.
 The project now fully supports Bun with automatic SQLite persistence:
 
 ```bash
-# Install Bun
+# Install Bun (optional for 3-4x faster startup)
 curl -fsSL https://bun.sh/install | bash
 
-# Run with Bun (auto-detected and used automatically)
-bun run gh:AnEntrypoint/gmgui
+# Run gmgui - Bun is auto-detected if installed
+npx gmgui
 ```
 
-Benefits:
+Benefits when Bun is installed:
 - 3-4x faster startup than Node.js
 - Native SQLite database (data.db)
-- Automatic runtime detection (uses Bun if available, Node.js fallback)
-- Same API interface, no code changes needed
+- Automatic detection - no special commands needed
+- Same API interface, zero code changes
 
 ## Troubleshooting
 
@@ -272,4 +269,4 @@ MIT - Free to use, modify, and distribute
 
 ---
 
-**Ready to manage multiple ACP agents?** Start with `bun run gh:AnEntrypoint/gmgui` or `npx gmgui` and open http://localhost:3000
+**Ready to manage multiple ACP agents?** Start with `npx gmgui` and open http://localhost:3000
