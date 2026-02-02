@@ -26,6 +26,7 @@
     "test:all": "npm run test:integration && npm run test"
   },
   "dependencies": {
+    "better-sqlite3": "^12.6.2",
     "ws": "^8.14.2"
   }
 }
