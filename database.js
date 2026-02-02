@@ -99,56 +99,54 @@ function migrateFromJson() {
     const content = fs.readFileSync(oldJsonPath, 'utf-8');
     const data = JSON.parse(content);
 
-    if (data.conversations) {
-      for (const id in data.conversations) {
-        const conv = data.conversations[id];
-        db.run(
-          `INSERT OR REPLACE INTO conversations (id, agentId, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?)`,
-          [conv.id, conv.agentId, conv.title || null, conv.created_at, conv.updated_at, conv.status || 'active']
-        );
+    const migrationStmt = db.transaction(() => {
+      if (data.conversations) {
+        for (const id in data.conversations) {
+          const conv = data.conversations[id];
+          db.prepare(
+            `INSERT OR REPLACE INTO conversations (id, agentId, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?)`
+          ).run(conv.id, conv.agentId, conv.title || null, conv.created_at, conv.updated_at, conv.status || 'active');
+        }
       }
-    }
 
-    if (data.messages) {
-      for (const id in data.messages) {
-        const msg = data.messages[id];
-        db.run(
-          `INSERT OR REPLACE INTO messages (id, conversationId, role, content, created_at) VALUES (?, ?, ?, ?, ?)`,
-          [msg.id, msg.conversationId, msg.role, msg.content, msg.created_at]
-        );
+      if (data.messages) {
+        for (const id in data.messages) {
+          const msg = data.messages[id];
+          db.prepare(
+            `INSERT OR REPLACE INTO messages (id, conversationId, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
+          ).run(msg.id, msg.conversationId, msg.role, msg.content, msg.created_at);
+        }
       }
-    }
 
-    if (data.sessions) {
-      for (const id in data.sessions) {
-        const sess = data.sessions[id];
-        db.run(
-          `INSERT OR REPLACE INTO sessions (id, conversationId, status, started_at, completed_at, response, error) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [sess.id, sess.conversationId, sess.status, sess.started_at, sess.completed_at || null, sess.response || null, sess.error || null]
-        );
+      if (data.sessions) {
+        for (const id in data.sessions) {
+          const sess = data.sessions[id];
+          db.prepare(
+            `INSERT OR REPLACE INTO sessions (id, conversationId, status, started_at, completed_at, response, error) VALUES (?, ?, ?, ?, ?, ?, ?)`
+          ).run(sess.id, sess.conversationId, sess.status, sess.started_at, sess.completed_at || null, sess.response || null, sess.error || null);
+        }
       }
-    }
 
-    if (data.events) {
-      for (const id in data.events) {
-        const evt = data.events[id];
-        db.run(
-          `INSERT OR REPLACE INTO events (id, type, conversationId, sessionId, data, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-          [evt.id, evt.type, evt.conversationId || null, evt.sessionId || null, JSON.stringify(evt.data), evt.created_at]
-        );
+      if (data.events) {
+        for (const id in data.events) {
+          const evt = data.events[id];
+          db.prepare(
+            `INSERT OR REPLACE INTO events (id, type, conversationId, sessionId, data, created_at) VALUES (?, ?, ?, ?, ?, ?)`
+          ).run(evt.id, evt.type, evt.conversationId || null, evt.sessionId || null, JSON.stringify(evt.data), evt.created_at);
+        }
       }
-    }
 
-    if (data.idempotencyKeys) {
-      for (const key in data.idempotencyKeys) {
-        const entry = data.idempotencyKeys[key];
-        db.run(
-          `INSERT OR REPLACE INTO idempotencyKeys (key, value, created_at, ttl) VALUES (?, ?, ?, ?)`,
-          [key, JSON.stringify(entry.value), entry.created_at, entry.ttl]
-        );
+      if (data.idempotencyKeys) {
+        for (const key in data.idempotencyKeys) {
+          const entry = data.idempotencyKeys[key];
+          db.prepare(
+            `INSERT OR REPLACE INTO idempotencyKeys (key, value, created_at, ttl) VALUES (?, ?, ?, ?)`
+          ).run(key, JSON.stringify(entry.value), entry.created_at, entry.ttl);
+        }
       }
-    }
+    });
 
+    migrationStmt();
     fs.renameSync(oldJsonPath, `${oldJsonPath}.migrated`);
     console.log('Migrated data from JSON to SQLite');
   } catch (e) {
@@ -188,8 +186,8 @@ export const queries = {
   },
 
   getAllConversations() {
-    const stmt = db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC');
-    return stmt.all();
+    const stmt = db.prepare('SELECT * FROM conversations WHERE status != ? ORDER BY updated_at DESC');
+    return stmt.all('deleted');
   },
 
   updateConversation(id, data) {
@@ -387,22 +385,28 @@ export const queries = {
     const conv = this.getConversation(id);
     if (!conv) return false;
 
-    db.prepare('DELETE FROM events WHERE conversationId = ?').run(id);
-    db.prepare('DELETE FROM sessions WHERE conversationId = ?').run(id);
-    db.prepare('DELETE FROM messages WHERE conversationId = ?').run(id);
-    db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+    const deleteStmt = db.transaction(() => {
+      db.prepare('DELETE FROM events WHERE conversationId = ?').run(id);
+      db.prepare('DELETE FROM sessions WHERE conversationId = ?').run(id);
+      db.prepare('DELETE FROM messages WHERE conversationId = ?').run(id);
+      db.prepare('UPDATE conversations SET status = ? WHERE id = ?').run('deleted', id);
+    });
 
+    deleteStmt();
     return true;
   },
 
   cleanup() {
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-
-    db.prepare('DELETE FROM events WHERE created_at < ?').run(thirtyDaysAgo);
-    db.prepare('DELETE FROM sessions WHERE completed_at IS NOT NULL AND completed_at < ?').run(thirtyDaysAgo);
-
     const now = Date.now();
-    db.prepare('DELETE FROM idempotencyKeys WHERE (created_at + ttl) < ?').run(now);
+
+    const cleanupStmt = db.transaction(() => {
+      db.prepare('DELETE FROM events WHERE created_at < ?').run(thirtyDaysAgo);
+      db.prepare('DELETE FROM sessions WHERE completed_at IS NOT NULL AND completed_at < ?').run(thirtyDaysAgo);
+      db.prepare('DELETE FROM idempotencyKeys WHERE (created_at + ttl) < ?').run(now);
+    });
+
+    cleanupStmt();
   },
 
   setIdempotencyKey(key, value) {
@@ -480,9 +484,10 @@ export const queries = {
 
     for (const conv of discovered) {
       try {
-        const existingConv = db.prepare('SELECT id FROM conversations WHERE id = ?').get(conv.id);
+        const existingConv = db.prepare('SELECT id, status FROM conversations WHERE id = ?').get(conv.id);
         if (existingConv) {
-          imported.push({ id: conv.id, status: 'skipped', reason: 'Already imported' });
+          const reason = existingConv.status === 'deleted' ? 'User deleted this conversation' : 'Already imported';
+          imported.push({ id: conv.id, status: 'skipped', reason });
           continue;
         }
 
@@ -490,20 +495,23 @@ export const queries = {
         const createdAt = conv.metadata?.created_at || Date.now();
         const updatedAt = conv.metadata?.updated_at || Date.now();
 
-        db.prepare(
-          `INSERT INTO conversations (id, agentId, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?)`
-        ).run(conv.id, 'claude-code', title, createdAt, updatedAt, 'active');
+        const importStmt = db.transaction(() => {
+          db.prepare(
+            `INSERT INTO conversations (id, agentId, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?)`
+          ).run(conv.id, 'claude-code', title, createdAt, updatedAt, 'active');
 
-        for (const msg of (conv.messages || [])) {
-          try {
-            db.prepare(
-              `INSERT INTO messages (id, conversationId, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
-            ).run(msg.id || generateId('msg'), conv.id, msg.role || 'user', msg.content || '', msg.created_at || Date.now());
-          } catch (e) {
-            console.error(`Error importing message in conversation ${conv.id}:`, e.message);
+          for (const msg of (conv.messages || [])) {
+            try {
+              db.prepare(
+                `INSERT INTO messages (id, conversationId, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
+              ).run(msg.id || generateId('msg'), conv.id, msg.role || 'user', msg.content || '', msg.created_at || Date.now());
+            } catch (e) {
+              console.error(`Error importing message in conversation ${conv.id}:`, e.message);
+            }
           }
-        }
+        });
 
+        importStmt();
         imported.push({ id: conv.id, status: 'imported', title });
       } catch (e) {
         console.error(`Error importing Claude Code conversation ${conv.id}:`, e.message);
