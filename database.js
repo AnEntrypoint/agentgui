@@ -439,36 +439,37 @@ export const queries = {
   },
 
   discoverClaudeCodeConversations() {
-    const claudeHomeDir = path.join(os.homedir(), '.claude-code');
-    const conversationsDir = path.join(claudeHomeDir, 'conversations');
-
-    if (!fs.existsSync(conversationsDir)) {
-      return [];
-    }
+    const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+    if (!fs.existsSync(projectsDir)) return [];
 
     const discovered = [];
     try {
-      const items = fs.readdirSync(conversationsDir, { withFileTypes: true });
-      for (const item of items) {
-        if (!item.isDirectory()) continue;
-
-        const metadataPath = path.join(conversationsDir, item.name, 'metadata.json');
-        const messagesPath = path.join(conversationsDir, item.name, 'messages.json');
-
-        if (!fs.existsSync(metadataPath) || !fs.existsSync(messagesPath)) continue;
+      const dirs = fs.readdirSync(projectsDir, { withFileTypes: true });
+      for (const dir of dirs) {
+        if (!dir.isDirectory()) continue;
+        const dirPath = path.join(projectsDir, dir.name);
+        const indexPath = path.join(dirPath, 'sessions-index.json');
+        if (!fs.existsSync(indexPath)) continue;
 
         try {
-          const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-          const messages = JSON.parse(fs.readFileSync(messagesPath, 'utf-8'));
-
-          discovered.push({
-            id: item.name,
-            metadata,
-            messages,
-            source: 'claude-code'
-          });
+          const index = JSON.parse(fs.readFileSync(indexPath, 'utf-8'));
+          const projectPath = index.originalPath || dir.name.replace(/^-/, '/').replace(/-/g, '/');
+          for (const entry of (index.entries || [])) {
+            if (!entry.sessionId || entry.messageCount === 0) continue;
+            discovered.push({
+              id: entry.sessionId,
+              jsonlPath: entry.fullPath || path.join(dirPath, `${entry.sessionId}.jsonl`),
+              title: entry.summary || entry.firstPrompt || 'Claude Code Session',
+              projectPath,
+              created: entry.created ? new Date(entry.created).getTime() : entry.fileMtime,
+              modified: entry.modified ? new Date(entry.modified).getTime() : entry.fileMtime,
+              messageCount: entry.messageCount,
+              gitBranch: entry.gitBranch,
+              source: 'claude-code'
+            });
+          }
         } catch (e) {
-          console.error(`Error reading Claude Code conversation ${item.name}:`, e.message);
+          console.error(`Error reading index ${indexPath}:`, e.message);
         }
       }
     } catch (e) {
@@ -476,6 +477,46 @@ export const queries = {
     }
 
     return discovered;
+  },
+
+  parseJsonlMessages(jsonlPath) {
+    if (!fs.existsSync(jsonlPath)) return [];
+    const messages = [];
+    try {
+      const lines = fs.readFileSync(jsonlPath, 'utf-8').split('\n');
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.type === 'user' && obj.message?.content) {
+            const content = typeof obj.message.content === 'string'
+              ? obj.message.content
+              : Array.isArray(obj.message.content)
+                ? obj.message.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+                : JSON.stringify(obj.message.content);
+            if (content && !content.startsWith('[{"tool_use_id"')) {
+              messages.push({ id: obj.uuid || generateId('msg'), role: 'user', content, created_at: new Date(obj.timestamp).getTime() });
+            }
+          } else if (obj.type === 'assistant' && obj.message?.content) {
+            let text = '';
+            const content = obj.message.content;
+            if (Array.isArray(content)) {
+              for (const c of content) {
+                if (c.type === 'text' && c.text) text += c.text;
+              }
+            } else if (typeof content === 'string') {
+              text = content;
+            }
+            if (text) {
+              messages.push({ id: obj.uuid || generateId('msg'), role: 'assistant', content: text, created_at: new Date(obj.timestamp).getTime() });
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      console.error(`Error parsing JSONL ${jsonlPath}:`, e.message);
+    }
+    return messages;
   },
 
   importClaudeCodeConversations() {
@@ -486,35 +527,33 @@ export const queries = {
       try {
         const existingConv = db.prepare('SELECT id, status FROM conversations WHERE id = ?').get(conv.id);
         if (existingConv) {
-          const reason = existingConv.status === 'deleted' ? 'User deleted this conversation' : 'Already imported';
-          imported.push({ id: conv.id, status: 'skipped', reason });
+          imported.push({ id: conv.id, status: 'skipped', reason: existingConv.status === 'deleted' ? 'deleted' : 'exists' });
           continue;
         }
 
-        const title = conv.metadata?.title || 'Claude Code Conversation';
-        const createdAt = conv.metadata?.created_at || Date.now();
-        const updatedAt = conv.metadata?.updated_at || Date.now();
+        const projectName = conv.projectPath ? path.basename(conv.projectPath) : '';
+        const title = conv.title || 'Claude Code Session';
+        const displayTitle = projectName ? `[${projectName}] ${title}` : title;
+
+        const messages = this.parseJsonlMessages(conv.jsonlPath);
 
         const importStmt = db.transaction(() => {
           db.prepare(
             `INSERT INTO conversations (id, agentId, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?)`
-          ).run(conv.id, 'claude-code', title, createdAt, updatedAt, 'active');
+          ).run(conv.id, 'claude-code', displayTitle, conv.created, conv.modified, 'active');
 
-          for (const msg of (conv.messages || [])) {
+          for (const msg of messages) {
             try {
               db.prepare(
                 `INSERT INTO messages (id, conversationId, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
-              ).run(msg.id || generateId('msg'), conv.id, msg.role || 'user', msg.content || '', msg.created_at || Date.now());
-            } catch (e) {
-              console.error(`Error importing message in conversation ${conv.id}:`, e.message);
-            }
+              ).run(msg.id, conv.id, msg.role, msg.content, msg.created_at);
+            } catch (_) {}
           }
         });
 
         importStmt();
-        imported.push({ id: conv.id, status: 'imported', title });
+        imported.push({ id: conv.id, status: 'imported', title: displayTitle, messages: messages.length });
       } catch (e) {
-        console.error(`Error importing Claude Code conversation ${conv.id}:`, e.message);
         imported.push({ id: conv.id, status: 'error', error: e.message });
       }
     }
