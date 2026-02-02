@@ -140,8 +140,24 @@ GET /uploads/{filename}
 - `PORT` (default: 3000) - Server port
 - `UPLOAD_DIR` (default: /tmp/gmgui-conversations) - File storage location
 
-### Browser Local Storage
+### Data Storage
+
+**Conversation History**: Stored in `~/.gmgui/data.db` (hidden folder in your home directory)
+- Uses SQLite database for persistent storage
+- Auto-created on first run with proper permissions
+- Contains conversations, messages, sessions, and event history
+- Data persists across runs and restarts
+- Private to current user (mode 0644)
+
+**Browser Local Storage**
 - `gmgui-settings` - User preferences and configuration
+
+**Why Hidden Folder?**
+Using `~/.gmgui/` follows Unix conventions:
+- Hidden folders (starting with `.`) keep user directories clean
+- Prevents accidental deletion or modification
+- Private by convention - not visible in casual `ls` output
+- Standard practice for application data (`.config`, `.local`, `.cache`)
 
 ## Architecture
 
