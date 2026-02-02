@@ -1,14 +1,11 @@
 #!/usr/bin/env node
-import { spawn, spawnSync } from 'child_process';
-import { fileURLToPath } from 'url';
-import path from 'path';
-import process from 'process';
-import fs from 'fs';
+const { spawn, spawnSync } = require('child_process');
+const path = require('path');
+const fs = require('fs');
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.join(__dirname, '..');
 
-export default async function gmgui(args = []) {
+async function gmgui(args = []) {
   const command = args[0] || 'start';
 
   if (command === 'start') {
@@ -48,7 +45,8 @@ export default async function gmgui(args = []) {
 }
 
 // Run if this file is executed directly (works with symlinks, npm, npx)
-const isBinFile = process.argv[1].endsWith('gmgui.js') ||
+const isBinFile = process.argv[1].endsWith('gmgui.cjs') ||
+                   process.argv[1].endsWith('gmgui.js') ||
                    process.argv[1].endsWith('/gmgui') ||
                    process.argv[1].includes('bin/gmgui');
 if (isBinFile) {
