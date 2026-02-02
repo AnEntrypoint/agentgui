@@ -1,6 +1,4 @@
-* {
-  margin: 0;
-  padding: 0;
+*, *::before, *::after {
   box-sizing: border-box;
 }
 
@@ -594,7 +592,7 @@ html, body {
   cursor: pointer;
 }
 
-.input {
+.gm-input {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid var(--border-color);
@@ -607,7 +605,7 @@ html, body {
   margin-top: 0.5rem;
 }
 
-.input:focus {
+.gm-input:focus {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
@@ -819,9 +817,9 @@ html, body {
   flex: 0 1 100%;
   border: 1px solid var(--border-color);
   border-radius: 0.5rem;
-  overflow: hidden;
+  overflow: visible;
   background: var(--bg-secondary);
-  max-width: 70%;
+  max-width: 100%;
 }
 
 .html-header {
@@ -835,22 +833,10 @@ html, body {
 
 .html-content {
   padding: 0.75rem;
-  font-size: 0.9rem;
-  color: var(--text-primary);
   overflow-x: auto;
 }
 
-.html-content > * {
-  margin: 0.5rem 0;
-}
 
-.html-content > *:first-child {
-  margin-top: 0;
-}
-
-.html-content > *:last-child {
-  margin-bottom: 0;
-}
 
 .image-block {
   flex: 0 1 100%;
@@ -938,7 +924,7 @@ html, body {
 }
 
 /* Modal */
-.modal {
+.gm-modal {
   display: none;
   position: fixed;
   inset: 0;
@@ -971,11 +957,11 @@ html, body {
   }
 }
 
-.modal.active {
+.gm-modal.active {
   display: flex;
 }
 
-.modal-content {
+.gm-modal-content {
   background: var(--bg-primary);
   border-radius: 0.75rem;
   box-shadow: var(--shadow-xl);
@@ -988,7 +974,7 @@ html, body {
   transition: var(--transition-smooth);
 }
 
-.modal-header {
+.gm-modal-header {
   padding: 1.5rem;
   border-bottom: 1px solid var(--border-color);
   display: flex;
@@ -996,12 +982,12 @@ html, body {
   align-items: center;
 }
 
-.modal-header h3 {
+.gm-modal-header h3 {
   margin: 0;
   color: var(--text-primary);
 }
 
-.modal-body {
+.gm-modal-body {
   padding: 1.5rem;
   overflow-y: auto;
   flex: 1;
@@ -1010,7 +996,7 @@ html, body {
   justify-content: center;
 }
 
-.modal-footer {
+.gm-modal-footer {
   padding: 1rem 1.5rem;
   border-top: 1px solid var(--border-color);
   display: flex;
@@ -1069,7 +1055,7 @@ html, body {
   color: var(--text-tertiary);
 }
 
-.btn {
+.gm-btn {
   padding: 0.625rem 1rem;
   border: none;
   border-radius: 0.5rem;
@@ -1083,47 +1069,47 @@ html, body {
   white-space: nowrap;
 }
 
-.btn-primary {
+.gm-btn-primary {
   background: var(--color-primary);
   color: white;
 }
 
-.btn-primary:hover {
+.gm-btn-primary:hover {
   background: var(--color-primary-light);
   transform: translateY(-1px);
 }
 
-.btn-success {
+.gm-btn-success {
   background: var(--color-success);
   color: white;
 }
 
-.btn-success:hover {
+.gm-btn-success:hover {
   background: #059669;
   transform: translateY(-1px);
 }
 
-.btn-secondary {
+.gm-btn-secondary {
   background: var(--bg-tertiary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
 }
 
-.btn-secondary:hover {
+.gm-btn-secondary:hover {
   background: var(--border-color);
 }
 
-.btn-danger {
+.gm-btn-danger {
   background: var(--color-danger);
   color: white;
 }
 
-.btn-danger:hover {
+.gm-btn-danger:hover {
   background: #dc2626;
   transform: translateY(-1px);
 }
 
-.btn-close {
+.gm-btn-close {
   background: none;
   border: none;
   font-size: 2rem;
@@ -1138,7 +1124,7 @@ html, body {
   transition: var(--transition-fast);
 }
 
-.btn-close:hover {
+.gm-btn-close:hover {
   color: var(--text-primary);
 }
 
@@ -1157,7 +1143,7 @@ html, body {
   display: flex;
 }
 
-.spinner {
+.gm-spinner {
   width: 48px;
   height: 48px;
   border: 4px solid rgba(255, 255, 255, 0.3);
@@ -1420,7 +1406,7 @@ html, body {
   .sidebar,
   .chat-input-section,
   .chat-footer,
-  .modal,
+  .gm-modal,
   .loading-overlay {
     display: none;
   }
