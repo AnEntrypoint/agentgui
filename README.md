@@ -7,7 +7,7 @@ A buildless, hot-reloading web client for managing multiple Claude Agent Protoco
 ## Get Started Now - One Command
 
 ```bash
-bunx gmgui
+bunx agentgui
 ```
 
 That's it. One command starts the server and opens http://localhost:3000/gm/ in your browser.

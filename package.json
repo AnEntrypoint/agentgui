@@ -1,5 +1,5 @@
 {
-  "name": "gmgui",
+  "name": "agentgui",
   "version": "1.0.2",
   "description": "Multi-agent ACP client with real-time communication",
   "type": "module",
