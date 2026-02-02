@@ -14,7 +14,7 @@ A buildless, hot-reloading web client for managing multiple Claude Agent Protoco
 - **Conversation History**: Full message history with timestamps
 - **Zero Build Step**: Pure HTML/CSS/JavaScript - no bundling or transpilation
 - **Hot Reload**: Auto-refresh browser on file changes (development mode)
-- **Minimal Dependencies**: Only 2 production dependencies (ws, msgpackr)
+- **Minimal Dependencies**: Only 1 production dependency (ws)
 
 ## Quick Start
 
@@ -211,23 +211,23 @@ npm run test:integration
 
 See [TESTING.md](TESTING.md) for detailed testing instructions.
 
-## Bun Edition (Optional)
+## Bun Support (Recommended)
 
-For faster startup and SQLite persistence:
+The project now fully supports Bun with automatic SQLite persistence:
 
 ```bash
 # Install Bun
 curl -fsSL https://bun.sh/install | bash
 
-# Run with Bun (3-4x faster)
-bun run server-bun.js
+# Run with Bun (auto-detected and used automatically)
+bun run gh:AnEntrypoint/gmgui
 ```
 
 Benefits:
-- 3-4x faster startup
-- Native SQLite database
-- No extra dependencies
-- Same API interface
+- 3-4x faster startup than Node.js
+- Native SQLite database (data.db)
+- Automatic runtime detection (uses Bun if available, Node.js fallback)
+- Same API interface, no code changes needed
 
 ## Troubleshooting
 
@@ -272,4 +272,4 @@ MIT - Free to use, modify, and distribute
 
 ---
 
-**Ready to manage multiple ACP agents?** Start with `npm start` and open http://localhost:3000
+**Ready to manage multiple ACP agents?** Start with `bun run gh:AnEntrypoint/gmgui` or `npx gmgui` and open http://localhost:3000
