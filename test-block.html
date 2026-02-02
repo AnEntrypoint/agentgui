@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hero Card</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+  :root {
+    --ink: #0a0a0a;
+    --cream: #f4f0eb;
+    --accent: #c8553d;
+    --accent-light: #e8886e;
+    --glass: rgba(244, 240, 235, 0.06);
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'DM Sans', sans-serif;
+    background: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 80%, rgba(200, 85, 61, 0.12), transparent),
+      radial-gradient(ellipse 60% 50% at 80% 20%, rgba(232, 136, 110, 0.08), transparent);
+    pointer-events: none;
+  }
+
+  .noise {
+    position: fixed;
+    inset: 0;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 200px;
+    pointer-events: none;
+  }
+
+  .card {
+    position: relative;
+    width: min(520px, 90vw);
+    padding: 56px 48px 48px;
+    border: 1px solid rgba(244, 240, 235, 0.08);
+    border-radius: 2px;
+    background: var(--glass);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    animation: cardIn 1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(32px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: -1px; left: 48px; right: 48px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+
+  .label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: var(--accent-light);
+    margin-bottom: 28px;
+    animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+  }
+
+  .heading {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 5vw, 2.75rem);
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--cream);
+    margin-bottom: 20px;
+    animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+  }
+
+  .heading em {
+    font-style: italic;
+    color: var(--accent-light);
+  }
+
+  .desc {
+    font-size: 15px;
+    line-height: 1.7;
+    color: rgba(244, 240, 235, 0.5);
+    max-width: 38ch;
+    margin-bottom: 40px;
+    animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both;
+  }
+
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 32px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--cream);
+    background: var(--accent);
+    border: none;
+    border-radius: 1px;
+    cursor: pointer;
+    transition: background 0.3s, transform 0.2s, box-shadow 0.3s;
+    animation: fadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.45s both;
+  }
+
+  .cta:hover {
+    background: var(--accent-light);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 32px rgba(200, 85, 61, 0.3);
+  }
+
+  .cta:active {
+    transform: translateY(0);
+  }
+
+  .cta svg {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.3s;
+  }
+
+  .cta:hover svg {
+    transform: translateX(3px);
+  }
+
+  .rule {
+    display: block;
+    width: 40px;
+    height: 1px;
+    background: rgba(244, 240, 235, 0.12);
+    margin-bottom: 24px;
+    animation: ruleIn 1s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes ruleIn {
+    from { opacity: 0; width: 0; }
+    to { opacity: 1; width: 40px; }
+  }
+</style>
+</head>
+<body>
+  <div class="noise"></div>
+  <div class="card">
+    <p class="label">Introducing</p>
+    <h1 class="heading">Craft something<br><em>extraordinary</em></h1>
+    <span class="rule"></span>
+    <p class="desc">Where restraint meets ambition. Build interfaces that command attention through precision, not noise.</p>
+    <button class="cta">
+      Get started
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 8h10M9 4l4 4-4 4"/>
+      </svg>
+    </button>
+  </div>
+</body>
+</html>
