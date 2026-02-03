@@ -245,16 +245,34 @@ export const queries = {
   },
 
   getMessage(id) {
-    const stmt = db.prepare('SELECT * FROM messages WHERE id = ?');
-    return stmt.get(id);
-  },
+     const stmt = db.prepare('SELECT * FROM messages WHERE id = ?');
+     const msg = stmt.get(id);
+     if (msg && typeof msg.content === 'string') {
+       try {
+         msg.content = JSON.parse(msg.content);
+       } catch (_) {
+         // If it's not JSON, leave it as string
+       }
+     }
+     return msg;
+   },
 
-  getConversationMessages(conversationId) {
-    const stmt = db.prepare(
-      'SELECT * FROM messages WHERE conversationId = ? ORDER BY created_at ASC'
-    );
-    return stmt.all(conversationId);
-  },
+   getConversationMessages(conversationId) {
+     const stmt = db.prepare(
+       'SELECT * FROM messages WHERE conversationId = ? ORDER BY created_at ASC'
+     );
+     const messages = stmt.all(conversationId);
+     return messages.map(msg => {
+       if (typeof msg.content === 'string') {
+         try {
+           msg.content = JSON.parse(msg.content);
+         } catch (_) {
+           // If it's not JSON, leave it as string
+         }
+       }
+       return msg;
+     });
+   },
 
   createSession(conversationId) {
     const id = generateId('sess');
