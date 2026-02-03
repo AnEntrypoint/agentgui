@@ -36,6 +36,9 @@ setInterval(() => {
   sessionStateStore.cleanup(3600000); // Clean sessions older than 1 hour
 }, 600000); // Run every 10 minutes
 
+/**
+ * Get or create ACP connection with timeout protection
+ */
 async function getACP(agentId, cwd) {
   let conn = acpPool.get(agentId);
   if (conn?.isRunning()) {
@@ -47,6 +50,19 @@ async function getACP(agentId, cwd) {
   conn = new ACPConnection();
   const agentType = agentId === 'opencode' ? 'opencode' : 'claude-code';
   
+  // Wrap entire init in timeout to prevent indefinite hangs
+  return Promise.race([
+    initializeACP(conn, agentType, cwd, agentId),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('ACP initialization timeout (>60s)')), 60000)
+    )
+  ]);
+}
+
+/**
+ * Initialize ACP with all steps
+ */
+async function initializeACP(conn, agentType, cwd, agentId) {
   try {
     console.log(`[getACP] Step 1: Connecting to ${agentType}...`);
     await conn.connect(agentType, cwd);
