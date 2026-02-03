@@ -48,17 +48,19 @@ async function gmgui(args = []) {
         stdio: 'inherit'
       });
 
-      ps.on('error', reject);
+      ps.on('error', (err) => {
+        console.error(`Failed to start server: ${err.message}`);
+        reject(err);
+      });
 
-      // Keep this process alive indefinitely to keep the server running
-      process.stdin.resume();
-
-      // If server exits, keep this process alive
       ps.on('exit', (code) => {
         if (code !== 0) {
           console.error(`Server exited with code ${code}`);
+          // Don't reject - keep the promise pending so process stays alive
         }
       });
+
+      // Never resolve this promise - keeps the process alive indefinitely
     });
   } else {
     throw new Error(`Unknown command: ${command}`);
