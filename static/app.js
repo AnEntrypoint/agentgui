@@ -95,6 +95,7 @@ class GMGUIApp {
 
   async init() {
     console.log('[DEBUG] Init: Starting initialization');
+    console.log('[DEBUG] Init: BASE_URL =', BASE_URL);
     this.loadSettings();
     this.setupEventListeners();
     await this.fetchHome();
@@ -105,12 +106,14 @@ class GMGUIApp {
     console.log('[DEBUG] Init: Auto-imported Claude Code conversations');
     await this.fetchConversations();
     console.log('[DEBUG] Init: Fetched conversations, count:', this.conversations.size);
+    console.log('[DEBUG] Init: Conversation details:', Array.from(this.conversations.values()).slice(0, 3));
     this.connectSyncWebSocket();
     this.setupCrossTabSync();
     this.startPeriodicSync();
     console.log('[DEBUG] Init: About to renderAll with', this.conversations.size, 'conversations');
     this.renderAll();
     console.log('[DEBUG] Init: renderAll completed');
+    console.log('[DEBUG] Init: chatList innerHTML length:', document.getElementById('chatList')?.innerHTML?.length || 0);
   }
 
   startPeriodicSync() {
@@ -411,6 +414,10 @@ class GMGUIApp {
     }
     list.innerHTML = '';
     console.log('[DEBUG] renderChatHistory - conversations.size:', this.conversations.size);
+    
+    // Debug: Update page title with conversation count
+    document.title = `GMGUI (${this.conversations.size} chats)`;
+    
     if (this.conversations.size === 0) {
       console.warn('[DEBUG] No conversations to display - showing empty state');
       console.warn('[DEBUG] conversations map contents:', this.conversations);
@@ -421,6 +428,7 @@ class GMGUIApp {
       (a, b) => (b.updated_at || 0) - (a.updated_at || 0)
     );
     console.log('[DEBUG] renderChatHistory - sorted conversations count:', sorted.length);
+    console.log('[DEBUG] renderChatHistory - rendering', sorted.length, 'conversations');
     sorted.forEach(conv => {
       const item = document.createElement('button');
       item.className = `chat-item ${this.currentConversation === conv.id ? 'active' : ''}`;
@@ -1274,3 +1282,13 @@ function confirmFolderSelection() {
 
 const app = new GMGUIApp();
 window._app = app;
+
+// Debug: Log app state to window for inspection
+window._debug = {
+  get conversations() { return Array.from(app.conversations.values()).map(c => ({ id: c.id, title: c.title })); },
+  get conversationCount() { return app.conversations.size; },
+  get selectedAgent() { return app.selectedAgent; },
+  get currentConversation() { return app.currentConversation; },
+  checkChatListElement() { return document.getElementById('chatList'); },
+  checkChatListChildCount() { return document.getElementById('chatList')?.children?.length || 0; }
+};
