@@ -39,34 +39,35 @@ setInterval(() => {
 async function getACP(agentId, cwd) {
   let conn = acpPool.get(agentId);
   if (conn?.isRunning()) {
-    debugLog(`[getACP] Returning cached connection for ${agentId}`);
+    console.log(`[getACP] Returning cached connection for ${agentId}`);
     return conn;
   }
 
-  debugLog(`[getACP] Creating new ACP connection for ${agentId}`);
+  console.log(`[getACP] Creating new ACP connection for ${agentId}`);
   conn = new ACPConnection();
   const agentType = agentId === 'opencode' ? 'opencode' : 'claude-code';
   
   try {
-    debugLog(`[getACP] Connecting to ${agentType}...`);
+    console.log(`[getACP] Step 1: Connecting to ${agentType}...`);
     await conn.connect(agentType, cwd);
-    debugLog(`[getACP] Connected, initializing...`);
+    console.log(`[getACP] Step 2: Connected, initializing...`);
     await conn.initialize();
-    debugLog(`[getACP] Initialized, creating session...`);
+    console.log(`[getACP] Step 3: Initialized, creating session...`);
     await conn.newSession(cwd);
-    debugLog(`[getACP] Session created, setting mode...`);
+    console.log(`[getACP] Step 4: Session created, setting mode...`);
     await conn.setSessionMode('bypassPermissions');
-    debugLog(`[getACP] Injecting skills...`);
+    console.log(`[getACP] Step 5: Injecting skills...`);
     // Inject system prompt to ensure HTML/RippleUI formatting
     await conn.injectSkills();
-    debugLog(`[getACP] Injecting system context...`);
+    console.log(`[getACP] Step 6: Injecting system context...`);
     await conn.injectSystemContext();
-    debugLog(`[getACP] All initialization complete, caching connection`);
+    console.log(`[getACP] Step 7: All initialization complete, caching connection`);
     acpPool.set(agentId, conn);
-    debugLog(`[getACP] ACP connection ready for ${agentId} in ${cwd}`);
+    console.log(`[getACP] ✅ ACP connection ready for ${agentId} in ${cwd}`);
     return conn;
   } catch (err) {
-    debugLog(`[getACP] ERROR: Failed to initialize ACP connection for ${agentId}: ${err.message}`);
+    console.error(`[getACP] ❌ ERROR: Failed to initialize ACP connection for ${agentId}: ${err.message}`);
+    console.error(`[getACP] Stack: ${err.stack}`);
     acpPool.delete(agentId);
     if (conn) await conn.terminate();
     throw new Error(`ACP initialization failed for ${agentId}: ${err.message}`);
