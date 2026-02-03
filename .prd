@@ -1,0 +1,186 @@
+# agentgui Complete Work Plan
+
+## PARALLEL EXECUTION STREAMS
+
+### Stream A: Test Categories (10 of 12) - CAN RUN IN PARALLEL
+**Independent Tests (can execute concurrently):**
+- [ ] Category 2: Real-Time Streaming with Persistence
+- [ ] Category 3: HTML Rendering Without Text Mixing
+- [ ] Category 4: Theme Compliance (Light/Dark)
+- [ ] Category 5: Advanced RippleUI Components
+- [ ] Category 6: Interactive Forms & Input Validation
+- [ ] Category 7: Database Persistence & Recovery
+- [ ] Category 8: State Consistency & Validation
+- [ ] Category 9: Reconnection & Recovery
+- [ ] Category 10: Error Handling & Edge Cases
+- [ ] Category 11: Performance & Latency
+- [ ] Category 12: Multi-Agent & Configuration
+
+**Dependency Chain (must execute sequentially):**
+1. Category 1 → (already passing: server startup works)
+2. Category 2 → Category 7 → Category 8 → Category 9
+3. Category 3 → Category 4 → Category 5
+4. Category 6 → (independent)
+5. Category 10 → Category 11 → (independent)
+6. Category 12 → (independent)
+
+### Stream B: Performance Optimization (Issue #1)
+- [ ] Profile /api/conversations/{id}/messages endpoint
+- [ ] Optimize fetchMessages() performance
+- [ ] Add response caching if applicable
+- [ ] Re-test conversation selection after optimization
+
+### Stream C: OpenCode Integration Decision
+- [ ] Option 1: Implement OpenCode CLI bridge (requires research)
+- [ ] Option 2: Document OpenCode limitation and deprecate feature
+- [ ] Option 3: Create SDK integration layer (future)
+- [ ] Decide approach and document
+
+### Stream D: Sync & Consistency (Phase 3)
+- [ ] Implement file watchers for claude code history changes
+- [ ] Add auto-import on file change detection
+- [ ] Create conflict resolution logic
+- [ ] Add read-only mode for imported conversations
+
+## EXECUTION STRATEGY
+
+### Phase 1: Parallel Test Execution
+**Batch 1 (4 parallel agents):**
+- Agent A: Categories 2,7,8,9 (streaming/state chain)
+- Agent B: Categories 3,4,5 (rendering chain)
+- Agent C: Categories 6,10,11 (forms/error handling chain)
+- Agent D: Category 12 (multi-agent, independent)
+
+### Phase 2: Issue Resolution
+- Performance profile and optimize Issue #1
+
+### Phase 3: OpenCode Decision & Implementation
+- Decide OpenCode approach
+- Implement chosen option
+
+### Phase 4: Sync Features
+- Implement Phase 3 file watchers and sync
+
+## TEST EXECUTION CHECKLIST
+
+### Category 2: Real-Time Streaming with Persistence
+- [ ] Send test message, verify real-time appearance
+- [ ] Check StreamHandler atomic write
+- [ ] Verify sequence numbers increment correctly
+- [ ] Test rapid message ordering
+- [ ] Test large message handling (10MB+)
+- [ ] Test empty message rejection
+
+### Category 3: HTML Rendering Without Text Mixing
+- [ ] Test agent response renders HTML only
+- [ ] Verify code block extraction
+- [ ] Test HTML sanitization (no XSS)
+- [ ] Test SVG rendering
+- [ ] Test nested HTML
+- [ ] Test special character handling
+
+### Category 4: Theme Compliance (Light/Dark)
+- [ ] Test system dark/light detection
+- [ ] Test theme toggle
+- [ ] Verify Tailwind text classes (gray-700 vs gray-300)
+- [ ] Test background color compliance
+- [ ] Verify no hardcoded hex colors
+- [ ] Test contrast ratios
+
+### Category 5: Advanced RippleUI Components
+- [ ] Progress bars: display, updates, percentage
+- [ ] Grid layouts: responsive wrapping
+- [ ] Collapsible sections: toggle state, animation
+- [ ] Two-column layouts: even split, responsive
+- [ ] Badge/pills: styling, variants
+- [ ] Timeline: vertical/horizontal, lines
+- [ ] Icon + text: alignment, wrapping
+- [ ] Buttons: states (default, hover, active, disabled)
+- [ ] Code blocks: syntax highlighting, scrollable
+- [ ] Tables: alignment, mobile scroll, alternating rows
+
+### Category 6: Interactive Forms & Input Validation
+- [ ] Text input: accepts and displays text
+- [ ] Email input: validates format
+- [ ] Textarea: multi-line, wrapping
+- [ ] Select dropdown: open/close, selection
+- [ ] Checkboxes: toggle, multiple select, state
+- [ ] Radio buttons: mutually exclusive
+- [ ] Form submit: handler triggers, data captured
+- [ ] Form validation: error messages display
+- [ ] Form reset: clears and restores defaults
+
+### Category 7: Database Persistence & Recovery
+- [ ] Session creation in database
+- [ ] Conversation creation with sessionId
+- [ ] stream_update atomic persistence
+- [ ] Message persistence after restart
+- [ ] Refresh shows message history
+- [ ] State checkpoints created
+- [ ] Gap detection identifies missing sequences
+- [ ] Full state recovery fetches missing data
+- [ ] Duplicate prevention (idempotency)
+- [ ] Orphaned data cleanup
+
+### Category 8: State Consistency & Validation
+- [ ] StateValidator identifies state errors
+- [ ] Checksum validation detects corruption
+- [ ] Sequence gaps trigger recovery
+- [ ] Session state returns complete picture
+- [ ] Concurrent updates don't cause races
+- [ ] Update count matches database rows
+- [ ] Block count accurate for all types
+- [ ] No duplicate messages in UI
+- [ ] Message order matches sequence exactly
+- [ ] Validator runs async
+
+### Category 9: Reconnection & Recovery
+- [ ] WebSocket disconnect detected within 5s
+- [ ] Exponential backoff: 1s, 2s, 4s, 8s, 16s, 32s, 60s
+- [ ] Max 10 reconnect attempts enforced
+- [ ] Reconnect succeeds after network recovery
+- [ ] Missed messages fetched via gap detection
+- [ ] State checkpoint enables recovery
+- [ ] Fast reconnect (< 100ms) has no duplicates
+- [ ] Slow network (high latency) handles gracefully
+- [ ] Multiple rapid disconnect/connect cycles work
+- [ ] Connection maintains 1+ hour persistence
+
+### Category 10: Error Handling & Edge Cases
+- [ ] Malformed JSON in updates rejected
+- [ ] Invalid session ID returns 404
+- [ ] Missing conversationId handled
+- [ ] Null/undefined content doesn't crash
+- [ ] Large payloads (100MB) handled
+- [ ] 1000 msgs/sec buffered correctly
+- [ ] Single character messages process
+- [ ] Whitespace-only messages handled
+- [ ] HTML syntax errors parse safely
+- [ ] Database locks don't block
+
+### Category 11: Performance & Latency
+- [ ] Messages appear in UI < 50ms
+- [ ] DB write + broadcast < 100ms
+- [ ] Page load blank→interactive < 2s
+- [ ] 1000 message history loads < 1s
+- [ ] WebSocket messages deliver < 50ms
+- [ ] Memory usage < 500MB (10k msgs)
+- [ ] CPU idle < 5%
+- [ ] 1000+ messages scroll smooth
+- [ ] Theme toggle no jank
+- [ ] Form submit responsive (< 200ms)
+
+### Category 12: Multi-Agent & Configuration
+- [ ] Agent type selection works
+- [ ] Claude Code config loads
+- [ ] OpenCode config loads
+- [ ] Environment variables passed through
+- [ ] OAuth tokens handled
+- [ ] Model preferences applied
+- [ ] Multiple agents in same session
+- [ ] Agent switching preserves history
+- [ ] Session isolation works
+- [ ] Config changes apply
+
+## SUCCESS CRITERIA
+All items must be completed and documented before session ends.
