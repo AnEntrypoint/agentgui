@@ -90,7 +90,13 @@ class GMGUIApp {
     this.settings = { autoScroll: true, connectTimeout: 30000 };
     this.pendingMessages = new Map();
     this.idempotencyKeys = new Map();
-    this.init();
+    
+    // Start async initialization and handle errors
+    this.initPromise = this.init().catch(err => {
+      console.error('[CRITICAL] GMGUIApp.init() failed:', err);
+      console.error('[CRITICAL] Stack:', err.stack);
+      throw err;
+    });
   }
 
   async init() {
@@ -1336,37 +1342,62 @@ function confirmFolderSelection() {
 
 // Wait for DOM to be fully ready before initializing
 function initializeApp() {
-  console.log('[DEBUG] initializeApp: Checking if DOM is ready');
-  const chatList = document.getElementById('chatList');
-  if (!chatList) {
-    console.warn('[DEBUG] initializeApp: chatList not found, waiting 100ms');
-    setTimeout(initializeApp, 100);
-    return;
-  }
-  
-  console.log('[DEBUG] initializeApp: DOM is ready, creating GMGUIApp');
-  window.app = new GMGUIApp();
-  window._app = window.app;
-  
-  // Debug: Log app state to window for inspection
-  window._debug = {
-    get conversations() { return Array.from(window.app.conversations.values()).map(c => ({ id: c.id, title: c.title })); },
-    get conversationCount() { return window.app.conversations.size; },
-    get selectedAgent() { return window.app.selectedAgent; },
-    get currentConversation() { return window.app.currentConversation; },
-    checkChatListElement() { return document.getElementById('chatList'); },
-    checkChatListChildCount() { return document.getElementById('chatList')?.children?.length || 0; },
-    async forceRefetch() {
-      console.log('[FORCE] Forcing fetchConversations...');
-      await window.app.fetchConversations();
-      console.log('[FORCE] Conversations loaded:', window.app.conversations.size);
-      window.app.renderChatHistory();
-      console.log('[FORCE] renderChatHistory called');
-      return window.app.conversations.size;
+  try {
+    console.log('[DEBUG] initializeApp: Checking if DOM is ready');
+    const chatList = document.getElementById('chatList');
+    if (!chatList) {
+      console.warn('[DEBUG] initializeApp: chatList not found, waiting 100ms');
+      setTimeout(initializeApp, 100);
+      return;
     }
-  };
-  
-  console.log('[DEBUG] initializeApp: GMGUIApp created successfully');
+    
+    console.log('[DEBUG] initializeApp: DOM is ready, creating GMGUIApp');
+    try {
+      window.app = new GMGUIApp();
+      window._app = window.app;
+      console.log('[DEBUG] initializeApp: GMGUIApp constructor completed');
+    } catch (constructorError) {
+      console.error('[ERROR] GMGUIApp constructor failed:', constructorError.message);
+      console.error('[ERROR] Stack:', constructorError.stack);
+      throw constructorError;
+    }
+    
+    // Debug: Log app state to window for inspection
+    window._debug = {
+      get conversations() { return Array.from(window.app.conversations.values()).map(c => ({ id: c.id, title: c.title })); },
+      get conversationCount() { return window.app.conversations.size; },
+      get selectedAgent() { return window.app.selectedAgent; },
+      get currentConversation() { return window.app.currentConversation; },
+      checkChatListElement() { return document.getElementById('chatList'); },
+      checkChatListChildCount() { return document.getElementById('chatList')?.children?.length || 0; },
+      async forceRefetch() {
+        console.log('[FORCE] Forcing fetchConversations...');
+        await window.app.fetchConversations();
+        console.log('[FORCE] Conversations loaded:', window.app.conversations.size);
+        window.app.renderChatHistory();
+        console.log('[FORCE] renderChatHistory called');
+        return window.app.conversations.size;
+      }
+    };
+    
+    console.log('[DEBUG] initializeApp: GMGUIApp created successfully with', window.app.conversations.size, 'conversations');
+  } catch (error) {
+    console.error('[CRITICAL ERROR] initializeApp failed:', error.message);
+    console.error('[CRITICAL ERROR] Stack trace:', error.stack);
+    
+    // Show error on page
+    const chatList = document.getElementById('chatList');
+    if (chatList) {
+      chatList.innerHTML = `
+        <div style="color: red; padding: 1rem; font-family: monospace; font-size: 0.75rem;">
+          <strong>INITIALIZATION ERROR</strong><br>
+          ${error.message}<br>
+          <br>
+          Check browser console (F12) for details.
+        </div>
+      `;
+    }
+  }
 }
 
 if (document.readyState === 'loading') {
