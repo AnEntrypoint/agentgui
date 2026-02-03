@@ -1,13 +1,5 @@
 # agentgui Work Items
 
-## COMPLETED ✅
-- [x] Phase 1: Claude Code Conversation Import
-  - Database schema migrated (9 new columns added)
-  - 90 Claude Code conversations imported
-  - Auto-import running every 30 seconds
-  - Server running, UI fully loaded (177 conversations)
-  - Commits: 340b7c1, fda2822
-
 ## ACTIVE 🔄
 
 ### Phase 2: OpenCode Integration (PRIORITY 2)
