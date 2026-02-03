@@ -138,49 +138,17 @@ export class ResponseFormatter {
   static segmentResponse(text) {
     if (!text || typeof text !== 'string') return [];
     
+    // First, extract XML tags
+    const xmlSegments = this.extractXMLTags(text);
+    if (xmlSegments.length > 0) {
+      return xmlSegments;
+    }
+    
+    // Otherwise, segment by intent and transitions
     const segments = [];
-    const parts = [];
+    const parts = this.segmentByIntent(text);
     
-    // Split by major transitions
-    const transitions = [
-      { pattern: /I'll\s+use\s+the\s+\w+\s+(?:subagent|tool|command)/i, type: 'tool_transition' },
-      { pattern: /Let\s+me\s+(?:use|run|execute|call)\s+/i, type: 'action_start' },
-      { pattern: /Here['s]*\s+(?:what|the|a)\s+(?:happened|result|output)/i, type: 'result' },
-      { pattern: /^(✓|✅|✗|❌|-|•)\s+/m, type: 'bullet' }
-    ];
-    
-    let currentPart = '';
-    const lines = text.split('\n');
-    
-    for (const line of lines) {
-      let isTransition = false;
-      
-      for (const { pattern, type } of transitions) {
-        if (pattern.test(line)) {
-          if (currentPart.trim()) {
-            parts.push({ text: currentPart.trim(), type: 'text' });
-            currentPart = '';
-          }
-          isTransition = true;
-          break;
-        }
-      }
-      
-      if (isTransition || line.match(/^#+\s/) || line.match(/^```/)) {
-        if (currentPart.trim()) {
-          parts.push({ text: currentPart.trim(), type: 'text' });
-          currentPart = '';
-        }
-      }
-      
-      currentPart += (currentPart ? '\n' : '') + line;
-    }
-    
-    if (currentPart.trim()) {
-      parts.push({ text: currentPart.trim(), type: 'text' });
-    }
-    
-    // Further parse each part
+    // Parse each part
     for (const part of parts) {
       segments.push({
         ...part,
@@ -190,6 +158,82 @@ export class ResponseFormatter {
     }
     
     return segments;
+  }
+
+  /**
+   * Extract XML-tagged content as separate segments
+   */
+  static extractXMLTags(text) {
+    const xmlPattern = /<(thinking|tool_use|tool_result|result|action)[\s>]([\s\S]*?)<\/\1>/gi;
+    const segments = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = xmlPattern.exec(text)) !== null) {
+      const before = text.substring(lastIndex, match.index);
+      if (before.trim()) {
+        segments.push({ type: 'text', text: before.trim() });
+      }
+
+      const tagType = match[1].toLowerCase();
+      const tagContent = match[2].trim();
+      segments.push({ type: tagType, text: tagContent });
+      lastIndex = xmlPattern.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      const remaining = text.substring(lastIndex).trim();
+      if (remaining) {
+        segments.push({ type: 'text', text: remaining });
+      }
+    }
+
+    return segments.length > 0 ? segments : [];
+  }
+
+  /**
+   * Segment by semantic intent/actions
+   */
+  static segmentByIntent(text) {
+    const segments = [];
+    const intentPatterns = [
+      { pattern: /^(Let me|I'll|I'm going to|First,?|Next,?|Now,?|Here's)/im, type: 'action' },
+      { pattern: /^(Looking|Examining|Analyzing|Reviewing|Checking|Reading)/im, type: 'analysis' },
+      { pattern: /^(Here'?s|Result|Output|Found|Got|Completed)/im, type: 'result' },
+      { pattern: /^(The|This|That|These|Those)/im, type: 'explanation' }
+    ];
+
+    let currentSegment = '';
+    let currentType = 'text';
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      let newType = currentType;
+
+      // Check for intent pattern match
+      for (const { pattern, type } of intentPatterns) {
+        if (pattern.test(line)) {
+          newType = type;
+          break;
+        }
+      }
+
+      // If type changed and we have content, save segment
+      if (newType !== currentType && currentSegment.trim()) {
+        segments.push({ type: currentType, text: currentSegment.trim() });
+        currentSegment = '';
+        currentType = newType;
+      }
+
+      currentSegment += (currentSegment ? '\n' : '') + line;
+    }
+
+    // Add remaining segment
+    if (currentSegment.trim()) {
+      segments.push({ type: currentType, text: currentSegment.trim() });
+    }
+
+    return segments.length > 0 ? segments : [{ type: 'text', text }];
   }
 
   /**

@@ -677,6 +677,54 @@ class GMGUIApp {
       li.className = 'response-list-item';
       li.textContent = segment.content;
       el.appendChild(li);
+    } else if (segment.type === 'thinking') {
+      // Collapsible thinking block
+      const details = document.createElement('details');
+      details.className = 'segment-thinking';
+      const summary = document.createElement('summary');
+      summary.textContent = '💭 Thinking';
+      details.appendChild(summary);
+      const content = document.createElement('div');
+      content.className = 'thinking-content';
+      content.textContent = segment.text;
+      details.appendChild(content);
+      el.appendChild(details);
+    } else if (segment.type === 'tool_use') {
+      // Tool call highlight
+      const div = document.createElement('div');
+      div.className = 'segment-tool-use';
+      div.innerHTML = `<div class="tool-icon">⚙️ Tool Call</div><pre class="tool-content"><code>${this.escapeHtml(segment.text)}</code></pre>`;
+      el.appendChild(div);
+    } else if (segment.type === 'tool_result') {
+      // Tool result
+      const div = document.createElement('div');
+      div.className = 'segment-tool-result';
+      div.innerHTML = `<div class="result-icon">📦 Result</div><pre class="result-content"><code>${this.escapeHtml(segment.text)}</code></pre>`;
+      el.appendChild(div);
+    } else if (segment.type === 'action') {
+      // Action statement - bold and prominent
+      const p = document.createElement('p');
+      p.className = 'response-action';
+      p.innerHTML = `<strong>→ ${this.escapeHtml(segment.text)}</strong>`;
+      el.appendChild(p);
+    } else if (segment.type === 'analysis') {
+      // Analysis/investigation
+      const p = document.createElement('p');
+      p.className = 'response-analysis';
+      p.innerHTML = `<em>🔍 ${this.escapeHtml(segment.text)}</em>`;
+      el.appendChild(p);
+    } else if (segment.type === 'result') {
+      // Result presentation
+      const div = document.createElement('div');
+      div.className = 'response-result';
+      div.innerHTML = segment.text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+      el.appendChild(div);
     } else if (segment.type === 'text') {
       const p = document.createElement('p');
       p.className = 'response-text';
@@ -691,6 +739,17 @@ class GMGUIApp {
     }
 
     return el;
+  }
+
+  escapeHtml(text) {
+    if (typeof text !== 'string') return '';
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
   }
 
   renderMetadata(metadata) {

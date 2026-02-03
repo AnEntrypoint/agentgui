@@ -1578,3 +1578,115 @@ p code {
   content: '✓ ';
   color: #28a745;
 }
+
+/* New Segment Types */
+
+/* Thinking blocks */
+.segment-thinking {
+  background: #f9f9f9;
+  border-left: 4px solid #999;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+.segment-thinking summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #666;
+  user-select: none;
+  padding-bottom: 0.5rem;
+}
+
+.segment-thinking summary:hover {
+  color: #333;
+}
+
+.thinking-content {
+  color: #555;
+  font-size: 0.95em;
+  line-height: 1.6;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+/* Tool use blocks */
+.segment-tool-use {
+  background: #f0f8ff;
+  border-left: 4px solid #007acc;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+.tool-icon {
+  font-weight: 600;
+  color: #007acc;
+  margin-bottom: 0.5rem;
+}
+
+.tool-content {
+  background: #f5f5f5;
+  padding: 0.75rem;
+  border-radius: 3px;
+  overflow-x: auto;
+}
+
+.tool-content code {
+  color: #d73a49;
+  font-family: 'Courier New', monospace;
+}
+
+/* Tool result blocks */
+.segment-tool-result {
+  background: #fff9e6;
+  border-left: 4px solid #ffb300;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+}
+
+.result-icon {
+  font-weight: 600;
+  color: #997700;
+  margin-bottom: 0.5rem;
+}
+
+.result-content {
+  background: #f5f5f5;
+  padding: 0.75rem;
+  border-radius: 3px;
+  overflow-x: auto;
+}
+
+/* Action statements */
+.response-action {
+  background: #e8f5e9;
+  border-left: 4px solid #28a745;
+  padding: 0.75rem 1rem;
+  margin: 1.5rem 0 0.5rem 0;
+  border-radius: 4px;
+  font-weight: 500;
+  color: #1b5e20;
+}
+
+/* Analysis blocks */
+.response-analysis {
+  background: #e3f2fd;
+  border-left: 4px solid #1976d2;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+  color: #0d47a1;
+  font-size: 0.95em;
+}
+
+/* Result presentation */
+.response-result {
+  background: #f3e5f5;
+  border-left: 4px solid #7b1fa2;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 4px;
+  line-height: 1.6;
+}
