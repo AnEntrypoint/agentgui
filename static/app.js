@@ -760,7 +760,21 @@ class GMGUIApp {
     wrap.className = 'html-block rendered-html';
     const content = document.createElement('div');
     content.className = 'html-content';
-    content.innerHTML = this.sanitizeHtml(rawHtml);
+    
+    // CRITICAL: Ensure RippleUI styles are available for agent HTML
+    // Agent responses use RippleUI/Tailwind classes, so wrap in a context that has those styles
+    let enhancedHtml = rawHtml;
+    
+    // If HTML doesn't already have the RippleUI wrapper classes, add them
+    if (!rawHtml.includes('space-y-4') && !rawHtml.includes('card') && !rawHtml.includes('alert')) {
+      // Wrap in RippleUI container if agent didn't already wrap it
+      enhancedHtml = `<div class="space-y-4 p-6 max-w-4xl">${rawHtml}</div>`;
+      console.log('[HTML] Wrapped agent HTML in RippleUI container for styling');
+    } else {
+      console.log('[HTML] Agent HTML already has RippleUI classes');
+    }
+    
+    content.innerHTML = this.sanitizeHtml(enhancedHtml);
     wrap.appendChild(content);
     return wrap;
   }
