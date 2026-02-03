@@ -39,35 +39,36 @@ export default class ACPConnection {
       const promptText = typeof prompt === 'string' ? prompt : prompt.map(p => p.text).join('\n');
       const systemMessage = `${SYSTEM_PROMPT}\n\nUser Request: ${promptText}`;
 
-      const response = await query({
+      const response = query({
         prompt: systemMessage,
         options: {}
       });
 
-      // Handle different response formats
-      let responseText = '';
-      if (typeof response === 'string') {
-        responseText = response;
-      } else if (response?.content) {
-        responseText = typeof response.content === 'string' ? response.content : response.content.map(c => c.text || '').join('');
-      } else if (response?.result) {
-        responseText = response.result;
-      } else if (response?.text) {
-        responseText = response.text;
-      } else {
-        responseText = String(response || '');
+      // query() returns an async iterable
+      // Iterate through all messages and collect the response
+      for await (const message of response) {
+        // Try multiple content paths: direct .content or .message.content
+        let content = message.content || message.message?.content;
+
+        if (content && Array.isArray(content)) {
+          const textChunks = content.map(c => c.text || '').join('');
+          fullResponse += textChunks;
+
+          // Emit update for real-time display
+          if (this.onUpdate && textChunks) {
+            this.onUpdate({
+              update: {
+                sessionUpdate: 'agent_message_chunk',
+                content: { text: textChunks }
+              }
+            });
+          }
+        }
       }
 
-      fullResponse = responseText;
-
-      // Emit updates for streaming
-      if (this.onUpdate && responseText) {
-        this.onUpdate({
-          update: {
-            sessionUpdate: 'agent_message_chunk',
-            content: { text: responseText }
-          }
-        });
+      // Fallback if nothing was collected
+      if (!fullResponse) {
+        fullResponse = 'No response from agent';
       }
 
       return { content: fullResponse };
