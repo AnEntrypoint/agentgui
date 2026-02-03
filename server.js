@@ -454,16 +454,30 @@ function onServerReady() {
   console.log(`GMGUI running on http://localhost:${PORT}${BASE_URL}/`);
   console.log(`Agents: ${discoveredAgents.map(a => a.name).join(', ') || 'none'}`);
   console.log(`Hot reload: ${watch ? 'on' : 'off'}`);
-  // Auto-import Claude Code conversations
-  const imported = queries.importClaudeCodeConversations();
-  if (imported.length > 0) {
-    const importedCount = imported.filter(i => i.status === 'imported').length;
-    const skippedCount = imported.filter(i => i.status === 'skipped').length;
-    if (importedCount > 0) {
-      console.log(`Auto-imported ${importedCount} new Claude Code conversations (${skippedCount} already imported)`);
-    } else if (skippedCount > 0) {
-      console.log(`Claude Code conversations ready (${skippedCount} already imported)`);
+  
+  // Run auto-import immediately
+  performAutoImport();
+  
+  // Then run it every 30 seconds (constant automatic importing)
+  setInterval(performAutoImport, 30000);
+}
+
+function performAutoImport() {
+  try {
+    const imported = queries.importClaudeCodeConversations();
+    if (imported.length > 0) {
+      const importedCount = imported.filter(i => i.status === 'imported').length;
+      const skippedCount = imported.filter(i => i.status === 'skipped').length;
+      if (importedCount > 0) {
+        console.log(`[AUTO-IMPORT] Imported ${importedCount} new Claude Code conversations (${skippedCount} already exist)`);
+        // Broadcast to all connected clients that conversations were updated
+        broadcastSync({ type: 'conversations_updated', count: importedCount });
+      } else if (skippedCount > 0) {
+        // All conversations already imported, don't spam logs
+      }
     }
+  } catch (err) {
+    console.error('[AUTO-IMPORT] Error:', err.message);
   }
 }
 

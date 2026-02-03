@@ -226,11 +226,20 @@ class GMGUIApp {
         }
         break;
 
-      case 'message_created':
-        if (!fromBroadcast && this.broadcastChannel) {
-          this.broadcastChannel.postMessage(event);
-        }
-        break;
+       case 'conversations_updated':
+         // Server notified us that new conversations were imported
+         console.log('[SYNC] Server imported', event.count, 'new conversations, refreshing...');
+         this.fetchConversations().then(() => this.renderChatHistory());
+         if (!fromBroadcast && this.broadcastChannel) {
+           this.broadcastChannel.postMessage(event);
+         }
+         break;
+
+       case 'message_created':
+         if (!fromBroadcast && this.broadcastChannel) {
+           this.broadcastChannel.postMessage(event);
+         }
+         break;
 
       case 'session_updated':
         if (event.status === 'completed' && event.message) {
