@@ -164,6 +164,136 @@ To ensure compatibility and prevent clashing:
 </table>
 \`\`\`
 
+## Advanced RippleUI Components (Use These!)
+
+Use RippleUI's rich component library to create interesting, visually effective displays:
+
+### Progress Indicator
+\`\`\`html
+<div class="space-y-4 p-6 max-w-4xl">
+  <div class="space-y-2">
+    <div class="flex justify-between items-center mb-2">
+      <span class="text-sm font-semibold">Progress</span>
+      <span class="text-sm text-gray-500">75%</span>
+    </div>
+    <div class="w-full bg-gray-200 rounded-full h-2">
+      <div class="bg-blue-600 h-2 rounded-full" style="width: 75%"></div>
+    </div>
+  </div>
+</div>
+\`\`\`
+
+### Grid Layout with Cards
+\`\`\`html
+<div class="space-y-4 p-6 max-w-4xl">
+  <div class="grid grid-cols-2 gap-4">
+    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+      <h4 class="font-bold text-blue-900">Metric 1</h4>
+      <p class="text-2xl font-bold text-blue-600">1,234</p>
+    </div>
+    <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+      <h4 class="font-bold text-green-900">Metric 2</h4>
+      <p class="text-2xl font-bold text-green-600">567</p>
+    </div>
+  </div>
+</div>
+\`\`\`
+
+### Collapsible Section
+\`\`\`html
+<div class="space-y-4 p-6 max-w-4xl">
+  <details class="group">
+    <summary class="cursor-pointer font-bold text-gray-900 flex items-center">
+      <span class="group-open:rotate-90 inline-block transition-transform">▶</span>
+      Click to expand
+    </summary>
+    <div class="mt-4 pl-4 text-gray-700">
+      Hidden content here
+    </div>
+  </details>
+</div>
+\`\`\`
+
+### Sidebar/Two-Column
+\`\`\`html
+<div class="space-y-4 p-6 max-w-4xl">
+  <div class="flex gap-4">
+    <div class="w-1/3 bg-gray-50 p-4 rounded-lg">
+      <h4 class="font-bold mb-2">Sidebar</h4>
+      <p class="text-sm text-gray-700">Navigation or info</p>
+    </div>
+    <div class="w-2/3 bg-white p-4 rounded-lg border">
+      <h4 class="font-bold mb-2">Main Content</h4>
+      <p class="text-gray-700">Primary content here</p>
+    </div>
+  </div>
+</div>
+\`\`\`
+
+### Badge/Pill Labels
+\`\`\`html
+<div class="space-y-4 p-6 max-w-4xl">
+  <div class="flex gap-2 flex-wrap">
+    <span class="inline-block bg-blue-500 text-white px-3 py-1 rounded-full text-sm">Active</span>
+    <span class="inline-block bg-yellow-500 text-white px-3 py-1 rounded-full text-sm">Pending</span>
+    <span class="inline-block bg-green-500 text-white px-3 py-1 rounded-full text-sm">Completed</span>
+  </div>
+</div>
+\`\`\`
+
+### Timeline
+\`\`\`html
+<div class="space-y-4 p-6 max-w-4xl">
+  <div class="space-y-4">
+    <div class="flex gap-4">
+      <div class="w-3 h-3 rounded-full bg-blue-600 mt-1.5"></div>
+      <div>
+        <h4 class="font-bold">Step 1</h4>
+        <p class="text-gray-700 text-sm">Description of first step</p>
+      </div>
+    </div>
+    <div class="flex gap-4">
+      <div class="w-3 h-3 rounded-full bg-green-600 mt-1.5"></div>
+      <div>
+        <h4 class="font-bold">Step 2</h4>
+        <p class="text-gray-700 text-sm">Description of second step</p>
+      </div>
+    </div>
+  </div>
+</div>
+\`\`\`
+
+### Icon + Text Combination
+\`\`\`html
+<div class="space-y-4 p-6 max-w-4xl">
+  <div class="flex items-start gap-3">
+    <span class="text-2xl">⚡</span>
+    <div>
+      <h4 class="font-bold">Performance</h4>
+      <p class="text-gray-700">High-speed data processing</p>
+    </div>
+  </div>
+  <div class="flex items-start gap-3">
+    <span class="text-2xl">🔒</span>
+    <div>
+      <h4 class="font-bold">Security</h4>
+      <p class="text-gray-700">Enterprise-grade protection</p>
+    </div>
+  </div>
+</div>
+\`\`\`
+
+### Data Visualization (ASCII-style)
+\`\`\`html
+<div class="space-y-4 p-6 max-w-4xl">
+  <div class="bg-gray-50 p-4 rounded-lg font-mono text-sm">
+    <div>█████████░░░░░░░░░░ 50%</div>
+    <div>████████████████░░░░ 80%</div>
+    <div>██████████░░░░░░░░░░ 50%</div>
+  </div>
+</div>
+\`\`\`
+
 ## Structure Template
 
 ALWAYS use this structure:
