@@ -8,6 +8,7 @@ import { execSync } from 'child_process';
 import { queries } from './database.js';
 import ACPConnection from './acp-launcher.js';
 import { ResponseFormatter } from './response-formatter.js';
+import { HTMLWrapper } from './html-wrapper.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -337,7 +338,13 @@ async function processMessage(conversationId, messageId, sessionId, content, age
     const result = await conn.sendPrompt(content);
     conn.onUpdate = null;
 
-    const responseText = fullText || result?.result || (result?.stopReason ? `Completed: ${result.stopReason}` : 'No response.');
+    let responseText = fullText || result?.result || (result?.stopReason ? `Completed: ${result.stopReason}` : 'No response.');
+    
+    // Wrap response in HTML if it's not already
+    const isHTML = responseText.trim().startsWith('<');
+    if (!isHTML) {
+      responseText = HTMLWrapper.wrapResponse(responseText);
+    }
     
     // Segment and format the response for better display
     const segments = ResponseFormatter.segmentResponse(responseText);
@@ -348,12 +355,14 @@ async function processMessage(conversationId, messageId, sessionId, content, age
       blocks,
       segments,
       metadata,
-      updateChunks
+      updateChunks,
+      isHTML: true
     } : {
       text: responseText,
       segments,
       metadata,
-      updateChunks
+      updateChunks,
+      isHTML: true
     };
 
     const assistantMessage = queries.createMessage(conversationId, 'assistant', messageContent);
