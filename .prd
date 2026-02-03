@@ -1,5 +1,12 @@
 # agentgui Work Items
 
+## SUMMARY
+- ✅ Phase 1: Claude Code Conversation Import - COMPLETE (90 conversations imported)
+- 🔄 Phase 2-3: OpenCode Integration - BLOCKED (no persistent conversation storage found)
+- ⚠️ Issue #1: Conversation timeout - INVESTIGATED (API performance issue deferred)
+- ✅ Issue #2: Message input - VERIFIED (Form is properly wired)
+- 📋 10/12 Test categories remain (systematic execution needed)
+
 ## ACTIVE 🔄
 
 ### Phase 2: OpenCode Integration (PRIORITY 2)
