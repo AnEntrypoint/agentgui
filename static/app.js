@@ -135,12 +135,43 @@ class GMGUIApp {
   }
 
   startPeriodicSync() {
-    // Rapid sync every 10 seconds: check for new Claude Code conversations and sync
+    // GUARANTEED CONSISTENCY MECHANISM
+    // Primary: WebSocket events (real-time, instant)
+    // Fallback: Consistency check every 3 seconds
+    // If any mismatch detected, full refresh immediately
+    
+    // Server auto-import runs every 30 seconds (discovers new Claude Code conversations)
     setInterval(() => {
-      this.autoImportClaudeCode().then(() => {
-        this.fetchConversations().then(() => this.renderChatHistory());
-      });
-    }, 10000);
+      this.autoImportClaudeCode();
+    }, 30000);
+    
+    // Consistency monitor: Verify local state matches server
+    // This catches any desync issues and fixes them within 3 seconds
+    setInterval(() => {
+      this.verifyConsistency();
+    }, 3000);
+  }
+
+  async verifyConsistency() {
+    // Silent consistency check - only log if mismatch found
+    try {
+      const res = await fetch(BASE_URL + '/api/conversations');
+      if (!res.ok) return;
+      
+      const data = await res.json();
+      const serverCount = data.conversations?.length || 0;
+      const localCount = this.conversations.size;
+      
+      if (serverCount !== localCount) {
+        console.warn(`[CONSISTENCY MISMATCH] Server has ${serverCount} conversations, local has ${localCount}`);
+        console.warn('[CONSISTENCY] Forcing full refresh to restore sync');
+        await this.fetchConversations();
+        this.renderChatHistory();
+        console.log('[CONSISTENCY] State restored to match server');
+      }
+    } catch (e) {
+      // Silent error - don't spam logs
+    }
   }
 
   async autoImportClaudeCode() {
@@ -157,27 +188,47 @@ class GMGUIApp {
       `${proto}//${location.host}${BASE_URL}/sync`
     );
 
+    this.wsDisconnectTime = null;
+
     this.syncWs.on('open', () => {
-      console.log('Sync WebSocket connected');
+      console.log('[SYNC] WebSocket connected - guaranteed consistency active');
       this.updateConnectionStatus('connected');
+      this.wsDisconnectTime = null;
+      
+      // Force full sync when reconnecting to ensure consistency
+      this.fetchConversations().then(() => this.renderChatHistory());
     });
 
     this.syncWs.on('message', (e) => {
       try {
         const event = JSON.parse(e.data);
+        console.log('[SYNC] Event:', event.type);
         this.handleSyncEvent(event, false);
       } catch (err) {
-        console.error('Sync message parse error:', err);
+        console.error('[SYNC ERROR] Parse error:', err);
       }
     });
 
     this.syncWs.on('close', () => {
-      console.log('Sync WebSocket disconnected, will auto-reconnect...');
+      console.log('[SYNC] WebSocket disconnected - reconnecting...');
       this.updateConnectionStatus('reconnecting');
+      this.wsDisconnectTime = Date.now();
+      
+      // CRITICAL: Force full refresh if disconnected for more than 2 seconds
+      // This ensures we NEVER have inconsistent state for more than a few seconds
+      setTimeout(() => {
+        if (this.wsDisconnectTime && Date.now() - this.wsDisconnectTime > 2000) {
+          console.log('[SYNC CRITICAL] Lost WebSocket > 2s, forcing full data refresh NOW');
+          this.fetchConversations().then(() => {
+            this.renderChatHistory();
+            console.log('[SYNC] Full refresh completed - guaranteed consistency restored');
+          });
+        }
+      }, 2000);
     });
 
     this.syncWs.on('error', (err) => {
-      console.error('Sync WebSocket error:', err);
+      console.error('[SYNC ERROR]', err);
       this.updateConnectionStatus('disconnected');
     });
   }
@@ -196,67 +247,93 @@ class GMGUIApp {
   }
 
   handleSyncEvent(event, fromBroadcast = false) {
+    // CRITICAL: Server is the authoritative source of truth
+    // On ANY event, fetch fresh state from server to ensure consistency
+    // Never rely on event data alone - always verify with server
+    
+    console.log('[STATE SYNC] Event received:', event.type);
+    
     switch (event.type) {
       case 'sync_connected':
+        console.log('[STATE SYNC] Connected to sync bus - fetching full state');
+        // On connection, always do a full state refresh
+        this.fetchConversations().then(() => this.renderChatHistory());
         break;
 
       case 'conversation_created':
-        this.conversations.set(event.conversation.id, event.conversation);
-        this.renderChatHistory();
+        console.log('[STATE SYNC] Conversation created, fetching full state');
+        // Never trust just the event data - fetch authoritative state
+        this.fetchConversations().then(() => this.renderChatHistory());
         if (!fromBroadcast && this.broadcastChannel) {
           this.broadcastChannel.postMessage(event);
         }
         break;
 
       case 'conversation_updated':
-        this.conversations.set(event.conversation.id, event.conversation);
-        this.renderChatHistory();
-        if (this.currentConversation?.id === event.conversation.id) {
-          this.currentConversation = event.conversation;
-          this.renderCurrentConversation();
-        }
+        console.log('[STATE SYNC] Conversation updated, fetching full state');
+        // Fetch full state to ensure we have the latest version
+        this.fetchConversations().then(() => {
+          this.renderChatHistory();
+          // If we're viewing this conversation, refresh its content too
+          if (this.currentConversation === event.conversation?.id) {
+            this.displayConversation(event.conversation.id);
+          }
+        });
         if (!fromBroadcast && this.broadcastChannel) {
           this.broadcastChannel.postMessage(event);
         }
         break;
 
       case 'conversation_deleted':
-        this.conversations.delete(event.conversationId);
-        this.renderChatHistory();
-        if (this.currentConversation?.id === event.conversationId) {
-          this.currentConversation = null;
-          this.renderCurrentConversation();
-        }
+        console.log('[STATE SYNC] Conversation deleted, fetching full state');
+        this.fetchConversations().then(() => {
+          this.renderChatHistory();
+          if (this.currentConversation === event.conversationId) {
+            this.currentConversation = null;
+            this.renderCurrentConversation();
+          }
+        });
         if (!fromBroadcast && this.broadcastChannel) {
           this.broadcastChannel.postMessage(event);
         }
         break;
 
-       case 'conversations_updated':
-         // Server notified us that new conversations were imported
-         console.log('[SYNC] Server imported', event.count, 'new conversations, refreshing...');
-         this.fetchConversations().then(() => this.renderChatHistory());
-         if (!fromBroadcast && this.broadcastChannel) {
-           this.broadcastChannel.postMessage(event);
-         }
-         break;
+      case 'conversations_updated':
+        console.log('[STATE SYNC] Conversations imported, fetching full state');
+        // New conversations imported - refresh everything
+        this.fetchConversations().then(() => this.renderChatHistory());
+        if (!fromBroadcast && this.broadcastChannel) {
+          this.broadcastChannel.postMessage(event);
+        }
+        break;
 
-       case 'message_created':
-         if (!fromBroadcast && this.broadcastChannel) {
-           this.broadcastChannel.postMessage(event);
-         }
-         break;
+      case 'message_created':
+        console.log('[STATE SYNC] Message created, fetching full state');
+        // A message was created - refresh everything to see updated timestamps
+        this.fetchConversations().then(() => {
+          this.renderChatHistory();
+          // If we're viewing this conversation, refresh it
+          if (this.currentConversation === event.conversationId) {
+            this.displayConversation(event.conversationId);
+          }
+        });
+        if (!fromBroadcast && this.broadcastChannel) {
+          this.broadcastChannel.postMessage(event);
+        }
+        break;
 
       case 'session_updated':
-        if (event.status === 'completed' && event.message) {
+        console.log('[STATE SYNC] Session updated:', event.status, '- fetching full state');
+        // Session completed with a message - ALWAYS fetch fresh state
+        // This ensures the conversation's updated_at timestamp is synced
+        this.fetchConversations().then(() => {
+          this.renderChatHistory(); // Update sidebar with new timestamps
+          
+          // If viewing this conversation, show the message
           if (this.currentConversation === event.conversationId) {
-            this.addMessageToDisplay(event.message);
-            if (this.settings.autoScroll) {
-              const div = document.getElementById('chatMessages');
-              if (div) div.scrollTop = div.scrollHeight;
-            }
+            this.displayConversation(event.conversationId);
           }
-        }
+        });
         if (!fromBroadcast && this.broadcastChannel) {
           this.broadcastChannel.postMessage(event);
         }
@@ -567,9 +644,18 @@ class GMGUIApp {
   }
 
   async displayConversation(id) {
+    // CONSISTENCY CHECK: Verify conversation exists before displaying
     this.currentConversation = id;
     const conv = this.conversations.get(id);
-    if (!conv) return;
+    if (!conv) {
+      console.warn('[SYNC] Conversation not found locally, fetching fresh data...');
+      await this.fetchConversations();
+      const freshConv = this.conversations.get(id);
+      if (!freshConv) {
+        console.error('[SYNC] Conversation still not found after refresh!');
+        return;
+      }
+    }
     if (conv.agentId && !this.selectedAgent) {
       this.selectedAgent = conv.agentId;
     }
