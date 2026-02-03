@@ -65,14 +65,9 @@ async function gmgui(args = []) {
   }
 }
 
-// Run if this file is executed directly (works with symlinks, npm, npx)
-const isBinFile = process.argv[1].endsWith('gmgui.cjs') ||
-                   process.argv[1].endsWith('gmgui.js') ||
-                   process.argv[1].endsWith('/gmgui') ||
-                   process.argv[1].includes('bin/gmgui');
-if (isBinFile) {
-  gmgui(process.argv.slice(2)).catch(err => {
-    console.error(err.message);
-    process.exit(1);
-  });
-}
+// Always run when executed as a bin file (this file should only be used that way)
+// Works with npm, npx, bunx, and direct execution
+gmgui(process.argv.slice(2)).catch(err => {
+  console.error(err.message);
+  process.exit(1);
+});
