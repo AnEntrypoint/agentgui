@@ -18,15 +18,11 @@
   "homepage": "https://github.com/AnEntrypoint/agentgui#readme",
   "scripts": {
     "start": "node server.js",
-    "start:bun": "bun run server-bun.js",
-    "dev": "node server.js --watch",
-    "dev:bun": "bun run server-bun.js --watch",
-    "test": "node run-browser-tests.js",
-    "test:integration": "./test-integration.sh",
-    "test:all": "npm run test:integration && npm run test"
+    "dev": "node server.js --watch"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
+    "claude-code-acp": "^1.0.0",
     "ws": "^8.14.2"
   }
 }
