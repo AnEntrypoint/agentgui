@@ -1,0 +1,53 @@
+# agentgui Work Items
+
+## ACTIVE 🔄
+
+### Phase 2: OpenCode Integration (PRIORITY 2)
+**User Request:** Import all OpenCode conversations and keep them in sync
+
+**Investigation Result:**
+- OpenCode does NOT store persistent conversation history like Claude Code
+- ~/.config/opencode/opencode.json contains only MCP server config
+- No sessions-index.json or history.jsonl found in OpenCode directories
+- OpenCode may not persist conversations to filesystem
+
+**Options:**
+- [ ] Option A: Implement OpenCode CLI integration to query conversations at runtime (requires OpenCode SDK/API)
+- [ ] Option B: Focus on Claude Code import (already complete) and document OpenCode limitation
+- [ ] Option C: Create placeholder for future OpenCode support when SDK is available
+
+**Tasks (waiting for approach decision):**
+- [ ] Implement OpenCode history loader (if feasible)
+- [ ] Merge both sources in database
+- [ ] Display merged history in sidebar
+- [ ] Support agent type filtering
+
+### Phase 3: Sync & Consistency (PRIORITY 3)
+- [ ] File watchers for history changes
+- [ ] Auto-import new conversations from CLI
+- [ ] Keep GUI database in sync with filesystem
+- [ ] Handle conflicts (same conversation in both systems)
+- [ ] Implement read-only mode for imported conversations
+
+## ISSUES TO FIX ⚠️
+
+**Issue #1: Timeout on Conversation Selection**
+- Clicking conversations causes code execution timeout
+- Needs investigation into click handlers
+
+**Issue #2: Message Input Field**
+- Message submission behavior unclear
+- May not be properly wired to agent communication
+
+## Test Categories Remaining (10 of 12)
+- [ ] Category 2: Real-Time Streaming with Persistence
+- [ ] Category 3: HTML Rendering Without Text Mixing
+- [ ] Category 4: Theme Compliance (Light/Dark)
+- [ ] Category 5: Advanced RippleUI Components
+- [ ] Category 6: Interactive Forms & Input Validation
+- [ ] Category 7: Database Persistence & Recovery
+- [ ] Category 8: State Consistency & Validation
+- [ ] Category 9: Reconnection & Recovery
+- [ ] Category 10: Error Handling & Edge Cases
+- [ ] Category 11: Performance & Latency
+- [ ] Category 12: Multi-Agent & Configuration
