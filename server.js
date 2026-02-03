@@ -558,8 +558,8 @@ const hotReloadClients = [];
 const syncClients = new Set();
 
 wss.on('connection', (ws, req) => {
-  const url = new URL(req.url, 'http://localhost');
-  const wsPath = url.pathname.startsWith(BASE_URL) ? url.pathname.slice(BASE_URL.length) : url.pathname;
+  // req.url in WebSocket is just the path (e.g., '/gm/sync'), not a full URL
+  const wsPath = req.url.startsWith(BASE_URL) ? req.url.slice(BASE_URL.length) : req.url;
   if (wsPath === '/hot-reload') {
     hotReloadClients.push(ws);
     ws.on('close', () => { const i = hotReloadClients.indexOf(ws); if (i > -1) hotReloadClients.splice(i, 1); });

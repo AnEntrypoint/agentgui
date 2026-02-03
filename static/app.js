@@ -108,7 +108,7 @@ class GMGUIApp {
     console.log('[DEBUG] Init: Starting initialization');
     console.log('[DEBUG] Init: BASE_URL =', BASE_URL);
     console.log('[DEBUG] Init: Window width:', window.innerWidth);
-    
+
     // Ensure sidebar is visible on desktop (open on wide screens)
     const sidebar = document.getElementById('sidebar');
     if (window.innerWidth >= 768 && sidebar) {
@@ -118,13 +118,25 @@ class GMGUIApp {
       console.log('[DEBUG] Init: Mobile/narrow screen detected, opening sidebar');
       sidebar.classList.add('open');
     }
-    
+
     this.loadSettings();
     this.setupEventListeners();
     await this.fetchHome();
     console.log('[DEBUG] Init: Fetched home');
     await this.fetchAgents();
     console.log('[DEBUG] Init: Fetched agents, count:', this.agents.size);
+
+    // Pre-select agent on first load: try from localStorage, otherwise pick first available
+    const savedAgent = localStorage.getItem('gmgui-selectedAgent');
+    if (savedAgent && this.agents.has(savedAgent)) {
+      this.selectedAgent = savedAgent;
+      console.log('[DEBUG] Init: Restored selected agent from localStorage:', savedAgent);
+    } else if (this.agents.size > 0) {
+      this.selectedAgent = Array.from(this.agents.keys())[0];
+      localStorage.setItem('gmgui-selectedAgent', this.selectedAgent);
+      console.log('[DEBUG] Init: Pre-selected first available agent:', this.selectedAgent);
+    }
+
     await this.autoImportClaudeCode();
     console.log('[DEBUG] Init: Auto-imported Claude Code conversations');
     await this.fetchConversations();
@@ -1057,7 +1069,17 @@ class GMGUIApp {
       // Fallback for non-string, non-object content
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
-      bubble.textContent = JSON.stringify(msg.content);
+      // Handle all object types: convert to string safely
+      if (typeof msg.content === 'object' && msg.content !== null) {
+        try {
+          bubble.textContent = JSON.stringify(msg.content, null, 2);
+        } catch (e) {
+          // If stringify fails (circular ref, etc), use toString
+          bubble.textContent = String(msg.content);
+        }
+      } else {
+        bubble.textContent = String(msg.content);
+      }
       el.appendChild(bubble);
     }
 
