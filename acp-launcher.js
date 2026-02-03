@@ -1,4 +1,32 @@
 import { createClient } from 'claude-code-acp';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+
+/**
+ * Load CLI configuration to ensure identical behavior
+ */
+function loadCLIConfig() {
+  const configPaths = [
+    path.join(os.homedir(), '.claude', 'config.json'),
+    path.join(os.homedir(), '.claude-code', 'config.json'),
+    path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'claude', 'config.json')
+  ];
+
+  for (const configPath of configPaths) {
+    try {
+      if (fs.existsSync(configPath)) {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+        console.log(`[ACP] Loaded CLI config from ${configPath}`);
+        return config;
+      }
+    } catch (e) {
+      // Config file doesn't exist or is invalid, continue
+    }
+  }
+
+  return {};
+}
 
 const RIPPLEUI_SYSTEM_PROMPT = `CRITICAL INSTRUCTION: You are responding in a web-based HTML interface. EVERY response must be formatted as beautiful, styled HTML using RippleUI and Tailwind CSS. This is NOT a text-based interface - users see raw HTML rendered in their browser.
 
@@ -73,18 +101,50 @@ export default class ACPConnection {
 
   /**
    * Connect to ACP bridge and create session
+   * Uses identical configuration to CLI version
    */
   async connect(agentType, cwd) {
     try {
       console.log(`[ACP] Connecting to ${agentType}...`);
 
-      // Create client directly from npm module
-      this.client = await createClient({
+      // Load CLI configuration for identical behavior
+      const cliConfig = loadCLIConfig();
+
+      // Create client with CLI-identical configuration
+      // Pass through all environment for OAuth and plugin support
+      const clientConfig = {
         agent: agentType === 'opencode' ? 'opencode' : 'claude-code',
-        cwd
+        cwd,
+        // Use same environment as CLI (HOME, PATH, etc.)
+        env: process.env,
+        // Load plugins just like CLI does
+        plugins: true,
+        // Use OAuth for authentication (same as CLI)
+        oauth: true,
+        // Use model preferences from CLI config
+        modelPreferences: cliConfig.modelPreferences || undefined,
+        // Enable all capabilities that CLI enables
+        capabilities: {
+          fs: true,
+          mcp: true,
+          web: true,
+          terminal: true
+        },
+        // Pass through any other CLI settings
+        ...cliConfig
+      };
+
+      // Remove potential conflicting fields
+      delete clientConfig.agent; // Re-add below
+      delete clientConfig.cwd;   // Re-add below
+
+      this.client = await createClient({
+        agent: clientConfig.agent || (agentType === 'opencode' ? 'opencode' : 'claude-code'),
+        cwd,
+        ...clientConfig
       });
 
-      console.log(`[ACP] ✅ Connected to ${agentType} (direct module)`);
+      console.log(`[ACP] ✅ Connected to ${agentType} (CLI-identical mode)`);
     } catch (err) {
       console.error(`[ACP] ❌ FATAL: Connection failed: ${err.message}`);
       throw new Error(`ACP connection failed for ${agentType}: ${err.message}`);
