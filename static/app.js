@@ -843,7 +843,6 @@ class GMGUIApp {
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
-  }
 
   renderMetadata(metadata) {
     if (!metadata || Object.keys(metadata).every(k => !metadata[k] || metadata[k].length === 0)) {
