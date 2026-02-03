@@ -517,19 +517,25 @@ export const queries = {
             if (content && !content.startsWith('[{"tool_use_id"')) {
               messages.push({ id: obj.uuid || generateId('msg'), role: 'user', content, created_at: new Date(obj.timestamp).getTime() });
             }
-          } else if (obj.type === 'assistant' && obj.message?.content) {
-            let text = '';
-            const content = obj.message.content;
-            if (Array.isArray(content)) {
-              for (const c of content) {
-                if (c.type === 'text' && c.text) text += c.text;
-              }
-            } else if (typeof content === 'string') {
-              text = content;
-            }
-            if (text) {
-              messages.push({ id: obj.uuid || generateId('msg'), role: 'assistant', content: text, created_at: new Date(obj.timestamp).getTime() });
-            }
+           } else if (obj.type === 'assistant' && obj.message?.content) {
+             let text = '';
+             const content = obj.message.content;
+             if (Array.isArray(content)) {
+               // CRITICAL FIX: Join text blocks with newlines to preserve separation
+               const textBlocks = [];
+               for (const c of content) {
+                 if (c.type === 'text' && c.text) {
+                   textBlocks.push(c.text);
+                 }
+               }
+               // Join with double newline to preserve logical separation
+               text = textBlocks.join('\n\n');
+             } else if (typeof content === 'string') {
+               text = content;
+             }
+             if (text) {
+               messages.push({ id: obj.uuid || generateId('msg'), role: 'assistant', content: text, created_at: new Date(obj.timestamp).getTime() });
+             }
           }
         } catch (_) {}
       }
