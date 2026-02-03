@@ -1,6 +1,6 @@
 {
   "name": "agentgui",
-  "version": "1.0.37",
+  "version": "1.0.38",
   "description": "Multi-agent ACP client with real-time communication",
   "type": "module",
   "main": "server.js",
