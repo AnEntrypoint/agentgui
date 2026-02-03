@@ -7,6 +7,7 @@ import os from 'os';
 import { execSync } from 'child_process';
 import { queries } from './database.js';
 import ACPConnection from './acp-launcher.js';
+import { ResponseFormatter } from './response-formatter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -313,17 +314,21 @@ async function processMessage(conversationId, messageId, sessionId, content, age
 
     let fullText = '';
     const blocks = [];
+    const updateChunks = []; // Track all message chunks in order
     conn.onUpdate = (params) => {
       const u = params.update;
       if (!u) return;
       const kind = u.sessionUpdate;
       if (kind === 'agent_message_chunk' && u.content?.text) {
         fullText += u.content.text;
+        updateChunks.push({ type: 'text', content: u.content.text, timestamp: Date.now() });
       } else if (kind === 'html_content' && u.content?.html) {
         blocks.push({ type: 'html', html: u.content.html, title: u.content.title, id: u.content.id });
+        updateChunks.push({ type: 'html', content: u.content.html, title: u.content.title, timestamp: Date.now() });
       } else if (kind === 'image_content' && u.content?.path) {
         const imageUrl = BASE_URL + '/api/image/' + encodeURIComponent(u.content.path);
         blocks.push({ type: 'image', path: u.content.path, url: imageUrl, title: u.content.title, alt: u.content.alt });
+        updateChunks.push({ type: 'image', path: u.content.path, url: imageUrl, title: u.content.title, timestamp: Date.now() });
       }
     };
 
@@ -331,7 +336,23 @@ async function processMessage(conversationId, messageId, sessionId, content, age
     conn.onUpdate = null;
 
     const responseText = fullText || result?.result || (result?.stopReason ? `Completed: ${result.stopReason}` : 'No response.');
-    const messageContent = blocks.length > 0 ? { text: responseText, blocks } : responseText;
+    
+    // Segment and format the response for better display
+    const segments = ResponseFormatter.segmentResponse(responseText);
+    const metadata = ResponseFormatter.extractMetadata(responseText);
+    
+    const messageContent = blocks.length > 0 ? { 
+      text: responseText, 
+      blocks,
+      segments,
+      metadata,
+      updateChunks
+    } : {
+      text: responseText,
+      segments,
+      metadata,
+      updateChunks
+    };
 
     const assistantMessage = queries.createMessage(conversationId, 'assistant', messageContent);
     queries.updateSession(sessionId, { status: 'completed', response: { text: responseText, messageId: assistantMessage.id }, completed_at: Date.now() });

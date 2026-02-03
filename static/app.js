@@ -599,7 +599,13 @@ class GMGUIApp {
         el.appendChild(bubble);
       }
     } else if (typeof msg.content === 'object' && msg.content !== null) {
-      if (msg.content.text) {
+      // Display segmented content if available
+      if (msg.content.segments && Array.isArray(msg.content.segments)) {
+        msg.content.segments.forEach(segment => {
+          el.appendChild(this.renderSegment(segment));
+        });
+      } else if (msg.content.text) {
+        // Fallback to regular text rendering
         const parsed = this.parseAndRenderContent(msg.content.text);
         if (parsed) {
           parsed.forEach(elem => el.appendChild(elem));
@@ -610,6 +616,8 @@ class GMGUIApp {
           el.appendChild(bubble);
         }
       }
+
+      // Display blocks if available
       if (msg.content.blocks && Array.isArray(msg.content.blocks)) {
         msg.content.blocks.forEach(block => {
           if (block.type === 'html') {
@@ -621,6 +629,12 @@ class GMGUIApp {
           }
         });
       }
+
+      // Display metadata if available
+      if (msg.content.metadata) {
+        const metadataEl = this.renderMetadata(msg.content.metadata);
+        if (metadataEl) el.appendChild(metadataEl);
+      }
     } else {
       const bubble = document.createElement('div');
       bubble.className = 'message-bubble';
@@ -629,6 +643,127 @@ class GMGUIApp {
     }
 
     div.appendChild(el);
+  }
+
+  renderSegment(segment) {
+    const el = document.createElement('div');
+    el.className = `segment segment-${segment.type}`;
+
+    if (segment.type === 'code') {
+      const pre = document.createElement('pre');
+      pre.className = `code-block language-${segment.language || 'text'}`;
+      const code = document.createElement('code');
+      code.textContent = segment.content;
+      pre.appendChild(code);
+      el.appendChild(pre);
+    } else if (segment.type === 'heading') {
+      const tag = `h${Math.min(segment.level, 6)}`;
+      const heading = document.createElement(tag);
+      heading.className = 'response-heading';
+      heading.textContent = segment.content;
+      el.appendChild(heading);
+    } else if (segment.type === 'blockquote') {
+      const quote = document.createElement('blockquote');
+      quote.className = 'response-quote';
+      quote.textContent = segment.content;
+      el.appendChild(quote);
+    } else if (segment.type === 'list_item') {
+      const li = document.createElement('li');
+      li.className = 'response-list-item';
+      li.textContent = segment.content;
+      el.appendChild(li);
+    } else if (segment.type === 'text') {
+      const p = document.createElement('p');
+      p.className = 'response-text';
+      p.innerHTML = segment.content
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>');
+      el.appendChild(p);
+    }
+
+    return el;
+  }
+
+  renderMetadata(metadata) {
+    if (!metadata || Object.keys(metadata).every(k => !metadata[k] || metadata[k].length === 0)) {
+      return null;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'response-metadata';
+
+    if (metadata.tools && metadata.tools.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'metadata-section tools';
+      const title = document.createElement('strong');
+      title.textContent = 'Tools Used:';
+      section.appendChild(title);
+      const ul = document.createElement('ul');
+      metadata.tools.forEach(tool => {
+        const li = document.createElement('li');
+        const code = document.createElement('code');
+        code.textContent = tool.name;
+        li.appendChild(code);
+        if (tool.description) {
+          li.appendChild(document.createTextNode(`: ${tool.description}`));
+        }
+        ul.appendChild(li);
+      });
+      section.appendChild(ul);
+      container.appendChild(section);
+    }
+
+    if (metadata.thinking && metadata.thinking.length > 0) {
+      const section = document.createElement('details');
+      section.className = 'metadata-section thinking';
+      const summary = document.createElement('summary');
+      summary.textContent = 'Reasoning';
+      section.appendChild(summary);
+      metadata.thinking.forEach(thought => {
+        const p = document.createElement('p');
+        p.textContent = thought;
+        section.appendChild(p);
+      });
+      container.appendChild(section);
+    }
+
+    if (metadata.subagents && metadata.subagents.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'metadata-section subagents';
+      const title = document.createElement('strong');
+      title.textContent = 'Subagents:';
+      section.appendChild(title);
+      const ul = document.createElement('ul');
+      metadata.subagents.forEach(agent => {
+        const li = document.createElement('li');
+        li.textContent = agent;
+        ul.appendChild(li);
+      });
+      section.appendChild(ul);
+      container.appendChild(section);
+    }
+
+    if (metadata.tasks && metadata.tasks.length > 0) {
+      const section = document.createElement('div');
+      section.className = 'metadata-section tasks';
+      const title = document.createElement('strong');
+      title.textContent = 'Tasks:';
+      section.appendChild(title);
+      const ul = document.createElement('ul');
+      metadata.tasks.forEach(task => {
+        const li = document.createElement('li');
+        li.textContent = task;
+        ul.appendChild(li);
+      });
+      section.appendChild(ul);
+      container.appendChild(section);
+    }
+
+    return container;
   }
 
   async startNewChat(folderPath) {
