@@ -219,62 +219,7 @@ export default class ACPConnection {
   }
 
   async _sendPrintPrompt(prompt) {
-    const text = typeof prompt === 'string' ? prompt : (Array.isArray(prompt) ? prompt.map(p => p.text || '').join('\n') : String(prompt));
-    let apiKey;
-    try { apiKey = fs.readFileSync(API_KEY_PATH, 'utf-8').trim(); }
-    catch (e) { throw new Error('No API key found at ' + API_KEY_PATH); }
-
-    const body = JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
-      system: RIPPLEUI_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: text }],
-      stream: true,
-    });
-
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body,
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Anthropic API ${res.status}: ${errText.substring(0, 200)}`);
-    }
-
-    let fullText = '';
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6);
-        if (data === '[DONE]') continue;
-        try {
-          const evt = JSON.parse(data);
-          if (evt.type === 'content_block_delta' && evt.delta?.text) {
-            fullText += evt.delta.text;
-            if (this.onUpdate) {
-              this.onUpdate({ update: { sessionUpdate: 'agent_message_chunk', content: { text: evt.delta.text } } });
-            }
-          }
-        } catch (_) {}
-      }
-    }
-
-    return { stopReason: 'end_turn', result: fullText };
+    throw new Error('Claude Code uses OAuth and requires the ACP bridge. The fallback to direct API calls is not supported because OAuth tokens cannot be used with the Anthropic API directly. Please ensure claude-code-acp is available in your PATH.');
   }
 
   isRunning() {
