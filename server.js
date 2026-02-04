@@ -455,19 +455,16 @@ async function processMessage(conversationId, messageId, sessionId, content, age
         data: { promptSentTime: Date.now(), responseReceivedTime: Date.now() }
       });
 
-      console.log(`[processMessage] ACP returned: stopReason=${result?.stopReason}, streamUpdates=${streamHandler.getUpdateCount()}`);
+       console.log(`[processMessage] ACP returned: stopReason=${result?.stopReason}, streamUpdates=${streamHandler.getUpdateCount()}`);
 
-      // Agent sends HTML directly - no conversion needed
-      // Extract HTML code block from response
-      const responseText = fullText || result?.result || 'No response.';
-      const htmlMatch = responseText.match(/```html\n([\s\S]*?)\n```/);
-      const htmlContent = htmlMatch ? htmlMatch[1] : responseText;
+       // Save agent's complete response as-is, without any processing
+       // The agent workflow must flow naturally - no HTML extraction or interference
+       const responseText = fullText || result?.result || 'No response.';
 
-      const messageContent = {
-        text: htmlContent,
-        html: true,
-        streamUpdatesCount: streamHandler.getUpdateCount()
-      };
+       const messageContent = {
+         text: responseText,
+         streamUpdatesCount: streamHandler.getUpdateCount()
+       };
 
       // Save consolidated response to database
       const assistantMessage = queries.createMessage(conversationId, 'assistant', messageContent);
