@@ -58,6 +58,122 @@
       gap: 0;
     }
 
+    .layout-with-sidebar {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 0;
+      min-height: 0;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      background-color: var(--color-bg-secondary);
+      border-right: 1px solid var(--color-border);
+      overflow: hidden;
+    }
+
+    .sidebar-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header h2 {
+      margin: 0;
+      font-size: 0.875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-text-secondary);
+    }
+
+    .sidebar-new-btn {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      background-color: var(--color-primary);
+      color: white;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .sidebar-new-btn:hover {
+      background-color: var(--color-primary-dark);
+    }
+
+    .sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      list-style: none;
+      margin: 0;
+      padding: 0.5rem 0;
+    }
+
+    .conversation-item {
+      padding: 0.75rem 0.5rem;
+      margin: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+      border-left: 3px solid transparent;
+      user-select: none;
+    }
+
+    .conversation-item:hover {
+      background-color: var(--color-bg-primary);
+    }
+
+    .conversation-item.active {
+      background-color: var(--color-primary);
+      color: white;
+      border-left-color: var(--color-primary-dark);
+    }
+
+    .conversation-item-title {
+      font-weight: 500;
+      font-size: 0.875rem;
+      margin: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .conversation-item-meta {
+      font-size: 0.75rem;
+      color: var(--color-text-secondary);
+      margin-top: 0.25rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .conversation-item.active .conversation-item-meta {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .sidebar-empty {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--color-text-secondary);
+      font-size: 0.875rem;
+    }
+
+    /* Main content area - flex column */
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
     header {
       background-color: var(--color-bg-secondary);
       border-bottom: 1px solid var(--color-border);
@@ -122,12 +238,12 @@
 
     /* Main content */
     main {
-      display: grid;
-      grid-template-columns: 1fr;
-      grid-template-rows: auto 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 0;
       min-height: 0;
       overflow: hidden;
+      flex: 1;
     }
 
     .execution-panel {
@@ -246,6 +362,24 @@
 
     /* Responsive */
     @media (max-width: 768px) {
+      .layout-with-sidebar {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 250px;
+        height: 100vh;
+        z-index: 1000;
+      }
+
+      .sidebar.mobile-visible {
+        display: flex;
+      }
+
       .execution-panel {
         grid-template-columns: 1fr;
       }
@@ -440,34 +574,48 @@
       </div>
     </header>
 
-    <!-- Main Content -->
-    <main id="app">
-      <!-- Execution Panel -->
-      <div class="execution-panel">
-        <div class="execution-input-group">
-          <select class="agent-selector" data-agent-selector title="Select agent">
-            <option value="claude-code">Claude Code</option>
-            <option value="opencode">OpenCode</option>
-          </select>
+    <!-- Main Content with Sidebar -->
+    <div class="layout-with-sidebar">
+      <!-- Sidebar -->
+      <aside class="sidebar" data-sidebar>
+        <div class="sidebar-header">
+          <h2>History</h2>
+          <button class="sidebar-new-btn" data-new-conversation title="Start new conversation">+ New</button>
+        </div>
+        <ul class="sidebar-list" data-conversation-list>
+          <li class="sidebar-empty" data-conversation-empty>No conversations yet</li>
+        </ul>
+      </aside>
 
-          <textarea
-            class="execution-textarea"
-            data-message-input
-            placeholder="Enter command or prompt... (Ctrl+Enter to submit)"
-            aria-label="Execution prompt input"
-          ></textarea>
+      <!-- Main Content Area -->
+      <main id="app" class="main-content">
+        <!-- Execution Panel -->
+        <div class="execution-panel">
+          <div class="execution-input-group">
+            <select class="agent-selector" data-agent-selector title="Select agent">
+              <option value="claude-code">Claude Code</option>
+              <option value="opencode">OpenCode</option>
+            </select>
+
+            <textarea
+              class="execution-textarea"
+              data-message-input
+              placeholder="Enter command or prompt... (Ctrl+Enter to submit)"
+              aria-label="Execution prompt input"
+            ></textarea>
+          </div>
+
+          <button class="btn btn-primary" data-send-button title="Start execution (Ctrl+Enter)">
+            Execute
+          </button>
         </div>
 
-        <button class="btn btn-primary" data-send-button title="Start execution (Ctrl+Enter)">
-          Execute
-        </button>
-      </div>
-
-      <!-- Output Container -->
-      <div id="output-scroll" role="region" aria-label="Execution output" aria-live="polite" aria-atomic="false">
-        <div id="output" class="output"></div>
-      </div>
-    </main>
+        <!-- Output Container -->
+        <div id="output-scroll" role="region" aria-label="Execution output" aria-live="polite" aria-atomic="false">
+          <div id="output" class="output"></div>
+        </div>
+      </main>
+    </div>
   </div>
 
   <!-- Scripts - Order matters! -->
@@ -489,7 +637,10 @@
   <!-- 6. UI Components (no dependencies) -->
   <script src="/gm/js/ui-components.js"></script>
 
-  <!-- 7. Main Client (depends on all above) -->
+  <!-- 7. Conversations Manager (loads conversation history) -->
+  <script src="/gm/js/conversations.js"></script>
+
+  <!-- 8. Main Client (depends on all above) -->
   <script src="/gm/js/client.js"></script>
 
   <!-- Inline initialization -->
