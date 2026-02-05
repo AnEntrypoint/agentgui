@@ -8,16 +8,56 @@ import { query } from '@anthropic-ai/claude-code';
  * - Actual filesystem operations
  * - Streaming responses with onUpdate callbacks
  * - No subprocess spawning needed (SDK handles it)
+ * - Integrated glootie-cc MCP servers for full capabilities
  */
 export default class ACPConnection {
   constructor() {
     this.sessionId = null;
     this.onUpdate = null;
     this.cwd = process.cwd();
+    this.mcpServers = this.buildMcpServers();
+  }
+
+  buildMcpServers() {
+    const mcpServers = {};
+
+    // Add glootie-cc MCP servers for full execution capabilities
+    if (process.env.CLAUDE_PLUGIN_ROOT) {
+      const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT;
+      mcpServers['dev'] = {
+        type: 'stdio',
+        command: 'bunx',
+        args: ['mcp-glootie@latest'],
+        timeout: 360000
+      };
+      mcpServers['code-search'] = {
+        type: 'stdio',
+        command: 'bunx',
+        args: ['codebasesearch@latest'],
+        timeout: 360000
+      };
+    } else {
+      // Fallback to standard MCP configuration
+      mcpServers['dev'] = {
+        type: 'stdio',
+        command: 'bunx',
+        args: ['mcp-glootie@latest'],
+        timeout: 360000
+      };
+      mcpServers['code-search'] = {
+        type: 'stdio',
+        command: 'bunx',
+        args: ['codebasesearch@latest'],
+        timeout: 360000
+      };
+    }
+
+    return mcpServers;
   }
 
   async connect(agentType, cwd) {
     console.log(`[ACP] Using @anthropic-ai/claude-code SDK (${agentType})`);
+    console.log(`[ACP] MCP servers configured: ${Object.keys(this.mcpServers).join(', ')}`);
     if (cwd) {
       this.cwd = cwd;
     }
@@ -46,7 +86,7 @@ export default class ACPConnection {
   }
 
   async injectSystemContext() {
-    return { context: 'Using Claude Code SDK with real plugins' };
+    return { context: 'Using Claude Code SDK with glootie-cc MCP integration' };
   }
 
   async sendPrompt(prompt) {
@@ -55,12 +95,42 @@ export default class ACPConnection {
     try {
       console.log(`[ACP] Sending prompt (${promptText.length} chars) in ${this.cwd}`);
 
+      // Build environment with proper permissions and working directory setup
+      const env = {
+        ...process.env,
+        HOME: process.env.HOME || '/config',
+        USER: process.env.USER || 'abc',
+        PATH: process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+        // Ensure file operations are fully enabled
+        CLAUDE_CODE_ALLOW_ALL: 'true',
+        CLAUDE_CODE_BYPASS_PERMISSIONS: 'true'
+      };
+
+      // Build permission updates to allow directory access
+      const permissionUpdates = [
+        {
+          type: 'addDirectories',
+          directories: ['/tmp/test-projects', this.cwd, '/tmp', '/config'],
+          destination: 'session'
+        },
+        {
+          type: 'addRules',
+          rules: ['*'],
+          behavior: 'allow',
+          destination: 'session'
+        }
+      ];
+
       // Use the SDK directly to execute the prompt
       // The SDK handles plugins, system prompt, and all real execution
       const session = await query({
         prompt: promptText,
         options: {
-          cwd: this.cwd
+          cwd: this.cwd,
+          env: env,
+          mcpServers: this.mcpServers,
+          permissionMode: 'acceptEdits',
+          additionalDirectories: ['/tmp/test-projects', this.cwd, '/tmp', '/config']
         }
       });
 

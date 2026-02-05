@@ -1354,7 +1354,7 @@ class GMGUIApp {
     if (this.pollingInterval) clearInterval(this.pollingInterval);
 
     let pollCount = 0;
-    const maxNoResponsePolls = 60;
+    const maxNoResponsePolls = 240;
     let lastKnownIds = new Set(
       Array.from(document.querySelectorAll('#chatMessages [data-message-id]'))
         .map(el => el.dataset.messageId)
