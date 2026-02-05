@@ -288,8 +288,11 @@ class GMGUIApp {
     }
   }
 
-  async createConversation() {
-    const title = document.getElementById('newConvTitle')?.value || 'New Conversation';
+  async createConversation(title = 'New Conversation') {
+    if (!this.selectedAgent) {
+      console.error('[APP] No agent selected');
+      return;
+    }
 
     try {
       const res = await fetch(BASE_URL + '/api/conversations', {
@@ -299,8 +302,12 @@ class GMGUIApp {
       });
 
       if (res.ok) {
+        const data = await res.json();
         await this.fetchConversations();
         this.renderChatHistory();
+        if (data.conversation) {
+          this.selectConversation(data.conversation.id);
+        }
       }
     } catch (e) {
       console.error('[APP] Error creating conversation:', e);
@@ -415,6 +422,112 @@ function initializeApp() {
 
 function sendMessage() {
   app.sendMessage();
+}
+
+function showNewChatModal() {
+  const modal = document.getElementById('newChatModal');
+  if (modal) {
+    modal.style.display = 'flex';
+  }
+}
+
+function closeNewChatModal() {
+  const modal = document.getElementById('newChatModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function createChatInWorkspace() {
+  const title = prompt('Enter a title for the conversation:', 'New Conversation');
+  if (title) {
+    app.createConversation(title);
+    closeNewChatModal();
+  }
+}
+
+function createChatInFolder() {
+  const folderModal = document.getElementById('folderBrowserModal');
+  if (folderModal) {
+    folderModal.style.display = 'flex';
+    closeNewChatModal();
+  }
+}
+
+function closeFolderBrowser() {
+  const modal = document.getElementById('folderBrowserModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function confirmFolderSelection() {
+  const folderPath = document.getElementById('folderPath')?.value;
+  if (folderPath) {
+    const title = `Chat in ${folderPath}`;
+    app.createConversation(title);
+    closeFolderBrowser();
+  }
+}
+
+function browseFolders() {
+  // Placeholder for folder browsing functionality
+  console.log('Folder browsing not yet implemented');
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    sidebar.classList.toggle('collapsed');
+  }
+}
+
+function switchTab(tab) {
+  if (tab === 'settings') {
+    const panel = document.getElementById('settingsPanel');
+    if (panel) {
+      panel.style.display = 'flex';
+    }
+    const main = document.querySelector('.main-content');
+    if (main) {
+      main.style.display = 'none';
+    }
+  } else if (tab === 'chat') {
+    const panel = document.getElementById('settingsPanel');
+    if (panel) {
+      panel.style.display = 'none';
+    }
+    const main = document.querySelector('.main-content');
+    if (main) {
+      main.style.display = 'flex';
+    }
+  }
+}
+
+function triggerFileUpload() {
+  const input = document.getElementById('fileInput');
+  if (input) {
+    input.click();
+  }
+}
+
+function handleFileUpload() {
+  console.log('File upload not yet implemented');
+}
+
+function closeScreenshotModal() {
+  const modal = document.getElementById('screenshotModal');
+  if (modal) {
+    modal.style.display = 'none';
+  }
+}
+
+function sendScreenshot() {
+  console.log('Send screenshot not yet implemented');
+}
+
+function downloadScreenshot() {
+  console.log('Download screenshot not yet implemented');
 }
 
 window.addEventListener('load', initializeApp);
