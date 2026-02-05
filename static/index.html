@@ -167,11 +167,13 @@
       font-size: 0.875rem;
     }
 
-    /* Main content area - flex column */
+    /* Main content area - flex column with full height */
     .main-content {
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      flex: 1;
+      min-height: 0;
     }
 
     header {
@@ -182,6 +184,8 @@
       justify-content: space-between;
       align-items: center;
       gap: 1rem;
+      flex-shrink: 0;
+      height: 60px;
     }
 
     .header-title {
@@ -195,6 +199,7 @@
       display: flex;
       gap: 1rem;
       align-items: center;
+      flex-shrink: 0;
     }
 
     .status-badge {
@@ -236,24 +241,34 @@
       }
     }
 
-    /* Main content */
-    main {
+    /* Output area - scrollable, fills available space */
+    #output-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
       display: flex;
       flex-direction: column;
-      gap: 0;
       min-height: 0;
-      overflow: hidden;
-      flex: 1;
+      padding: 1rem;
     }
 
+    #output {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    /* Execution panel - sticky at bottom */
     .execution-panel {
       background-color: var(--color-bg-secondary);
-      border-bottom: 1px solid var(--color-border);
+      border-top: 1px solid var(--color-border);
       padding: 1.5rem;
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 1rem;
       align-items: end;
+      flex-shrink: 0;
+      min-height: auto;
     }
 
     .execution-input-group {
@@ -288,6 +303,7 @@
       cursor: pointer;
       transition: all 0.2s;
       font-size: 0.875rem;
+      flex-shrink: 0;
     }
 
     .btn-primary {
@@ -312,23 +328,6 @@
       color: var(--color-text-primary);
       font-size: 0.875rem;
       cursor: pointer;
-    }
-
-    /* Output area */
-    #output-scroll {
-      overflow-y: auto;
-      overflow-x: hidden;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-
-    #output {
-      flex: 1;
-      padding: 1rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.5rem;
     }
 
     /* Event cards */
@@ -369,11 +368,12 @@
       .sidebar {
         display: none;
         position: fixed;
-        top: 0;
+        top: 60px;
         left: 0;
         width: 250px;
-        height: 100vh;
+        height: calc(100vh - 60px);
         z-index: 1000;
+        overflow-y: auto;
       }
 
       .sidebar.mobile-visible {
@@ -382,14 +382,72 @@
 
       .execution-panel {
         grid-template-columns: 1fr;
+        padding: 1rem;
       }
 
       .header-controls {
         flex-wrap: wrap;
+        gap: 0.5rem;
       }
 
       .execution-input-group {
         grid-template-columns: 1fr;
+        gap: 0.5rem;
+      }
+
+      #output-scroll {
+        padding: 0.75rem;
+      }
+
+      header {
+        padding: 0.75rem;
+        height: 50px;
+      }
+
+      .header-title {
+        font-size: 1.25rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .layout-with-sidebar {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        width: 100%;
+      }
+
+      .execution-panel {
+        padding: 0.75rem;
+      }
+
+      .execution-textarea {
+        min-height: 2.5rem;
+        max-height: 6rem;
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.8rem;
+      }
+
+      #output-scroll {
+        padding: 0.5rem;
+      }
+
+      header {
+        padding: 0.5rem;
+        height: 45px;
+      }
+
+      .header-title {
+        font-size: 1rem;
+      }
+
+      .status-badge {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
       }
     }
 
@@ -589,7 +647,12 @@
 
       <!-- Main Content Area -->
       <main id="app" class="main-content">
-        <!-- Execution Panel -->
+        <!-- Output Container - Scrollable -->
+        <div id="output-scroll" role="region" aria-label="Execution output" aria-live="polite" aria-atomic="false">
+          <div id="output" class="output"></div>
+        </div>
+
+        <!-- Execution Panel - Fixed at bottom -->
         <div class="execution-panel">
           <div class="execution-input-group">
             <select class="agent-selector" data-agent-selector title="Select agent">
@@ -608,11 +671,6 @@
           <button class="btn btn-primary" data-send-button title="Start execution (Ctrl+Enter)">
             Execute
           </button>
-        </div>
-
-        <!-- Output Container -->
-        <div id="output-scroll" role="region" aria-label="Execution output" aria-live="polite" aria-atomic="false">
-          <div id="output" class="output"></div>
         </div>
       </main>
     </div>
