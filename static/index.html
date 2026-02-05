@@ -359,6 +359,105 @@
       font-size: 0.7rem;
     }
 
+    /* Conversation display */
+    .conversation-header {
+      padding: 1rem;
+      border-bottom: 1px solid var(--color-border);
+      margin-bottom: 1rem;
+    }
+
+    .conversation-header h2 {
+      margin: 0 0 0.5rem 0;
+      font-size: 1.5rem;
+    }
+
+    .conversation-header p {
+      margin: 0;
+      font-size: 0.875rem;
+      color: var(--color-text-secondary);
+    }
+
+    .conversation-messages {
+      padding: 1rem;
+    }
+
+    .message {
+      margin-bottom: 1rem;
+      padding: 1rem;
+      border-radius: 0.375rem;
+      background-color: var(--color-bg-secondary);
+      border-left: 3px solid var(--color-primary);
+    }
+
+    .message-user {
+      border-left-color: var(--color-primary);
+    }
+
+    .message-assistant {
+      border-left-color: var(--color-success);
+    }
+
+    .message-role {
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      color: var(--color-text-secondary);
+      margin-bottom: 0.5rem;
+    }
+
+    .message-content {
+      font-size: 0.9rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message-timestamp {
+      font-size: 0.75rem;
+      color: var(--color-text-secondary);
+      margin-top: 0.5rem;
+    }
+
+    .message-blocks {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .message-text {
+      line-height: 1.6;
+      word-break: break-word;
+    }
+
+    .message-code {
+      background-color: var(--color-bg-code);
+      border-radius: 0.375rem;
+      padding: 0.75rem;
+      overflow-x: auto;
+      margin: 0.5rem 0;
+    }
+
+    .message-code pre {
+      margin: 0;
+      font-family: 'Courier New', monospace;
+      font-size: 0.85rem;
+      color: #e0e0e0;
+    }
+
+    .message-tool {
+      background-color: var(--color-primary);
+      color: white;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.25rem;
+      font-size: 0.75rem;
+      display: inline-block;
+      margin: 0.25rem 0;
+    }
+
+    .text-secondary {
+      color: var(--color-text-secondary);
+    }
+
     /* Responsive */
     @media (max-width: 768px) {
       .layout-with-sidebar {

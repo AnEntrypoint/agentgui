@@ -65,6 +65,7 @@ class ConversationManager {
   createConversationItem(conv) {
     const li = document.createElement('li');
     li.className = 'conversation-item';
+    li.dataset.convId = conv.id;
     if (conv.id === this.activeId) li.classList.add('active');
 
     const title = conv.title || `Conversation ${conv.id.slice(0, 8)}`;

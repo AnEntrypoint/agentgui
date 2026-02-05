@@ -65,13 +65,16 @@ const server = http.createServer(async (req, res) => {
   const routePath = req.url.slice(BASE_URL.length) || '/';
 
   try {
-    if (routePath === '/api/conversations' && req.method === 'GET') {
+    // Remove query parameters from routePath for matching
+    const pathOnly = routePath.split('?')[0];
+
+    if (pathOnly === '/api/conversations' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ conversations: queries.getConversationsList() }));
       return;
     }
 
-    if (routePath === '/api/conversations' && req.method === 'POST') {
+    if (pathOnly === '/api/conversations' && req.method === 'POST') {
       const body = await parseBody(req);
       const conversation = queries.createConversation(body.agentId, body.title);
       queries.createEvent('conversation.created', { agentId: body.agentId }, conversation.id);
@@ -81,7 +84,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const convMatch = routePath.match(/^\/api\/conversations\/([^/]+)$/);
+    const convMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)$/);
     if (convMatch) {
       if (req.method === 'GET') {
         const conv = queries.getConversation(convMatch[1]);
@@ -111,7 +114,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    const messagesMatch = routePath.match(/^\/api\/conversations\/([^/]+)\/messages$/);
+    const messagesMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/messages$/);
     if (messagesMatch) {
       if (req.method === 'GET') {
         const url = new URL(req.url, 'http://localhost');
@@ -141,7 +144,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    const streamMatch = routePath.match(/^\/api\/conversations\/([^/]+)\/stream$/);
+    const streamMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/stream$/);
     if (streamMatch && req.method === 'POST') {
       const conversationId = streamMatch[1];
       const body = await parseBody(req);
@@ -180,7 +183,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const messageMatch = routePath.match(/^\/api\/conversations\/([^/]+)\/messages\/([^/]+)$/);
+    const messageMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/messages\/([^/]+)$/);
     if (messageMatch && req.method === 'GET') {
       const msg = queries.getMessage(messageMatch[2]);
       if (!msg || msg.conversationId !== messageMatch[1]) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
@@ -189,7 +192,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const sessionMatch = routePath.match(/^\/api\/sessions\/([^/]+)$/);
+    const sessionMatch = pathOnly.match(/^\/api\/sessions\/([^/]+)$/);
     if (sessionMatch && req.method === 'GET') {
       const sess = queries.getSession(sessionMatch[1]);
       if (!sess) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
@@ -199,8 +202,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (routePath.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/) && req.method === 'GET') {
-      const convId = routePath.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/)[1];
+    if (pathOnly.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/) && req.method === 'GET') {
+      const convId = pathOnly.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/)[1];
       const latestSession = queries.getLatestSession(convId);
       if (!latestSession) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -213,7 +216,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const executionMatch = routePath.match(/^\/api\/sessions\/([^/]+)\/execution$/);
+    const executionMatch = pathOnly.match(/^\/api\/sessions\/([^/]+)\/execution$/);
     if (executionMatch && req.method === 'GET') {
       const sessionId = executionMatch[1];
       const url = new URL(req.url, 'http://localhost');

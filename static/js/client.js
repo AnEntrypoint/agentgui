@@ -170,6 +170,11 @@ class AgentGUIClient {
 
     // Listen for new conversation creation
     window.addEventListener('create-new-conversation', () => this.createNewConversation());
+
+    // Listen for conversation selection
+    window.addEventListener('conversation-selected', (event) => {
+      this.loadConversationMessages(event.detail.conversationId);
+    });
   }
 
   /**
@@ -515,6 +520,94 @@ class AgentGUIClient {
       console.error('Failed to create new conversation:', error);
       this.showError(`Failed to create conversation: ${error.message}`);
     }
+  }
+
+  /**
+   * Load and display conversation messages
+   */
+  async loadConversationMessages(conversationId) {
+    try {
+      this.state.currentConversation = { id: conversationId };
+
+      // Fetch conversation details
+      const convResponse = await fetch(window.__BASE_URL + `/api/conversations/${conversationId}`);
+      const { conversation } = await convResponse.json();
+
+      // Fetch messages
+      const messagesResponse = await fetch(window.__BASE_URL + `/api/conversations/${conversationId}/messages`);
+      if (!messagesResponse.ok) {
+        throw new Error(`Failed to fetch messages: ${messagesResponse.status}`);
+      }
+      const messagesData = await messagesResponse.json();
+
+      // Clear output and display conversation header
+      const outputEl = document.getElementById('output');
+      if (outputEl) {
+        outputEl.innerHTML = `
+          <div class="conversation-header">
+            <h2>${this.escapeHtml(conversation.title || 'Conversation')}</h2>
+            <p class="text-secondary">${conversation.agentType || 'unknown'} • ${new Date(conversation.created_at).toLocaleDateString()}</p>
+          </div>
+          <div class="conversation-messages">
+            ${this.renderMessages(messagesData.messages || [])}
+          </div>
+        `;
+      }
+    } catch (error) {
+      console.error('Failed to load conversation messages:', error);
+      this.showError('Failed to load conversation: ' + error.message);
+    }
+  }
+
+  /**
+   * Render messages for display
+   */
+  renderMessages(messages) {
+    if (messages.length === 0) {
+      return '<p class="text-secondary">No messages in this conversation yet</p>';
+    }
+
+    return messages.map(msg => {
+      let contentHtml = '';
+
+      // Handle different content types
+      if (typeof msg.content === 'string') {
+        contentHtml = `<div class="message-text">${this.escapeHtml(msg.content)}</div>`;
+      } else if (msg.content && typeof msg.content === 'object' && msg.content.type === 'claude_execution') {
+        // Handle Claude execution blocks
+        contentHtml = '<div class="message-blocks">';
+        if (msg.content.blocks && Array.isArray(msg.content.blocks)) {
+          msg.content.blocks.forEach(block => {
+            if (block.type === 'text') {
+              contentHtml += `<div class="message-text">${this.escapeHtml(block.text)}</div>`;
+            } else if (block.type === 'code_block') {
+              contentHtml += `<div class="message-code"><pre>${this.escapeHtml(block.code)}</pre></div>`;
+            } else if (block.type === 'tool_use') {
+              contentHtml += `<div class="message-tool">[Tool: ${this.escapeHtml(block.name)}]</div>`;
+            }
+          });
+        }
+        contentHtml += '</div>';
+      } else {
+        contentHtml = `<div class="message-text">${this.escapeHtml(JSON.stringify(msg.content))}</div>`;
+      }
+
+      return `
+        <div class="message message-${msg.role}">
+          <div class="message-role">${msg.role.charAt(0).toUpperCase() + msg.role.slice(1)}</div>
+          ${contentHtml}
+          <div class="message-timestamp">${new Date(msg.created_at).toLocaleString()}</div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  /**
+   * Escape HTML to prevent XSS
+   */
+  escapeHtml(text) {
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return text.replace(/[&<>"']/g, c => map[c]);
   }
 
   /**
