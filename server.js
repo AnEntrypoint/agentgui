@@ -3,14 +3,9 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
-import os from 'os';
 import { execSync } from 'child_process';
 import { queries } from './database.js';
-import ACPConnection from './acp-launcher.js';
-import { SessionStateStore } from './state-manager.js';
-import { StreamHandler } from './stream-handler.js';
-import { StateValidator } from './state-validator.js';
-import { getConversationSync } from './conversation-sync.js';
+import { runClaudeWithStreaming } from './lib/claude-runner.js';
 
 // Debug logging to file
 const debugLog = (msg) => {
@@ -25,71 +20,6 @@ const watch = process.argv.includes('--no-watch') ? false : (process.argv.includ
 
 const staticDir = path.join(__dirname, 'static');
 if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
-
-// ACP connection pool keyed by agentId
-const acpPool = new Map();
-
-// Global session state store - tracks ALL prompt processing with explicit states
-const sessionStateStore = new SessionStateStore();
-
-// Periodic cleanup of old sessions
-setInterval(() => {
-  sessionStateStore.cleanup(3600000); // Clean sessions older than 1 hour
-}, 600000); // Run every 10 minutes
-
-/**
- * Get or create ACP connection with timeout protection
- */
-async function getACP(agentId, cwd) {
-  let conn = acpPool.get(agentId);
-  if (conn?.isRunning()) {
-    console.log(`[getACP] Returning cached connection for ${agentId}`);
-    return conn;
-  }
-
-  console.log(`[getACP] Creating new ACP connection for ${agentId}`);
-  conn = new ACPConnection();
-  const agentType = agentId === 'opencode' ? 'opencode' : 'claude-code';
-  
-  // Wrap entire init in timeout to prevent indefinite hangs
-  return Promise.race([
-    initializeACP(conn, agentType, cwd, agentId),
-    new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('ACP initialization timeout (>60s)')), 60000)
-    )
-  ]);
-}
-
-/**
- * Initialize ACP with all steps
- */
-async function initializeACP(conn, agentType, cwd, agentId) {
-  try {
-    console.log(`[getACP] Step 1: Connecting to ${agentType}...`);
-    await conn.connect(agentType, cwd);
-    console.log(`[getACP] Step 2: Connected, initializing...`);
-    await conn.initialize();
-    console.log(`[getACP] Step 3: Initialized, creating session...`);
-    await conn.newSession(cwd);
-    console.log(`[getACP] Step 4: Session created, setting mode...`);
-    await conn.setSessionMode('bypassPermissions');
-    console.log(`[getACP] Step 5: Injecting skills...`);
-    // Inject system prompt to ensure HTML/RippleUI formatting
-    await conn.injectSkills();
-    console.log(`[getACP] Step 6: Injecting system context...`);
-    await conn.injectSystemContext();
-    console.log(`[getACP] Step 7: All initialization complete, caching connection`);
-    acpPool.set(agentId, conn);
-    console.log(`[getACP] ✅ ACP connection ready for ${agentId} in ${cwd}`);
-    return conn;
-  } catch (err) {
-    console.error(`[getACP] ❌ ERROR: Failed to initialize ACP connection for ${agentId}: ${err.message}`);
-    console.error(`[getACP] Stack: ${err.stack}`);
-    acpPool.delete(agentId);
-    if (conn) await conn.terminate();
-    throw new Error(`ACP initialization failed for ${agentId}: ${err.message}`);
-  }
-}
 
 function discoverAgents() {
   const agents = [];
@@ -205,7 +135,7 @@ const server = http.createServer(async (req, res) => {
          res.writeHead(201, { 'Content-Type': 'application/json' });
          res.end(JSON.stringify({ message, session, idempotencyKey }));
          // Fire-and-forget with proper error handling
-         processMessage(conversationId, message.id, session.id, body.content, body.agentId, body.folderContext)
+         processMessage(conversationId, message.id, body.content, body.agentId)
            .catch(err => debugLog(`[processMessage] Uncaught error: ${err.message}`));
          return;
       }
@@ -250,45 +180,6 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // Diagnostics endpoint - shows ALL active and recent sessions
-    if (routePath === '/api/diagnostics/sessions' && req.method === 'GET') {
-      const diagnostics = sessionStateStore.getDiagnostics();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(diagnostics, null, 2));
-      return;
-    }
-
-    const streamUpdatesMatch = routePath.match(/^\/api\/sessions\/([^/]+)\/stream-updates$/);
-    if (streamUpdatesMatch && req.method === 'GET') {
-      const sessionId = streamUpdatesMatch[1];
-      const updates = queries.getSessionStreamUpdates(sessionId);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ sessionId, updates, count: updates.length }));
-      return;
-    }
-
-    const stateRecoveryMatch = routePath.match(/^\/api\/sessions\/([^/]+)\/state-recovery$/);
-    if (stateRecoveryMatch && req.method === 'GET') {
-      const sessionId = stateRecoveryMatch[1];
-      const state = StateValidator.getSessionState(sessionId);
-      if (!state) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Session not found' }));
-        return;
-      }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(state));
-      return;
-    }
-
-    const stateValidationMatch = routePath.match(/^\/api\/sessions\/([^/]+)\/validate$/);
-    if (stateValidationMatch && req.method === 'GET') {
-      const sessionId = stateValidationMatch[1];
-      const validation = StateValidator.validateSession(sessionId);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(validation));
-      return;
-    }
 
     if (routePath === '/api/import/claude-code' && req.method === 'GET') {
       const result = queries.importClaudeCodeConversations();
@@ -396,159 +287,66 @@ function serveFile(filePath, res) {
   });
 }
 
-/**
- * Process a user message through the Claude Code ACP with real-time streaming
- * Updates are persisted to database and broadcast to clients immediately
- */
-async function processMessage(conversationId, messageId, sessionId, content, agentId, folderContext) {
-  // Create state manager for this session
-  const stateManager = sessionStateStore.create(sessionId, conversationId, messageId, 120000);
-
+async function processMessage(conversationId, messageId, content, agentId) {
   try {
-    console.log(`[processMessage] Starting: conversationId=${conversationId}, sessionId=${sessionId}`);
-    console.log(`[processMessage] Initial state: ${stateManager.getState()}`);
+    debugLog(`[processMessage] Starting: conversationId=${conversationId}, agentId=${agentId}`);
 
-    // STATE: PENDING → ACQUIRING_ACP
-    stateManager.transition(stateManager.constructor.STATES.ACQUIRING_ACP, {
-      reason: 'Connecting to ACP',
-      data: {}
-    });
-
-    const cwd = folderContext?.path || '/config';
+    const cwd = '/config';
     const actualAgentId = agentId || 'claude-code';
 
-    try {
-      const conn = await getACP(actualAgentId, cwd);
+    debugLog(`[processMessage] Calling runClaudeWithStreaming with prompt: "${content.substring(0, 50)}..."`);
+    const outputs = await runClaudeWithStreaming(content, cwd, actualAgentId);
+    debugLog(`[processMessage] Claude returned ${outputs.length} outputs`);
 
-      // STATE: ACQUIRING_ACP → ACP_ACQUIRED
-      stateManager.transition(stateManager.constructor.STATES.ACP_ACQUIRED, {
-        reason: 'ACP connection established',
-        data: { acpConnectionTime: Date.now() }
-      });
-
-      // Create stream handler for real-time persistence and broadcasting
-      const streamHandler = new StreamHandler(sessionId, conversationId, broadcastSync);
-      let fullText = '';
-
-      // Setup response streaming
-      conn.onUpdate = (params) => {
-        streamHandler.handleUpdate(params, BASE_URL);
-        const u = params.update;
-        if (u?.sessionUpdate === 'agent_message_chunk' && u.content?.text) {
-          fullText += u.content.text;
+    let textParts = [];
+    for (const output of outputs) {
+      if (typeof output === 'string') {
+        textParts.push(output);
+      } else if (output.type === 'assistant' && output.message?.content) {
+        debugLog(`[processMessage] Found assistant message with ${output.message.content.length} content blocks`);
+        for (const block of output.message.content) {
+          if (block.type === 'text' && block.text) {
+            textParts.push(block.text);
+          }
         }
-      };
+      } else if (output.type === 'result' && output.result) {
+        debugLog(`[processMessage] Found result block with result: ${output.result}`);
+        textParts.push(String(output.result));
+      } else if (output.text) {
+        textParts.push(output.text);
+      } else if (output.content?.text) {
+        textParts.push(output.content.text);
+      }
+    }
 
-      // STATE: ACP_ACQUIRED → SENDING_PROMPT
-      stateManager.transition(stateManager.constructor.STATES.SENDING_PROMPT, {
-        reason: 'Sending prompt to ACP',
-        data: {}
-      });
+    const responseText = textParts.join('\n').trim();
+    debugLog(`[processMessage] Extracted response text: "${responseText.substring(0, 100)}..."`);
 
-      console.log(`[processMessage] Sending prompt to ACP (${content.length} chars)`);
-      const result = await conn.sendPrompt(content);
-      conn.onUpdate = null;
-
-      // STATE: SENDING_PROMPT → PROCESSING
-      stateManager.transition(stateManager.constructor.STATES.PROCESSING, {
-        reason: 'ACP processing complete, formatting response',
-        data: { promptSentTime: Date.now(), responseReceivedTime: Date.now() }
-      });
-
-       console.log(`[processMessage] ACP returned: stopReason=${result?.stopReason}, streamUpdates=${streamHandler.getUpdateCount()}`);
-
-       // Save agent's complete response as-is, without any processing
-       // The agent workflow must flow naturally - no HTML extraction or interference
-       const responseText = fullText || result?.result || 'No response.';
-
-       const messageContent = {
-         text: responseText,
-         streamUpdatesCount: streamHandler.getUpdateCount()
-       };
-
-      // Save consolidated response to database
-      const assistantMessage = queries.createMessage(conversationId, 'assistant', messageContent);
-      queries.updateSession(sessionId, {
-        status: 'completed',
-        response: { text: responseText, messageId: assistantMessage.id },
-        completed_at: Date.now()
-      });
-      queries.createEvent('session.completed', { messageId: assistantMessage.id }, conversationId, sessionId);
-
-      // Broadcast final consolidated response with full message content
+    if (responseText) {
+      debugLog(`[processMessage] Creating assistant message`);
+      const assistantMessage = queries.createMessage(conversationId, 'assistant', responseText);
+      debugLog(`[processMessage] Created message with id: ${assistantMessage.id}`);
       broadcastSync({
-        type: 'session_updated',
-        sessionId,
+        type: 'message_created',
         conversationId,
-        status: 'completed',
         message: assistantMessage,
         timestamp: Date.now()
       });
-
-      // STATE: PROCESSING → COMPLETED
-      stateManager.transition(stateManager.constructor.STATES.COMPLETED, {
-        reason: 'Response successfully generated and saved',
-        data: {
-          responseLength: responseText.length,
-          messageId: assistantMessage.id,
-          streamUpdates: streamHandler.getUpdateCount()
-        }
-      });
-
-      console.log(`[processMessage] ✅ Session completed with ${streamHandler.getUpdateCount()} stream updates: ${stateManager.getSummary().duration}`);
-
-    } catch (acpError) {
-      console.error(`[processMessage] ACP Error: ${acpError.message}`);
-      console.error(`[processMessage] Stack: ${acpError.stack}`);
-
-      // STATE: → ERROR
-      stateManager.transition(stateManager.constructor.STATES.ERROR, {
-        reason: `ACP error: ${acpError.message}`,
-        data: {
-          error: acpError.message,
-          stackTrace: acpError.stack
-        }
-      });
-
-      // Save error to database
-      const errorMsg = `ACP Error: ${acpError.message}`;
-      const errorMessage = queries.createMessage(conversationId, 'assistant', errorMsg);
-      queries.updateSession(sessionId, { status: 'error', error: acpError.message, completed_at: Date.now() });
-      queries.createEvent('session.error', { error: acpError.message, stack: acpError.stack }, conversationId, sessionId);
-      broadcastSync({ type: 'session_updated', sessionId, conversationId, status: 'error', error: acpError.message, message: errorMessage, timestamp: Date.now() });
-
-      // Clean up ACP connection on error
-      acpPool.delete(actualAgentId);
-      throw acpError;
+    } else {
+      debugLog(`[processMessage] No response text extracted!`);
     }
 
-  } catch (fatalError) {
-    console.error(`[processMessage] ❌ Fatal error: ${fatalError.message}`);
-    console.error(`[processMessage] Stack: ${fatalError.stack}`);
-
-    // Ensure state is in error
-    if (!stateManager.isTerminal()) {
-      stateManager.transition(stateManager.constructor.STATES.ERROR, {
-        reason: `Fatal error: ${fatalError.message}`,
-        data: {
-          error: fatalError.message,
-          stackTrace: fatalError.stack
-        }
-      });
-    }
-
-    // Log full state history for debugging
-    const summary = stateManager.getSummary();
-    console.error(`[processMessage] State history: ${JSON.stringify(summary, null, 2)}`);
-
-  } finally {
-    // Cleanup: remove from state store immediately (async to not block)
-    setImmediate(() => {
-      sessionStateStore.remove(sessionId);
+    debugLog(`[processMessage] ✅ Completed: ${outputs.length} outputs received`);
+  } catch (error) {
+    debugLog(`[processMessage] Error: ${error.message}`);
+    debugLog(`[processMessage] Stack: ${error.stack}`);
+    const errorMessage = queries.createMessage(conversationId, 'assistant', `Error: ${error.message}`);
+    broadcastSync({
+      type: 'message_created',
+      conversationId,
+      message: errorMessage,
+      timestamp: Date.now()
     });
-
-    // Log final state
-    console.log(`[processMessage] Final state: ${stateManager.getState()}`);
   }
 }
 
@@ -579,29 +377,8 @@ wss.on('connection', (ws, req) => {
         const data = JSON.parse(msg);
         if (data.type === 'subscribe') {
           ws.subscriptions.add(data.sessionId);
-          // On subscribe, send current state for recovery
-          const state = StateValidator.getSessionState(data.sessionId);
-          if (state) {
-            ws.send(JSON.stringify({
-              type: 'state_snapshot',
-              sessionId: data.sessionId,
-              state,
-              timestamp: Date.now()
-            }));
-          }
         } else if (data.type === 'unsubscribe') {
           ws.subscriptions.delete(data.sessionId);
-        } else if (data.type === 'recovery_request') {
-          // Client asking to recover from a checkpoint
-          const state = StateValidator.getSessionState(data.sessionId);
-          if (state) {
-            ws.send(JSON.stringify({
-              type: 'recovery_response',
-              sessionId: data.sessionId,
-              state,
-              timestamp: Date.now()
-            }));
-          }
         }
       } catch (e) {
         console.error('WebSocket message parse error:', e.message);
@@ -659,8 +436,6 @@ if (watch) {
 }
 
 process.on('SIGTERM', async () => {
-  for (const conn of acpPool.values()) await conn.terminate();
-  acpPool.clear();
   wss.close(() => server.close(() => process.exit(0)));
 });
 
@@ -687,13 +462,6 @@ function onServerReady() {
   // Then run it every 30 seconds (constant automatic importing)
   setInterval(performAutoImport, 30000);
 
-  // Start conversation sync to watch for changes
-  try {
-    const sync = getConversationSync();
-    sync.start();
-  } catch (err) {
-    console.error('[SERVER] Error starting conversation sync:', err.message);
-  }
 }
 
 function performAutoImport() {

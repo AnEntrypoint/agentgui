@@ -1,6 +1,5 @@
 const BASE_URL = window.__BASE_URL || '';
 
-// Auto-reconnecting WebSocket wrapper
 class ReconnectingWebSocket {
   constructor(url, options = {}) {
     this.url = url;
@@ -79,1707 +78,262 @@ class ReconnectingWebSocket {
 
 class GMGUIApp {
   constructor() {
-    this.agents = new Map();
-    this.selectedAgent = null;
     this.conversations = new Map();
     this.currentConversation = null;
-    this.activeStream = null;
-    this.pollingInterval = null;
-    this.syncWs = null;
-    this.broadcastChannel = null;
-    this.settings = { autoScroll: true, connectTimeout: 30000 };
-    this.pendingMessages = new Map();
-    this.idempotencyKeys = new Map();
-    
-    // Start async initialization and handle errors
-    this.initPromise = this.init().catch(err => {
-      console.error('[CRITICAL] GMGUIApp.init() failed:', err);
-      console.error('[CRITICAL] Stack:', err.stack);
-      throw err;
-     });
-   }
+    this.agents = new Map();
+    this.selectedAgent = null;
+    this.ws = null;
+  }
 
-   // Helper for authenticated API calls - ensures credentials sent for proxy auth
-   async apiFetch(url, options = {}) {
-     return fetch(url, { credentials: 'include', ...options });
-   }
+  async init() {
+    console.log('[APP] Initializing');
 
-   async init() {
-    console.log('[DEBUG] Init: Starting initialization');
-    console.log('[DEBUG] Init: BASE_URL =', BASE_URL);
-    console.log('[DEBUG] Init: Window width:', window.innerWidth);
-
-    // Ensure sidebar is visible on desktop (open on wide screens)
-    const sidebar = document.getElementById('sidebar');
-    if (window.innerWidth >= 768 && sidebar) {
-      console.log('[DEBUG] Init: Wide screen detected, ensuring sidebar is visible');
-      sidebar.classList.remove('open'); // On desktop, sidebar is always visible, no need for 'open' class
-    } else if (sidebar) {
-      console.log('[DEBUG] Init: Mobile/narrow screen detected, opening sidebar');
-      sidebar.classList.add('open');
-    }
-
-    this.loadSettings();
     this.setupEventListeners();
-    await this.fetchHome();
-    console.log('[DEBUG] Init: Fetched home');
     await this.fetchAgents();
-    console.log('[DEBUG] Init: Fetched agents, count:', this.agents.size);
 
-    // Pre-select agent on first load: try from localStorage, otherwise pick first available
     const savedAgent = localStorage.getItem('gmgui-selectedAgent');
     if (savedAgent && this.agents.has(savedAgent)) {
       this.selectedAgent = savedAgent;
-      console.log('[DEBUG] Init: Restored selected agent from localStorage:', savedAgent);
     } else if (this.agents.size > 0) {
       this.selectedAgent = Array.from(this.agents.keys())[0];
       localStorage.setItem('gmgui-selectedAgent', this.selectedAgent);
-      console.log('[DEBUG] Init: Pre-selected first available agent:', this.selectedAgent);
     }
 
-    await this.autoImportClaudeCode();
-    console.log('[DEBUG] Init: Auto-imported Claude Code conversations');
     await this.fetchConversations();
-    console.log('[DEBUG] Init: Fetched conversations, count:', this.conversations.size);
-    console.log('[DEBUG] Init: Conversation details:', Array.from(this.conversations.values()).slice(0, 3));
-    this.connectSyncWebSocket();
-    this.setupCrossTabSync();
-    this.startPeriodicSync();
-    console.log('[DEBUG] Init: About to renderAll with', this.conversations.size, 'conversations');
+    this.connectWebSocket();
     this.renderAll();
-    console.log('[DEBUG] Init: renderAll completed');
-    console.log('[DEBUG] Init: chatList innerHTML length:', document.getElementById('chatList')?.innerHTML?.length || 0);
+    console.log('[APP] Ready');
   }
-
-  startPeriodicSync() {
-    // GUARANTEED CONSISTENCY MECHANISM
-    // Primary: WebSocket events (real-time, instant)
-    // Fallback: Consistency check every 3 seconds
-    // If any mismatch detected, full refresh immediately
-    
-    // Server auto-import runs every 30 seconds (discovers new Claude Code conversations)
-    setInterval(() => {
-      this.autoImportClaudeCode();
-    }, 30000);
-    
-    // Consistency monitor: Verify local state matches server
-    // This catches any desync issues and fixes them within 3 seconds
-    setInterval(() => {
-      this.verifyConsistency();
-    }, 3000);
-  }
-
-  async verifyConsistency() {
-    // Silent consistency check - only log if mismatch found
-    try {
-      const res = await this.apiFetch(BASE_URL + '/api/conversations');
-      if (!res.ok) return;
-      
-      const data = await res.json();
-      const serverCount = data.conversations?.length || 0;
-      const localCount = this.conversations.size;
-      
-      if (serverCount !== localCount) {
-        console.warn(`[CONSISTENCY MISMATCH] Server has ${serverCount} conversations, local has ${localCount}`);
-        console.warn('[CONSISTENCY] Forcing full refresh to restore sync');
-        await this.fetchConversations();
-        this.renderChatHistory();
-        console.log('[CONSISTENCY] State restored to match server');
-      }
-    } catch (e) {
-      // Silent error - don't spam logs
-    }
-  }
-
-  async autoImportClaudeCode() {
-    try {
-      await this.apiFetch(BASE_URL + '/api/import/claude-code');
-    } catch (e) {
-      console.error('autoImportClaudeCode:', e);
-    }
-  }
-
-  connectSyncWebSocket() {
-    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    this.syncWs = new ReconnectingWebSocket(
-      `${proto}//${location.host}${BASE_URL}/sync`
-    );
-
-    this.wsDisconnectTime = null;
-
-    this.syncWs.on('open', () => {
-      console.log('[SYNC] WebSocket connected - guaranteed consistency active');
-      this.updateConnectionStatus('connected');
-      this.wsDisconnectTime = null;
-      
-      // Force full sync when reconnecting to ensure consistency
-      this.fetchConversations().then(() => this.renderChatHistory());
-    });
-
-    this.syncWs.on('message', (e) => {
-      try {
-        const event = JSON.parse(e.data);
-        console.log('[SYNC] Event:', event.type);
-        this.handleSyncEvent(event, false);
-      } catch (err) {
-        console.error('[SYNC ERROR] Parse error:', err);
-      }
-    });
-
-    this.syncWs.on('close', () => {
-      console.log('[SYNC] WebSocket disconnected - reconnecting...');
-      this.updateConnectionStatus('reconnecting');
-      this.wsDisconnectTime = Date.now();
-      
-      // CRITICAL: Force full refresh if disconnected for more than 2 seconds
-      // This ensures we NEVER have inconsistent state for more than a few seconds
-      setTimeout(() => {
-        if (this.wsDisconnectTime && Date.now() - this.wsDisconnectTime > 2000) {
-          console.log('[SYNC CRITICAL] Lost WebSocket > 2s, forcing full data refresh NOW');
-          this.fetchConversations().then(() => {
-            this.renderChatHistory();
-            console.log('[SYNC] Full refresh completed - guaranteed consistency restored');
-          });
-        }
-      }, 2000);
-    });
-
-    this.syncWs.on('error', (err) => {
-      console.error('[SYNC ERROR]', err);
-      this.updateConnectionStatus('disconnected');
-    });
-  }
-
-  setupCrossTabSync() {
-    if ('BroadcastChannel' in window) {
-      try {
-        this.broadcastChannel = new BroadcastChannel('gmgui-sync');
-        this.broadcastChannel.onmessage = (e) => {
-          this.handleSyncEvent(e.data, true);
-        };
-      } catch (err) {
-        console.error('BroadcastChannel error:', err);
-      }
-    }
-  }
-
-  handleSyncEvent(event, fromBroadcast = false) {
-    // CRITICAL: Server is the authoritative source of truth
-    // Real-time WebSocket events for messages arrive immediately
-    // Subscribe to conversation to receive message updates
-
-    console.log('[STATE SYNC] Event received:', event.type);
-
-    switch (event.type) {
-      case 'sync_connected':
-        console.log('[STATE SYNC] Connected to sync bus - subscribing to all active sessions');
-        // On connection, always do a full state refresh
-        this.fetchConversations().then(() => this.renderChatHistory());
-        break;
-
-      case 'conversation_created':
-        console.log('[STATE SYNC] Conversation created, fetching full state');
-        // Never trust just the event data - fetch authoritative state
-        this.fetchConversations().then(() => this.renderChatHistory());
-        if (!fromBroadcast && this.broadcastChannel) {
-          this.broadcastChannel.postMessage(event);
-        }
-        break;
-
-      case 'conversation_updated':
-        console.log('[STATE SYNC] Conversation updated, fetching full state');
-        // Fetch full state to ensure we have the latest version
-        this.fetchConversations().then(() => {
-          this.renderChatHistory();
-          // If we're viewing this conversation, refresh its content too
-          if (this.currentConversation === event.conversation?.id) {
-            this.displayConversation(event.conversation.id);
-          }
-        });
-        if (!fromBroadcast && this.broadcastChannel) {
-          this.broadcastChannel.postMessage(event);
-        }
-        break;
-
-      case 'conversation_deleted':
-        console.log('[STATE SYNC] Conversation deleted, fetching full state');
-        this.fetchConversations().then(() => {
-          this.renderChatHistory();
-          if (this.currentConversation === event.conversationId) {
-            this.currentConversation = null;
-            this.renderCurrentConversation();
-          }
-        });
-        if (!fromBroadcast && this.broadcastChannel) {
-          this.broadcastChannel.postMessage(event);
-        }
-        break;
-
-      case 'conversations_updated':
-        console.log('[STATE SYNC] Conversations imported, fetching full state');
-        // New conversations imported - refresh everything
-        this.fetchConversations().then(() => this.renderChatHistory());
-        if (!fromBroadcast && this.broadcastChannel) {
-          this.broadcastChannel.postMessage(event);
-        }
-        break;
-
-      case 'message_created':
-        console.log('[STATE SYNC] Message created via WebSocket - real-time push');
-        // User message was created - add it immediately without polling
-        if (this.currentConversation === event.conversationId && event.message) {
-          console.log('[STATE SYNC] Adding user message to display immediately');
-          // Stop any existing polling for this conversation
-          this.stopPollingMessages();
-          // Add message directly to display
-          this.addMessageToDisplay(event.message);
-          // Update conversation metadata
-          this.fetchConversations().then(() => this.renderChatHistory());
-          // Auto-scroll to new message
-          if (this.settings.autoScroll) {
-            setTimeout(() => {
-              const div = document.getElementById('chatMessages');
-              if (div) div.scrollTop = div.scrollHeight;
-            }, 50);
-          }
-        } else {
-          // Not viewing this conversation, just update timestamps
-          this.fetchConversations().then(() => this.renderChatHistory());
-        }
-        if (!fromBroadcast && this.broadcastChannel) {
-          this.broadcastChannel.postMessage(event);
-        }
-        break;
-
-      case 'session_updated':
-        console.log('[STATE SYNC] Session updated via WebSocket:', event.status, '- real-time push');
-        // Session completed - agent response arrived via WebSocket push (no polling!)
-        if (this.currentConversation === event.conversationId && event.message) {
-          console.log('[STATE SYNC] Adding assistant message to display immediately (real-time push)');
-          // Stop polling immediately
-          this.stopPollingMessages();
-          // Add message directly to display
-          this.addMessageToDisplay(event.message);
-          // Update conversation metadata
-          this.fetchConversations().then(() => this.renderChatHistory());
-          // Auto-scroll to new message
-          if (this.settings.autoScroll) {
-            setTimeout(() => {
-              const div = document.getElementById('chatMessages');
-              if (div) div.scrollTop = div.scrollHeight;
-            }, 50);
-          }
-        } else {
-          // Not viewing this conversation, just update timestamps
-          this.fetchConversations().then(() => this.renderChatHistory());
-        }
-        if (!fromBroadcast && this.broadcastChannel) {
-          this.broadcastChannel.postMessage(event);
-        }
-        break;
-    }
-  }
-
-  updateConnectionStatus(status) {
-    const el = document.getElementById('connectionStatus');
-    if (!el) return;
-
-    el.className = `connection-status ${status}`;
-    const text = el.querySelector('.status-text');
-    if (text) {
-      text.textContent = status === 'connected' ? 'Connected' :
-                         status === 'reconnecting' ? 'Reconnecting...' :
-                         'Disconnected';
-    }
-  }
-
-  async fetchHome() {
-    try {
-      const res = await this.apiFetch(BASE_URL + '/api/home');
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('gmgui-home', data.home);
-      }
-    } catch (e) {
-      console.error('fetchHome:', e);
-    }
-  }
-
-  loadSettings() {
-    const stored = localStorage.getItem('gmgui-settings');
-    if (stored) {
-      try { this.settings = { ...this.settings, ...JSON.parse(stored) }; } catch (_) {}
-    }
-    this.applySettings();
-  }
-
-  saveSettings() {
-    localStorage.setItem('gmgui-settings', JSON.stringify(this.settings));
-  }
-
-  applySettings() {
-    const el = document.getElementById('autoScroll');
-    if (el) el.checked = this.settings.autoScroll;
-    const t = document.getElementById('connectTimeout');
-    if (t) t.value = this.settings.connectTimeout / 1000;
-  }
-
-  expandHome(p) {
-    if (!p) return p;
-    const home = localStorage.getItem('gmgui-home') || '/config';
-    return p.startsWith('~') ? p.replace('~', home) : p;
-  }
-
-   setupEventListeners() {
-     window.addEventListener('focus', () => {
-       this.autoImportClaudeCode().then(() => {
-         this.fetchConversations().then(() => this.renderChatHistory());
-       });
-     });
-     
-     // THEME CHANGE LISTENER: Update HTML blocks when theme changes
-     // Listen for theme changes on document element
-     const themeObserver = new MutationObserver(() => {
-       console.log('[THEME] Theme changed, updating HTML blocks');
-       this.updateHtmlBlockThemes();
-     });
-     
-     themeObserver.observe(document.documentElement, {
-       attributes: true,
-       attributeFilter: ['data-theme']
-     });
-     
-     // Also listen for system theme changes
-     if (window.matchMedia) {
-       window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-         console.log('[THEME] System theme changed, updating HTML blocks');
-         this.updateHtmlBlockThemes();
-       });
-     }
-     
-     const input = document.getElementById('messageInput');
-     if (input) {
-       input.addEventListener('keydown', (e) => {
-         if (e.key === 'Enter' && !e.shiftKey) {
-           e.preventDefault();
-           this.sendMessage();
-         }
-       });
-       input.addEventListener('input', () => this.updateSendButtonState());
-     }
-     document.getElementById('autoScroll')?.addEventListener('change', (e) => {
-       this.settings.autoScroll = e.target.checked;
-       this.saveSettings();
-     });
-     document.getElementById('connectTimeout')?.addEventListener('change', (e) => {
-       this.settings.connectTimeout = parseInt(e.target.value) * 1000;
-       this.saveSettings();
-     });
-   }
-   
-    updateHtmlBlockThemes() {
-      // Update theme attribute and CSS for all existing HTML blocks
-      const currentTheme = document.documentElement.getAttribute('data-theme') || 
-                          (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      
-      // CRITICAL: Remove old theme styles and inject new ones for all HTML blocks
-      document.querySelectorAll('.html-content').forEach(content => {
-        // Remove any existing theme style tags
-        const oldStyles = content.querySelectorAll('style');
-        oldStyles.forEach(style => {
-          if (style.textContent.includes('.html-content')) {
-            style.remove();
-          }
-        });
-        
-        // Inject new theme-aware CSS
-        const themeCSS = currentTheme === 'dark' 
-          ? `<style>
-               .html-content { 
-                 color: #f8fafc; 
-                 background: transparent;
-               }
-               .html-content p { color: #cbd5e1; }
-               .html-content h1, .html-content h2, .html-content h3, 
-               .html-content h4, .html-content h5, .html-content h6 { 
-                 color: #f8fafc; 
-               }
-               .html-content a { color: #6366f1; }
-               .html-content code { color: #c7d2fe; background: rgba(0,0,0,0.3); }
-               .html-content pre { background: rgba(0,0,0,0.5); color: #e0e7ff; }
-               .html-content table { border-color: #334155; }
-               .html-content th { background: #1a202c; color: #f8fafc; }
-               .html-content td { border-color: #334155; }
-               .html-content blockquote { border-color: #334155; color: #cbd5e1; }
-               .html-content ul, .html-content ol { color: #cbd5e1; }
-               .html-content li { color: #cbd5e1; }
-            </style>`
-          : `<style>
-               .html-content { 
-                 color: #1d2129; 
-                 background: transparent;
-               }
-               .html-content p { color: #475569; }
-               .html-content h1, .html-content h2, .html-content h3, 
-               .html-content h4, .html-content h5, .html-content h6 { 
-                 color: #1d2129; 
-               }
-               .html-content a { color: #4f46e5; }
-               .html-content code { color: #6366f1; background: rgba(99,102,241,0.1); }
-               .html-content pre { background: #f3f4f6; color: #1d2129; }
-               .html-content table { border-color: #e5e7eb; }
-               .html-content th { background: #f9fafb; color: #1d2129; }
-               .html-content td { border-color: #e5e7eb; }
-               .html-content blockquote { border-color: #e5e7eb; color: #475569; }
-               .html-content ul, .html-content ol { color: #475569; }
-               .html-content li { color: #475569; }
-            </style>`;
-        
-        // Create a temporary wrapper to parse and insert the style
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = themeCSS;
-        const styleEl = tempDiv.querySelector('style');
-        if (styleEl) {
-          content.insertBefore(styleEl.cloneNode(true), content.firstChild);
-        }
-        
-        // Update data-theme attribute
-        content.setAttribute('data-theme', currentTheme);
-      });
-      
-      console.log(`[THEME] Updated ${document.querySelectorAll('.html-content').length} HTML blocks to ${currentTheme} mode`);
-    }
 
   async fetchAgents() {
     try {
-      const res = await this.apiFetch(BASE_URL + '/api/agents');
+      const res = await fetch(BASE_URL + '/api/agents');
       const data = await res.json();
-      if (data.agents) {
-        data.agents.forEach(a => this.agents.set(a.id, a));
+      for (const agent of data.agents || []) {
+        this.agents.set(agent.id, agent);
       }
     } catch (e) {
-      console.error('fetchAgents:', e);
+      console.error('[APP] Error fetching agents:', e);
     }
   }
 
   async fetchConversations() {
     try {
-      console.log('[DEBUG] fetchConversations: Starting fetch from', BASE_URL + '/api/conversations');
-      const res = await this.apiFetch(BASE_URL + '/api/conversations');
-      console.log('[DEBUG] fetchConversations: Response status:', res.status);
-      
-      if (!res.ok) {
-        console.error('[DEBUG] fetchConversations: Response not OK, status:', res.status);
-        return;
-      }
-      
+      const res = await fetch(BASE_URL + '/api/conversations');
       const data = await res.json();
-      console.log('[DEBUG] fetchConversations response count:', data.conversations?.length);
-      
-      if (data.conversations) {
-        console.log('[DEBUG] fetchConversations: About to clear and load conversations');
-        this.conversations.clear();
-        console.log('[DEBUG] fetchConversations: Cleared conversations map, size now:', this.conversations.size);
-        
-        data.conversations.forEach(c => {
-          this.conversations.set(c.id, c);
-        });
-        
-        console.log('[DEBUG] Loaded conversations, total:', this.conversations.size);
-        console.log('[DEBUG] First few conversation IDs:', Array.from(this.conversations.keys()).slice(0, 5));
-        
-        if (this.conversations.size === 0) {
-          console.error('[DEBUG] ERROR: conversations.size is 0 after loading!');
-        }
-      } else {
-        console.warn('[DEBUG] fetchConversations: data.conversations is undefined or null');
-        console.warn('[DEBUG] fetchConversations: Full response:', data);
+      this.conversations.clear();
+      for (const conv of data.conversations || []) {
+        this.conversations.set(conv.id, conv);
       }
+      console.log('[APP] Loaded', this.conversations.size, 'conversations');
     } catch (e) {
-      console.error('[DEBUG] fetchConversations error:', e);
-      console.error('[DEBUG] Error details:', e.message, e.stack);
+      console.error('[APP] Error fetching conversations:', e);
     }
   }
 
   async fetchMessages(conversationId) {
     try {
-      const res = await this.apiFetch(`${BASE_URL}/api/conversations/${conversationId}/messages`);
+      const res = await fetch(BASE_URL + `/api/conversations/${conversationId}/messages`);
       const data = await res.json();
       return data.messages || [];
     } catch (e) {
-      console.error('fetchMessages:', e);
+      console.error('[APP] Error fetching messages:', e);
       return [];
     }
   }
 
-  renderAll() {
-    console.log('[DEBUG] renderAll: Called with', this.conversations.size, 'conversations');
-    this.renderAgentCards();
-    this.renderChatHistory();
-    if (this.currentConversation) {
-      console.log('[DEBUG] renderAll: Displaying current conversation', this.currentConversation);
-      this.displayConversation(this.currentConversation);
-    }
-  }
+  connectWebSocket() {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    this.ws = new ReconnectingWebSocket(`${proto}//${location.host}${BASE_URL}/sync`);
 
-  renderAgentCards() {
-    const container = document.getElementById('agentCards');
-    if (!container) return;
-    container.innerHTML = '';
-    if (this.agents.size === 0) {
-      container.innerHTML = '<p style="color: var(--text-tertiary); font-size: 0.875rem;">No agents found. Install claude or opencode.</p>';
-      return;
-    }
-    let first = true;
-    this.agents.forEach((agent, id) => {
-      if (!first) {
-        const sep = document.createElement('span');
-        sep.className = 'agent-separator';
-        sep.textContent = '|';
-        container.appendChild(sep);
+    this.ws.on('open', () => {
+      console.log('[WS] Connected');
+      document.getElementById('connectionStatus').textContent = 'Connected';
+    });
+
+    this.ws.on('message', (e) => {
+      try {
+        const event = JSON.parse(e.data);
+        this.handleEvent(event);
+      } catch (err) {
+        console.error('[WS] Parse error:', err);
       }
-      first = false;
-      const card = document.createElement('button');
-      card.className = `agent-card ${this.selectedAgent === id ? 'active' : ''}`;
-      card.onclick = () => this.selectAgent(id);
-      card.innerHTML = `
-        <span class="agent-card-icon">${escapeHtml(agent.icon || 'A')}</span>
-        <span class="agent-card-name">${escapeHtml(agent.name || id)}</span>
-      `;
-      container.appendChild(card);
+    });
+
+    this.ws.on('close', () => {
+      console.log('[WS] Disconnected, reconnecting...');
+      document.getElementById('connectionStatus').textContent = 'Reconnecting...';
+    });
+
+    this.ws.on('error', (err) => {
+      console.error('[WS] Error:', err);
+      document.getElementById('connectionStatus').textContent = 'Error';
     });
   }
 
-  selectAgent(id) {
-    this.selectedAgent = id;
-    localStorage.setItem('gmgui-selectedAgent', id);
-    this.renderAgentCards();
-    const welcome = document.querySelector('.welcome-section');
-    if (welcome) welcome.style.display = 'none';
-    const input = document.getElementById('messageInput');
-    if (input) input.focus();
-  }
-
-  renderChatHistory() {
-    const list = document.getElementById('chatList');
-    if (!list) {
-      console.error('[DEBUG] chatList element not found!');
-      return;
-    }
-    list.innerHTML = '';
-    console.log('[DEBUG] renderChatHistory - conversations.size:', this.conversations.size);
-    
-    // Debug: Update page title with conversation count
-    document.title = `GMGUI (${this.conversations.size} chats)`;
-    
-    if (this.conversations.size === 0) {
-      console.warn('[DEBUG] No conversations to display - showing empty state');
-      console.warn('[DEBUG] conversations map contents:', this.conversations);
-      
-      // VISUAL DEBUG: Show debug info on page
-      const debugInfo = `
-        <div style="background: #fee; padding: 1rem; border: 1px solid #f99; border-radius: 0.5rem; margin-bottom: 1rem; font-family: monospace; font-size: 0.75rem;">
-          <strong style="color: #c00;">🔍 DEBUG INFO</strong><br>
-          Conversations: ${this.conversations.size}<br>
-          BASE_URL: ${BASE_URL}<br>
-          Width: ${window.innerWidth}px<br>
-          Sidebar: ${document.getElementById('sidebar')?.offsetHeight > 0 ? 'visible' : 'hidden'}<br>
-          <br>
-          <strong>To debug (F12 console):</strong><br>
-          • app.conversations.size<br>
-          • Array.from(app.conversations.keys()).slice(0,5)
-        </div>
-      `;
-      
-      list.innerHTML = debugInfo + '<p style="color: var(--text-tertiary); font-size: 0.875rem; padding: 0.5rem;">No chats yet</p>';
-      return;
-    }
-    const sorted = Array.from(this.conversations.values()).sort(
-      (a, b) => (b.updated_at || 0) - (a.updated_at || 0)
-    );
-    console.log('[DEBUG] renderChatHistory - sorted conversations count:', sorted.length);
-    console.log('[DEBUG] renderChatHistory - rendering', sorted.length, 'conversations');
-    sorted.forEach(conv => {
-      const item = document.createElement('button');
-      item.className = `chat-item ${this.currentConversation === conv.id ? 'active' : ''}`;
-      const titleSpan = document.createElement('span');
-      titleSpan.className = 'chat-item-title';
-      titleSpan.textContent = conv.title || 'Untitled';
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'chat-item-delete';
-      deleteBtn.textContent = 'x';
-      deleteBtn.title = 'Delete chat';
-      deleteBtn.onclick = (e) => {
-        e.stopPropagation();
-        this.deleteConversation(conv.id);
-      };
-      item.appendChild(titleSpan);
-      item.appendChild(deleteBtn);
-      item.onclick = () => this.displayConversation(conv.id);
-      list.appendChild(item);
-    });
-  }
-
-  async deleteConversation(id) {
-    try {
-      const res = await this.apiFetch(`${BASE_URL}/api/conversations/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        console.error('deleteConversation failed:', res.status);
-        return;
-      }
-      this.conversations.delete(id);
-      if (this.currentConversation === id) {
-        this.currentConversation = null;
-        const first = Array.from(this.conversations.values())[0];
-        if (first) {
-          this.displayConversation(first.id);
-        } else {
-          this.showWelcome();
-        }
-      }
-      this.renderChatHistory();
-    } catch (e) {
-      console.error('deleteConversation:', e);
+  handleEvent(event) {
+    if (event.type === 'message_created') {
+      this.addMessageToDisplay(event.message);
+      this.handleMessageReceived(event.message);
+    } else if (event.type === 'conversations_updated') {
+      this.fetchConversations().then(() => this.renderChatHistory());
     }
   }
 
-  showWelcome() {
-    const div = document.getElementById('chatMessages');
-    if (!div) return;
-    div.innerHTML = `
-      <div class="welcome-section">
-        <h2>Hi, what's your plan for today?</h2>
-        <div class="agent-selection">
-          <div id="agentCards" class="agent-cards"></div>
-        </div>
-      </div>
-    `;
-    this.renderAgentCards();
+  addMessageToDisplay(message) {
+    if (this.currentConversation && message.conversationId === this.currentConversation) {
+      const chatDiv = document.getElementById('chatMessages');
+      if (!chatDiv) return;
+
+      const msgEl = document.createElement('div');
+      msgEl.className = `message ${message.role}`;
+      msgEl.innerHTML = `<div class="message-content">${this.escapeHtml(
+        typeof message.content === 'string' ? message.content : JSON.stringify(message.content)
+      )}</div>`;
+      chatDiv.appendChild(msgEl);
+      chatDiv.scrollTop = chatDiv.scrollHeight;
+    }
   }
 
-  groupConsecutiveMessages(messages) {
-    if (!messages.length) return [];
-    const grouped = [];
-    let current = { ...messages[0], content: typeof messages[0].content === 'string' ? messages[0].content : messages[0].content };
-    for (let i = 1; i < messages.length; i++) {
-      const msg = messages[i];
-      if (msg.role === current.role && msg.role === 'assistant') {
-        const curText = typeof current.content === 'string' ? current.content : (current.content?.text || '');
-        const msgText = typeof msg.content === 'string' ? msg.content : (msg.content?.text || '');
-        current = { ...current, content: curText + '\n\n' + msgText };
-      } else {
-        grouped.push(current);
-        current = { ...msg };
-      }
-    }
-    grouped.push(current);
-    return grouped;
-  }
-
-  async displayConversation(id) {
-    // CONSISTENCY CHECK: Verify conversation exists before displaying
-    this.currentConversation = id;
-    const conv = this.conversations.get(id);
-    if (!conv) {
-      console.warn('[SYNC] Conversation not found locally, fetching fresh data...');
-      await this.fetchConversations();
-      const freshConv = this.conversations.get(id);
-      if (!freshConv) {
-        console.error('[SYNC] Conversation still not found after refresh!');
-        return;
-      }
-    }
-    if (conv.agentId && !this.selectedAgent) {
-      this.selectedAgent = conv.agentId;
-    }
-
-    const messages = await this.fetchMessages(id);
-
-    const div = document.getElementById('chatMessages');
-    if (!div) return;
-    div.innerHTML = '';
-
-    if (messages.length === 0 && !this.selectedAgent) {
-      div.innerHTML = `
-        <div class="welcome-section">
-          <h2>Hi, what's your plan for today?</h2>
-          <div class="agent-selection">
-            <div id="agentCards" class="agent-cards"></div>
-          </div>
-        </div>
-      `;
-      this.renderAgentCards();
-    } else {
-      const grouped = this.groupConsecutiveMessages(messages);
-      grouped.forEach(msg => this.addMessageToDisplay(msg));
-
-      if (this.settings.autoScroll) {
-        div.scrollTop = div.scrollHeight;
-      }
-    }
-    this.renderChatHistory();
-    this.renderAgentCards();
-  }
-
-
-  sanitizeHtml(raw) {
-    const tmp = document.createElement('div');
-    tmp.innerHTML = raw;
-    tmp.querySelectorAll('script,iframe,object,embed,form,meta,link').forEach(el => el.remove());
-    tmp.querySelectorAll('*').forEach(el => {
-      for (const attr of Array.from(el.attributes)) {
-        if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
-        if (attr.name === 'href' && attr.value.trim().toLowerCase().startsWith('javascript:')) el.removeAttribute(attr.name);
-      }
-    });
-    return tmp.innerHTML;
-  }
-
-  looksLikeHtml(text) {
-    const trimmed = text.trim();
-    // Check for HTML tags at the start
-    if (/^<[a-z][\s\S]*>/i.test(trimmed)) return true;
-    // Check for closing tags of common HTML elements
-    if (/<\/(div|span|p|table|ul|ol|h[1-6]|section|article|header|footer|nav|main|aside|details|summary|figure|figcaption|blockquote|pre|code|a|strong|em|img|br|hr|button|input|form|label)>/i.test(trimmed)) return true;
-    // Check for Tailwind/RippleUI classes (strong indicator of HTML)
-    if (/class\s*=\s*["'][^"']*(?:card|alert|badge|btn|table|space-y|p-\d+|text-|bg-|rounded|shadow)/.test(trimmed)) return true;
-    // Count HTML tags
-    const tagCount = (trimmed.match(/<[a-z][^>]*>/gi) || []).length;
-    if (tagCount >= 2) return true; // Lower threshold for HTML detection
-    return false;
-  }
-
-  parseAndRenderContent(content) {
-    const elements = [];
-    if (typeof content !== 'string') return null;
-
-    const htmlCodeBlockRegex = /```html\n([\s\S]*?)\n```/g;
-    let lastIndex = 0;
-    let match;
-
-    while ((match = htmlCodeBlockRegex.exec(content)) !== null) {
-      if (match.index > lastIndex) {
-        const textBefore = content.substring(lastIndex, match.index);
-        if (textBefore.trim()) {
-          elements.push(this.renderTextOrHtml(textBefore));
-        }
-      }
-      elements.push(this.createSandboxedHtml(match[1]));
-      lastIndex = htmlCodeBlockRegex.lastIndex;
-    }
-
-    if (lastIndex < content.length) {
-      const remaining = content.substring(lastIndex);
-      if (remaining.trim()) {
-        elements.push(this.renderTextOrHtml(remaining));
-      }
-    }
-
-    return elements.length > 0 ? elements : null;
-  }
-
-   renderTextOrHtml(text) {
-     if (this.looksLikeHtml(text)) {
-       return this.createSandboxedHtml(text);
-     }
-     
-     // CRITICAL FIX: Don't bundle all text into one bubble
-     // Try splitting by paragraph breaks first (double newlines)
-     let parts = text.split('\n\n').filter(p => p.trim());
-     
-     // If no paragraphs found, try splitting by single newlines
-     // (handles imported messages that may not have proper paragraph breaks)
-     if (parts.length === 1) {
-       const singleNewlines = text.split('\n').filter(p => p.trim());
-       // Only use single newlines if we get reasonable chunks (3+ non-empty lines)
-       if (singleNewlines.length >= 3) {
-         parts = singleNewlines;
-       }
-     }
-     
-     // If still just one part and it's very long (>500 chars), split by sentences
-     if (parts.length === 1 && text.length > 500) {
-       const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-       if (sentences.length > 1) {
-         parts = sentences.map(s => s.trim()).filter(s => s);
-       }
-     }
-     
-     if (parts.length === 1) {
-       // Single item - just one bubble
-       const bubble = document.createElement('div');
-       bubble.className = 'message-bubble';
-       bubble.textContent = text;
-       return bubble;
-     }
-     
-     // Multiple parts - create separate bubbles for each
-     const container = document.createElement('div');
-     container.className = 'message-bubbles-container';
-     
-     for (const part of parts) {
-       const bubble = document.createElement('div');
-       bubble.className = 'message-bubble';
-       bubble.textContent = part;
-       container.appendChild(bubble);
-     }
-     
-     return container;
-   }
-
-   createSandboxedHtml(rawHtml) {
-     const wrap = document.createElement('div');
-     wrap.className = 'html-block rendered-html';
-     const content = document.createElement('div');
-     content.className = 'html-content';
-     
-     // Get current theme to apply to HTML content
-     const currentTheme = document.documentElement.getAttribute('data-theme') || 
-                         (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-     
-     // CRITICAL: Inject theme-aware CSS to ensure text colors work in dark/light mode
-     const themeCSS = currentTheme === 'dark' 
-       ? `<style>
-            .html-content { 
-              color: #f8fafc; 
-              background: transparent;
-            }
-            .html-content p { color: #cbd5e1; }
-            .html-content h1, .html-content h2, .html-content h3, 
-            .html-content h4, .html-content h5, .html-content h6 { 
-              color: #f8fafc; 
-            }
-            .html-content a { color: #6366f1; }
-            .html-content code { color: #c7d2fe; background: rgba(0,0,0,0.3); }
-            .html-content pre { background: rgba(0,0,0,0.5); color: #e0e7ff; }
-            .html-content table { border-color: #334155; }
-            .html-content th { background: #1a202c; color: #f8fafc; }
-            .html-content td { border-color: #334155; }
-            .html-content blockquote { border-color: #334155; color: #cbd5e1; }
-            .html-content ul, .html-content ol { color: #cbd5e1; }
-            .html-content li { color: #cbd5e1; }
-         </style>`
-       : `<style>
-            .html-content { 
-              color: #1d2129; 
-              background: transparent;
-            }
-            .html-content p { color: #475569; }
-            .html-content h1, .html-content h2, .html-content h3, 
-            .html-content h4, .html-content h5, .html-content h6 { 
-              color: #1d2129; 
-            }
-            .html-content a { color: #4f46e5; }
-            .html-content code { color: #6366f1; background: rgba(99,102,241,0.1); }
-            .html-content pre { background: #f3f4f6; color: #1d2129; }
-            .html-content table { border-color: #e5e7eb; }
-            .html-content th { background: #f9fafb; color: #1d2129; }
-            .html-content td { border-color: #e5e7eb; }
-            .html-content blockquote { border-color: #e5e7eb; color: #475569; }
-            .html-content ul, .html-content ol { color: #475569; }
-            .html-content li { color: #475569; }
-         </style>`;
-     
-     // CRITICAL: Ensure RippleUI styles are available for agent HTML
-     // Agent responses use RippleUI/Tailwind classes, so wrap in a context that has those styles
-     let enhancedHtml = themeCSS + rawHtml;
-     
-     // If HTML doesn't already have the RippleUI wrapper classes, add them
-     if (!rawHtml.includes('space-y-4') && !rawHtml.includes('card') && !rawHtml.includes('alert')) {
-       // Wrap in RippleUI container if agent didn't already wrap it
-       enhancedHtml = themeCSS + `<div class="space-y-4 p-6 max-w-4xl">${rawHtml}</div>`;
-       console.log('[HTML] Wrapped agent HTML in RippleUI container with theme CSS');
-     } else {
-       console.log('[HTML] Agent HTML already has RippleUI classes, applying theme CSS');
-     }
-     
-     content.innerHTML = this.sanitizeHtml(enhancedHtml);
-     wrap.appendChild(content);
-     
-     // Apply theme attribute to content so nested elements inherit
-     content.setAttribute('data-theme', currentTheme);
-     
-     return wrap;
-   }
-
-  addMessageToDisplay(msg) {
-    const div = document.getElementById('chatMessages');
-    if (!div) return;
-    const el = document.createElement('div');
-    el.className = `message ${msg.role}`;
-    el.dataset.messageId = msg.id;
-
-    // CRITICAL: Always check for HTML content first - NEVER render HTML as plain text
-    if (typeof msg.content === 'string') {
-      // MANDATORY HTML RENDERING: Check if this is HTML before falling back to text
-      if (this.looksLikeHtml(msg.content)) {
-        console.log('[HTML] Agent response contains HTML - rendering as HTML');
-        el.appendChild(this.createSandboxedHtml(msg.content));
-      } else {
-        // Only use text rendering if it's not HTML
-        const parsed = this.parseAndRenderContent(msg.content);
-        if (parsed) {
-          parsed.forEach(elem => el.appendChild(elem));
-        } else {
-          const bubble = document.createElement('div');
-          bubble.className = 'message-bubble';
-          bubble.textContent = msg.content;
-          el.appendChild(bubble);
-        }
-      }
-    } else if (typeof msg.content === 'object' && msg.content !== null) {
-      // CRITICAL: Check for HTML content in object
-      let hasHtmlContent = false;
-      
-      // Display blocks if available (HTML blocks MUST be rendered as HTML)
-      if (msg.content.blocks && Array.isArray(msg.content.blocks)) {
-        msg.content.blocks.forEach(block => {
-          if (block.type === 'html') {
-            console.log('[HTML] Rendering HTML block from agent');
-            const htmlEl = this.createHtmlBlock(block);
-            el.appendChild(htmlEl);
-            hasHtmlContent = true;
-          } else if (block.type === 'image') {
-            const imgEl = this.createImageBlock(block);
-            el.appendChild(imgEl);
-            hasHtmlContent = true;
-          }
-        });
-      }
-      
-       // CRITICAL: Agent responses are now HTML from system prompt
-       // Check if we have text first (which should be HTML)
-       if (msg.content.text && !hasHtmlContent) {
-         // ALWAYS check if text itself contains HTML first
-         if (this.looksLikeHtml(msg.content.text)) {
-           console.log('[HTML] ✅ Agent response is HTML - rendering directly (NOT segmenting)');
-           el.appendChild(this.createSandboxedHtml(msg.content.text));
-         } else {
-           // Only if NOT HTML, then try segmenting
-           console.log('[HTML] Text is not HTML, attempting segmentation');
-           if (msg.content.segments && Array.isArray(msg.content.segments)) {
-             console.log('[HTML] Rendering', msg.content.segments.length, 'segments');
-             msg.content.segments.forEach(segment => {
-               el.appendChild(this.renderSegment(segment));
-             });
-           } else {
-             const parsed = this.parseAndRenderContent(msg.content.text);
-             if (parsed) {
-               parsed.forEach(elem => el.appendChild(elem));
-             } else {
-               const bubble = document.createElement('div');
-               bubble.className = 'message-bubble';
-               bubble.textContent = msg.content.text;
-               el.appendChild(bubble);
-             }
-           }
-         }
-       } else if (msg.content.segments && Array.isArray(msg.content.segments) && !hasHtmlContent) {
-         // Fallback: only use segments if we have them and no text
-         console.log('[HTML] No text content, rendering segments');
-         msg.content.segments.forEach(segment => {
-           el.appendChild(this.renderSegment(segment));
-         });
-       }
-
-      // Display metadata if available
-      if (msg.content.metadata) {
-        const metadataEl = this.renderMetadata(msg.content.metadata);
-        if (metadataEl) el.appendChild(metadataEl);
-      }
-    } else {
-      // Fallback for non-string, non-object content
-      const bubble = document.createElement('div');
-      bubble.className = 'message-bubble';
-      // Handle all object types: convert to string safely
-      if (typeof msg.content === 'object' && msg.content !== null) {
-        try {
-          bubble.textContent = JSON.stringify(msg.content, null, 2);
-        } catch (e) {
-          // If stringify fails (circular ref, etc), use toString
-          bubble.textContent = String(msg.content);
-        }
-      } else {
-        bubble.textContent = String(msg.content);
-      }
-      el.appendChild(bubble);
-    }
-
-    div.appendChild(el);
-  }
-
-  renderSegment(segment) {
-    const el = document.createElement('div');
-    el.className = `segment segment-${segment.type}`;
-
-    if (segment.type === 'code') {
-      const pre = document.createElement('pre');
-      pre.className = `code-block language-${segment.language || 'text'}`;
-      const code = document.createElement('code');
-      code.textContent = segment.content;
-      pre.appendChild(code);
-      el.appendChild(pre);
-    } else if (segment.type === 'heading') {
-      const tag = `h${Math.min(segment.level, 6)}`;
-      const heading = document.createElement(tag);
-      heading.className = 'response-heading';
-      heading.textContent = segment.content;
-      el.appendChild(heading);
-    } else if (segment.type === 'blockquote') {
-      const quote = document.createElement('blockquote');
-      quote.className = 'response-quote';
-      quote.textContent = segment.content;
-      el.appendChild(quote);
-    } else if (segment.type === 'list_item') {
-      const li = document.createElement('li');
-      li.className = 'response-list-item';
-      li.textContent = segment.content;
-      el.appendChild(li);
-    } else if (segment.type === 'thinking') {
-      // Collapsible thinking block
-      const details = document.createElement('details');
-      details.className = 'segment-thinking';
-      const summary = document.createElement('summary');
-      summary.textContent = '💭 Thinking';
-      details.appendChild(summary);
-      const content = document.createElement('div');
-      content.className = 'thinking-content';
-      content.textContent = segment.text;
-      details.appendChild(content);
-      el.appendChild(details);
-    } else if (segment.type === 'tool_use') {
-      // Tool call highlight
-      const div = document.createElement('div');
-      div.className = 'segment-tool-use';
-      div.innerHTML = `<div class="tool-icon">⚙️ Tool Call</div><pre class="tool-content"><code>${this.escapeHtml(segment.text)}</code></pre>`;
-      el.appendChild(div);
-    } else if (segment.type === 'tool_result') {
-      // Tool result
-      const div = document.createElement('div');
-      div.className = 'segment-tool-result';
-      div.innerHTML = `<div class="result-icon">📦 Result</div><pre class="result-content"><code>${this.escapeHtml(segment.text)}</code></pre>`;
-      el.appendChild(div);
-    } else if (segment.type === 'action') {
-      // Action statement - bold and prominent
-      const p = document.createElement('p');
-      p.className = 'response-action';
-      p.innerHTML = `<strong>→ ${this.escapeHtml(segment.text)}</strong>`;
-      el.appendChild(p);
-    } else if (segment.type === 'analysis') {
-      // Analysis/investigation
-      const p = document.createElement('p');
-      p.className = 'response-analysis';
-      p.innerHTML = `<em>🔍 ${this.escapeHtml(segment.text)}</em>`;
-      el.appendChild(p);
-    } else if (segment.type === 'result') {
-      // Result presentation
-      const div = document.createElement('div');
-      div.className = 'response-result';
-      div.innerHTML = segment.text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>');
-      el.appendChild(div);
-    } else if (segment.type === 'text') {
-      const p = document.createElement('p');
-      p.className = 'response-text';
-      p.innerHTML = segment.content
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>');
-      el.appendChild(p);
-    }
-
-    return el;
-  }
-
-  escapeHtml(text) {
-    if (typeof text !== 'string') return '';
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
-
-  renderMetadata(metadata) {
-    if (!metadata || Object.keys(metadata).every(k => !metadata[k] || metadata[k].length === 0)) {
-      return null;
-    }
-
-    const container = document.createElement('div');
-    container.className = 'response-metadata';
-
-    if (metadata.tools && metadata.tools.length > 0) {
-      const section = document.createElement('div');
-      section.className = 'metadata-section tools';
-      const title = document.createElement('strong');
-      title.textContent = 'Tools Used:';
-      section.appendChild(title);
-      const ul = document.createElement('ul');
-      metadata.tools.forEach(tool => {
-        const li = document.createElement('li');
-        const code = document.createElement('code');
-        code.textContent = tool.name;
-        li.appendChild(code);
-        if (tool.description) {
-          li.appendChild(document.createTextNode(`: ${tool.description}`));
-        }
-        ul.appendChild(li);
-      });
-      section.appendChild(ul);
-      container.appendChild(section);
-    }
-
-    if (metadata.thinking && metadata.thinking.length > 0) {
-      const section = document.createElement('details');
-      section.className = 'metadata-section thinking';
-      const summary = document.createElement('summary');
-      summary.textContent = 'Reasoning';
-      section.appendChild(summary);
-      metadata.thinking.forEach(thought => {
-        const p = document.createElement('p');
-        p.textContent = thought;
-        section.appendChild(p);
-      });
-      container.appendChild(section);
-    }
-
-    if (metadata.subagents && metadata.subagents.length > 0) {
-      const section = document.createElement('div');
-      section.className = 'metadata-section subagents';
-      const title = document.createElement('strong');
-      title.textContent = 'Subagents:';
-      section.appendChild(title);
-      const ul = document.createElement('ul');
-      metadata.subagents.forEach(agent => {
-        const li = document.createElement('li');
-        li.textContent = agent;
-        ul.appendChild(li);
-      });
-      section.appendChild(ul);
-      container.appendChild(section);
-    }
-
-    if (metadata.tasks && metadata.tasks.length > 0) {
-      const section = document.createElement('div');
-      section.className = 'metadata-section tasks';
-      const title = document.createElement('strong');
-      title.textContent = 'Tasks:';
-      section.appendChild(title);
-      const ul = document.createElement('ul');
-      metadata.tasks.forEach(task => {
-        const li = document.createElement('li');
-        li.textContent = task;
-        ul.appendChild(li);
-      });
-      section.appendChild(ul);
-      container.appendChild(section);
-    }
-
-    return container;
-  }
-
-  async startNewChat(folderPath) {
-    if (!this.selectedAgent) {
-      const firstAgent = Array.from(this.agents.keys())[0];
-      if (firstAgent) {
-        this.selectedAgent = firstAgent;
-      }
-    }
-    const title = folderPath
-      ? folderPath.split('/').pop() || folderPath
-      : `Chat ${this.conversations.size + 1}`;
-    try {
-      const res = await this.apiFetch(BASE_URL + '/api/conversations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agentId: this.selectedAgent || 'claude-code', title }),
-      });
-      const data = await res.json();
-      if (data.conversation) {
-        const conv = data.conversation;
-        if (folderPath) conv.folderPath = folderPath;
-        this.conversations.set(conv.id, conv);
-        this.currentConversation = conv.id;
-        this.renderChatHistory();
-        this.displayConversation(conv.id);
-      }
-    } catch (e) {
-      console.error('startNewChat:', e);
+  handleMessageReceived(message) {
+    if (message.role === 'user') {
+      document.getElementById('messageInput').value = '';
+      document.getElementById('messageInput').focus();
     }
   }
 
   async sendMessage() {
     const input = document.getElementById('messageInput');
-    const message = input.value.trim();
-    if (!message) return;
-    if (!this.selectedAgent) {
-      this.addSystemMessage('Please select an agent first');
-      return;
-    }
-    if (!this.currentConversation) {
-      await this.startNewChat();
-    }
-    if (!this.currentConversation) return;
-    const conv = this.conversations.get(this.currentConversation);
+    const content = input.value.trim();
 
-    const idempotencyKey = `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    const tempId = `pending-${idempotencyKey}`;
-    this.addMessageToDisplay({ role: 'user', content: message, id: tempId });
-    input.value = '';
-    this.updateSendButtonState();
+    if (!content || !this.currentConversation || !this.selectedAgent) return;
 
     try {
-      const folderPath = conv?.folderPath || localStorage.getItem('gmgui-home') || '/config';
-      const res = await this.apiFetch(`${BASE_URL}/api/conversations/${this.currentConversation}/messages`, {
+      const res = await fetch(BASE_URL + `/api/conversations/${this.currentConversation}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: message,
-          agentId: this.selectedAgent,
-          folderContext: { path: folderPath, isFolder: true },
-          idempotencyKey,
-        }),
+          content,
+          agentId: this.selectedAgent
+        })
       });
-      if (!res.ok) {
-        const err = await res.json();
-        this.addMessageToDisplay({ role: 'system', content: `Error: ${err.error || 'Request failed'}` });
-        return;
+
+      if (res.ok) {
+        input.value = '';
       }
-      const data = await res.json();
-      const optimisticEl = document.querySelector(`[data-message-id="${tempId}"]`);
-      if (optimisticEl) optimisticEl.dataset.messageId = data.message.id;
-      this.idempotencyKeys.set(idempotencyKey, data.session.id);
-      this.startPollingMessages(this.currentConversation);
     } catch (e) {
-      this.addMessageToDisplay({ role: 'system', content: `Error: ${e.message}` });
-    }
-    if (this.settings.autoScroll) {
-      const div = document.getElementById('chatMessages');
-      if (div) div.scrollTop = div.scrollHeight;
+      console.error('[APP] Error sending message:', e);
     }
   }
 
-  addSystemMessage(text) {
-    this.addMessageToDisplay({ role: 'system', content: text });
-  }
+  async createConversation() {
+    const title = document.getElementById('newConvTitle')?.value || 'New Conversation';
 
-  stopPollingMessages() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = null;
-      console.log('[POLLING] Polling stopped - using WebSocket push instead');
-    }
-  }
-
-  startPollingMessages(conversationId) {
-    // DEPRECATED: Polling mechanism replaced with WebSocket push
-    // This method is kept for backwards compatibility but does nothing
-    // Messages now arrive via WebSocket in real-time via handleSyncEvent
-    console.log('[POLLING] Polling requested but disabled - WebSocket handles real-time updates');
-    this.stopPollingMessages();
-  }
-
-  createThoughtBlock() {
-    const wrap = document.createElement('div');
-    wrap.className = 'thought-block';
-    const header = document.createElement('div');
-    header.className = 'thought-header';
-    header.textContent = 'Thinking...';
-    header.onclick = () => wrap.classList.toggle('collapsed');
-    const content = document.createElement('div');
-    content.className = 'thought-content';
-    wrap.appendChild(header);
-    wrap.appendChild(content);
-    return wrap;
-  }
-
-  createToolBlock(event) {
-    const wrap = document.createElement('div');
-    wrap.className = `tool-block status-${event.status || 'running'}`;
-    const header = document.createElement('div');
-    header.className = 'tool-header';
-    const kindIcons = { execute: '>', read: '?', edit: '/', search: '~', fetch: '@', write: '/', think: '!', other: '#' };
-    const icon = kindIcons[event.kind] || '#';
-    header.innerHTML = `<span class="tool-icon">${escapeHtml(icon)}</span><span class="tool-title">${escapeHtml(event.title || event.kind || 'tool')}</span><span class="tool-status">${escapeHtml(event.status || 'running')}</span>`;
-    header.onclick = () => wrap.classList.toggle('collapsed');
-    wrap.appendChild(header);
-    if (event.content && event.content.length) {
-      const body = document.createElement('div');
-      body.className = 'tool-body';
-      event.content.forEach(c => {
-        if (c.text) body.textContent += c.text;
-      });
-      wrap.appendChild(body);
-    }
-    return wrap;
-  }
-
-  updateToolBlock(block, event) {
-    block.className = `tool-block status-${event.status || 'completed'}`;
-    const statusEl = block.querySelector('.tool-status');
-    if (statusEl) statusEl.textContent = event.status || 'completed';
-    if (event.content && event.content.length) {
-      let body = block.querySelector('.tool-body');
-      if (!body) { body = document.createElement('div'); body.className = 'tool-body'; block.appendChild(body); }
-      event.content.forEach(c => {
-        if (c.text) body.textContent += c.text;
-      });
-    }
-  }
-
-  createPlanBlock(entries) {
-    const wrap = document.createElement('div');
-    wrap.className = 'plan-block';
-    const header = document.createElement('div');
-    header.className = 'plan-header';
-    header.textContent = 'Plan';
-    wrap.appendChild(header);
-    if (entries && entries.length) {
-      entries.forEach(entry => {
-        const item = document.createElement('div');
-        item.className = 'plan-item';
-        item.textContent = entry.title || entry.description || JSON.stringify(entry);
-        wrap.appendChild(item);
-      });
-    }
-    return wrap;
-  }
-
-  createHtmlBlock(event) {
-    const wrap = document.createElement('div');
-    wrap.className = 'html-block rendered-html';
-    if (event.id) wrap.id = `html-${event.id}`;
-    if (event.title) {
-      const header = document.createElement('div');
-      header.className = 'html-header';
-      header.textContent = event.title;
-      wrap.appendChild(header);
-    }
-    const content = document.createElement('div');
-    content.className = 'html-content';
-
-    // Get current theme to apply to HTML content
-    const currentTheme = document.documentElement.getAttribute('data-theme') ||
-                        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-
-    // Apply theme-aware CSS for consistent colors in dark/light mode
-    const themeCSS = currentTheme === 'dark'
-      ? `<style>
-           .html-content {
-             color: #f8fafc;
-             background: transparent;
-           }
-           .html-content p { color: #cbd5e1; }
-           .html-content h1, .html-content h2, .html-content h3,
-           .html-content h4, .html-content h5, .html-content h6 {
-             color: #f8fafc;
-           }
-           .html-content a { color: #6366f1; }
-           .html-content code { color: #c7d2fe; background: rgba(0,0,0,0.3); }
-           .html-content pre { background: rgba(0,0,0,0.5); color: #e0e7ff; }
-           .html-content table { border-color: #334155; }
-           .html-content th { background: #1a202c; color: #f8fafc; }
-           .html-content td { border-color: #334155; }
-           .html-content blockquote { border-color: #334155; color: #cbd5e1; }
-           .html-content ul, .html-content ol { color: #cbd5e1; }
-           .html-content li { color: #cbd5e1; }
-        </style>`
-      : `<style>
-           .html-content {
-             color: #1d2129;
-             background: transparent;
-           }
-           .html-content p { color: #475569; }
-           .html-content h1, .html-content h2, .html-content h3,
-           .html-content h4, .html-content h5, .html-content h6 {
-             color: #1d2129;
-           }
-           .html-content a { color: #4f46e5; }
-           .html-content code { color: #6366f1; background: rgba(99,102,241,0.1); }
-           .html-content pre { background: #f3f4f6; color: #1d2129; }
-           .html-content table { border-color: #e5e7eb; }
-           .html-content th { background: #f9fafb; color: #1d2129; }
-           .html-content td { border-color: #e5e7eb; }
-           .html-content blockquote { border-color: #e5e7eb; color: #475569; }
-           .html-content ul, .html-content ol { color: #475569; }
-           .html-content li { color: #475569; }
-        </style>`;
-
-    const enhancedHtml = themeCSS + this.sanitizeHtml(event.html);
-    content.innerHTML = enhancedHtml;
-    content.setAttribute('data-theme', currentTheme);
-    wrap.appendChild(content);
-    return wrap;
-  }
-
-  createImageBlock(event) {
-    const wrap = document.createElement('div');
-    wrap.className = 'image-block';
-    if (event.title) {
-      const header = document.createElement('div');
-      header.className = 'image-header';
-      header.textContent = event.title;
-      wrap.appendChild(header);
-    }
-    const img = document.createElement('img');
-    img.src = event.url;
-    img.alt = event.alt || 'Image from agent';
-    img.className = 'image-content';
-    img.style.maxWidth = '100%';
-    img.style.height = 'auto';
-    img.style.borderRadius = '0.25rem';
-    wrap.appendChild(img);
-    return wrap;
-  }
-
-  updateSendButtonState() {
-    const input = document.getElementById('messageInput');
-    const sendBtn = document.getElementById('sendBtn');
-    if (sendBtn) sendBtn.disabled = !input || !input.value.trim();
-  }
-
-  openFolderBrowser() {
-    const dlgModal = document.getElementById('folderBrowserModal');
-    if (!dlgModal) return;
-    const pathInput = document.getElementById('folderPath');
-    pathInput.value = '~/';
-    this.loadFolderContents(this.expandHome('~/'));
-    dlgModal.classList.add('active');
-  }
-
-  closeFolderBrowser() {
-    const dlgModal = document.getElementById('folderBrowserModal');
-    if (dlgModal) dlgModal.classList.remove('active');
-  }
-
-  async loadFolderContents(folderPath) {
-    const list = document.getElementById('folderBrowserList');
-    if (!list) return;
-    list.innerHTML = '<div style="padding: 1rem; color: var(--text-tertiary);">Loading...</div>';
     try {
-      const res = await this.apiFetch(BASE_URL + '/api/folders', {
+      const res = await fetch(BASE_URL + '/api/conversations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: folderPath }),
+        body: JSON.stringify({ title, agentId: this.selectedAgent })
       });
+
       if (res.ok) {
-        const data = await res.json();
-        this.renderFolderList(data.folders, folderPath);
-      } else {
-        list.innerHTML = '<div style="padding: 1rem; color: var(--color-danger);">Error loading folder</div>';
+        await this.fetchConversations();
+        this.renderChatHistory();
       }
     } catch (e) {
-      list.innerHTML = '<div style="padding: 1rem; color: var(--color-danger);">Error: ' + e.message + '</div>';
+      console.error('[APP] Error creating conversation:', e);
     }
   }
 
-  renderFolderList(folders, currentPath) {
-    const list = document.getElementById('folderBrowserList');
+  selectConversation(convId) {
+    this.currentConversation = convId;
+    document.querySelectorAll('.chat-item').forEach(el => el.classList.remove('active'));
+    const el = document.querySelector(`[data-conv-id="${convId}"]`);
+    if (el) el.classList.add('active');
+    this.renderChatMessages();
+  }
+
+  async renderChatMessages() {
+    const chatDiv = document.getElementById('chatMessages');
+    if (!chatDiv || !this.currentConversation) return;
+
+    chatDiv.innerHTML = '';
+    const messages = await this.fetchMessages(this.currentConversation);
+    for (const msg of messages) {
+      const msgEl = document.createElement('div');
+      msgEl.className = `message ${msg.role}`;
+      msgEl.innerHTML = `<div class="message-content">${this.escapeHtml(
+        typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
+      )}</div>`;
+      chatDiv.appendChild(msgEl);
+    }
+  }
+
+  renderChatHistory() {
+    const list = document.getElementById('chatList');
     if (!list) return;
+
     list.innerHTML = '';
-    if (currentPath !== '/' && currentPath !== '/root') {
-      const parentPath = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
-      const parentItem = document.createElement('div');
-      parentItem.className = 'folder-item';
-      parentItem.style.cssText = 'padding: 0.75rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid var(--border-color);';
-      parentItem.innerHTML = '<span>../</span>';
-      parentItem.onclick = () => {
-        document.getElementById('folderPath').value = parentPath;
-        this.loadFolderContents(parentPath);
-      };
-      list.appendChild(parentItem);
+    const convs = Array.from(this.conversations.values())
+      .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+
+    for (const conv of convs) {
+      const el = document.createElement('div');
+      el.className = 'chat-item';
+      el.setAttribute('data-conv-id', conv.id);
+      el.innerHTML = `<div class="chat-item-title">${this.escapeHtml(conv.title || 'Untitled')}</div>`;
+      el.onclick = () => this.selectConversation(conv.id);
+      list.appendChild(el);
     }
-    if (!folders || folders.length === 0) {
-      const empty = document.createElement('div');
-      empty.style.cssText = 'padding: 1rem; color: var(--text-tertiary); text-align: center;';
-      empty.textContent = 'No subfolders found';
-      list.appendChild(empty);
-      return;
+  }
+
+  renderAll() {
+    this.renderChatHistory();
+    if (this.conversations.size > 0 && !this.currentConversation) {
+      const firstConv = Array.from(this.conversations.values())[0];
+      this.selectConversation(firstConv.id);
     }
-    folders.forEach(folder => {
-      const item = document.createElement('div');
-      item.style.cssText = 'padding: 0.75rem 1rem; cursor: pointer; display: flex; align-items: center; gap: 0.75rem; border-bottom: 1px solid var(--border-color);';
-      item.textContent = folder.name;
-      item.onclick = () => {
-        const newPath = currentPath === '/' ? '/' + folder.name : currentPath + '/' + folder.name;
-        document.getElementById('folderPath').value = newPath;
-        this.loadFolderContents(newPath);
-      };
-      list.appendChild(item);
-    });
+  }
+
+  setupEventListeners() {
+    const sendBtn = document.getElementById('sendBtn');
+    if (sendBtn) {
+      sendBtn.onclick = () => this.sendMessage();
+    }
+
+    const input = document.getElementById('messageInput');
+    if (input) {
+      input.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          this.sendMessage();
+        }
+      });
+    }
+
+    const newConvBtn = document.getElementById('newConversationBtn');
+    if (newConvBtn) {
+      newConvBtn.onclick = () => this.createConversation();
+    }
+  }
+
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+const app = new GMGUIApp();
 
-function showNewChatModal() {
-  const dlgModal = document.getElementById('newChatModal');
-  if (dlgModal) dlgModal.classList.add('active');
-}
-
-function closeNewChatModal() {
-  const dlgModal = document.getElementById('newChatModal');
-  if (dlgModal) dlgModal.classList.remove('active');
-}
-
-function createChatInWorkspace() {
-  closeNewChatModal();
-  app.startNewChat();
-}
-
-function createChatInFolder() {
-  closeNewChatModal();
-  app.openFolderBrowser();
-}
-
-async function importClaudeCodeConversations() {
-  closeNewChatModal();
-  try {
-    const res = await this.apiFetch(BASE_URL + '/api/import/claude-code');
-    const data = await res.json();
-
-    if (!data.imported) {
-      alert('No Claude Code conversations found to import.');
-      return;
-    }
-
-    const imported = data.imported.filter(r => r.status === 'imported');
-    const skipped = data.imported.filter(r => r.status === 'skipped');
-    const errors = data.imported.filter(r => r.status === 'error');
-
-    let message = `Import complete!\n\n`;
-    if (imported.length > 0) {
-      message += `✓ Imported: ${imported.length} conversation(s)\n`;
-    }
-    if (skipped.length > 0) {
-      message += `⊘ Skipped: ${skipped.length} (already imported)\n`;
-    }
-    if (errors.length > 0) {
-      message += `✗ Errors: ${errors.length}\n`;
-    }
-
-    alert(message.trim());
-
-    if (imported.length > 0) {
-      await app.fetchConversations();
-      app.renderAll();
-    }
-  } catch (e) {
-    console.error('Import error:', e);
-    alert('Failed to import Claude Code conversations: ' + e.message);
-  }
-}
-
-function sendMessage() { app.sendMessage(); }
-
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  if (sidebar) sidebar.classList.toggle('open');
-}
-
-function switchTab(tabName) {
-  const panel = document.getElementById('settingsPanel');
-  const main = document.querySelector('.main-content');
-  if (tabName === 'settings' && panel && main) {
-    panel.style.display = 'flex';
-    main.style.display = 'none';
-  } else if (tabName === 'chat' && panel && main) {
-    panel.style.display = 'none';
-    main.style.display = 'flex';
-  }
-}
-
-function closeFolderBrowser() { app.closeFolderBrowser(); }
-
-function browseFolders() {
-  const pathInput = document.getElementById('folderPath');
-  const p = pathInput.value.trim() || '~/';
-  app.loadFolderContents(app.expandHome(p));
-}
-
-function confirmFolderSelection() {
-  const pathInput = document.getElementById('folderPath');
-  const p = pathInput.value.trim();
-  if (!p) return;
-  app.startNewChat(app.expandHome(p));
-  app.closeFolderBrowser();
-}
-
-// Wait for DOM to be fully ready before initializing
 function initializeApp() {
-  try {
-    console.log('[DEBUG] initializeApp: Checking if DOM is ready');
-    const chatList = document.getElementById('chatList');
-    if (!chatList) {
-      console.warn('[DEBUG] initializeApp: chatList not found, waiting 100ms');
-      setTimeout(initializeApp, 100);
-      return;
-    }
-    
-    console.log('[DEBUG] initializeApp: DOM is ready, creating GMGUIApp');
-    try {
-      window.app = new GMGUIApp();
-      window._app = window.app;
-      console.log('[DEBUG] initializeApp: GMGUIApp constructor completed');
-    } catch (constructorError) {
-      console.error('[ERROR] GMGUIApp constructor failed:', constructorError.message);
-      console.error('[ERROR] Stack:', constructorError.stack);
-      throw constructorError;
-    }
-    
-    // Debug: Log app state to window for inspection
-    window._debug = {
-      get conversations() { return Array.from(window.app.conversations.values()).map(c => ({ id: c.id, title: c.title })); },
-      get conversationCount() { return window.app.conversations.size; },
-      get selectedAgent() { return window.app.selectedAgent; },
-      get currentConversation() { return window.app.currentConversation; },
-      checkChatListElement() { return document.getElementById('chatList'); },
-      checkChatListChildCount() { return document.getElementById('chatList')?.children?.length || 0; },
-      async forceRefetch() {
-        console.log('[FORCE] Forcing fetchConversations...');
-        await window.app.fetchConversations();
-        console.log('[FORCE] Conversations loaded:', window.app.conversations.size);
-        window.app.renderChatHistory();
-        console.log('[FORCE] renderChatHistory called');
-        return window.app.conversations.size;
-      }
-    };
-    
-    console.log('[DEBUG] initializeApp: GMGUIApp created successfully with', window.app.conversations.size, 'conversations');
-  } catch (error) {
-    console.error('[CRITICAL ERROR] initializeApp failed:', error.message);
-    console.error('[CRITICAL ERROR] Stack trace:', error.stack);
-    
-    // Show error on page
-    const chatList = document.getElementById('chatList');
-    if (chatList) {
-      chatList.innerHTML = `
-        <div style="color: red; padding: 1rem; font-family: monospace; font-size: 0.75rem;">
-          <strong>INITIALIZATION ERROR</strong><br>
-          ${error.message}<br>
-          <br>
-          Check browser console (F12) for details.
-        </div>
-      `;
-    }
-  }
+  app.init().catch(err => {
+    console.error('[CRITICAL] Failed to initialize app:', err);
+  });
 }
 
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeApp);
-} else {
-  initializeApp();
+function sendMessage() {
+  app.sendMessage();
 }
+
+window.addEventListener('load', initializeApp);
