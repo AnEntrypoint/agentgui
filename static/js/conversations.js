@@ -68,8 +68,8 @@ class ConversationManager {
     if (conv.id === this.activeId) li.classList.add('active');
 
     const title = conv.title || `Conversation ${conv.id.slice(0, 8)}`;
-    const timestamp = conv.createdAt ? new Date(conv.createdAt).toLocaleDateString() : 'Unknown';
-    const agent = conv.agentId || 'unknown';
+    const timestamp = conv.created_at ? new Date(conv.created_at).toLocaleDateString() : 'Unknown';
+    const agent = conv.agentType || 'unknown';
 
     li.innerHTML = `
       <div class="conversation-item-title">${this.escapeHtml(title)}</div>
