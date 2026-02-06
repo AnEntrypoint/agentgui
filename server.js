@@ -508,9 +508,15 @@ async function processMessage(conversationId, messageId, content, agentId) {
     const cwd = '/config';
     const actualAgentId = agentId || 'claude-code';
 
-    debugLog(`[processMessage] Calling runClaudeWithStreaming with prompt: "${content.substring(0, 50)}..."`);
+    // Handle both string content and object content (for structured messages)
+    let contentStr = content;
+    if (typeof content === 'object') {
+      contentStr = JSON.stringify(content);
+    }
+
+    debugLog(`[processMessage] Calling runClaudeWithStreaming with prompt: "${contentStr.substring(0, 50)}..."`);
     // Prepend system prompt to user content
-    const promptWithSystem = `${SYSTEM_PROMPT}\n\n${content}`;
+    const promptWithSystem = `${SYSTEM_PROMPT}\n\n${contentStr}`;
     const outputs = await runClaudeWithStreaming(promptWithSystem, cwd, actualAgentId);
     debugLog(`[processMessage] Claude returned ${outputs.length} outputs`);
 

@@ -1,0 +1,40 @@
+# AgentGUI HTML Rendering Implementation - IN PROGRESS
+
+## Task
+Implement markdown code block parsing within text blocks to enable HTML rendering in conversation messages.
+
+## Work Items
+
+### 1. Implement parseMarkdownCodeBlocks() in client.js
+- Parse ```language\ncode``` patterns from text blocks
+- Use regex: /```(\w*)\n([\s\S]*?)```/g
+- Return array of parts with type ('text' or 'code') and content/language/code
+- Handle text before, after, and between code blocks
+
+### 2. Update renderMessageContent() in client.js
+- For text blocks, check if they contain markdown code blocks
+- If markdown blocks found, parse and render each part
+- For code blocks with language='html', render with innerHTML
+- For other code blocks, render as escaped text with monospace font
+- Apply "Rendered HTML" badge styling for HTML blocks
+
+### 3. Add CSS styling for rendered HTML blocks
+- .html-rendered-label: blue background, white text, small font, padding
+- .html-content: white background, border, padding, overflow handling
+- Support both light and dark modes with CSS variables
+
+### 4. Test HTML rendering
+- Open "HTML Test" conversation in agent-browser
+- Verify HTML table renders as actual table element
+- Verify "Rendered HTML" badge appears
+- Verify no escaped HTML entities visible
+- Verify no markdown delimiters visible
+- Verify CSS styling applies correctly
+
+## Files to Modify
+- /config/workspace/agentgui/static/js/client.js
+  - Add parseMarkdownCodeBlocks() method
+  - Update renderMessageContent() to use parser for text blocks
+
+## Status
+PENDING: Implementation not yet complete

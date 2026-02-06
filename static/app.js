@@ -220,9 +220,20 @@ class GMGUIApp {
     let html = '<div class="message-block">';
 
     switch (block.type) {
-      case 'text':
-        html += `<div class="block-text">${this.escapeHtml(block.text || '')}</div>`;
+      case 'text': {
+        const text = block.text || '';
+        const parts = this.parseMarkdownCodeBlocks(text);
+        html += '<div class="block-text">';
+        for (const part of parts) {
+          if (part.type === 'text') {
+            html += `<div>${this.escapeHtml(part.content)}</div>`;
+          } else if (part.type === 'code') {
+            html += this.renderCodeBlock(part.language, part.content);
+          }
+        }
+        html += '</div>';
         break;
+      }
 
       case 'tool_use':
         html += `<div class="block-tool-use">`;
@@ -402,6 +413,57 @@ class GMGUIApp {
     const newConvBtn = document.getElementById('newConversationBtn');
     if (newConvBtn) {
       newConvBtn.onclick = () => this.createConversation();
+    }
+  }
+
+  parseMarkdownCodeBlocks(text) {
+    const parts = [];
+    const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      // Add text before code block
+      if (match.index > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: text.substring(lastIndex, match.index)
+        });
+      }
+
+      // Add code block
+      const language = match[1] || 'text';
+      const code = match[2];
+      parts.push({
+        type: 'code',
+        language,
+        content: code
+      });
+
+      lastIndex = codeBlockRegex.lastIndex;
+    }
+
+    // Add remaining text
+    if (lastIndex < text.length) {
+      parts.push({
+        type: 'text',
+        content: text.substring(lastIndex)
+      });
+    }
+
+    return parts.length > 0 ? parts : [{ type: 'text', content: text }];
+  }
+
+  renderCodeBlock(language, code) {
+    if (language === 'html') {
+      return `<div class="html-block">
+        <div class="html-header">Rendered HTML</div>
+        <div class="html-content">${code}</div>
+      </div>`;
+    } else {
+      return `<div class="code-block" data-language="${this.escapeHtml(language)}">
+        <pre><code>${this.escapeHtml(code)}</code></pre>
+      </div>`;
     }
   }
 

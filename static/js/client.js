@@ -364,6 +364,69 @@ class AgentGUIClient {
   }
 
   /**
+   * Parse markdown code blocks from text
+   * Returns array of parts with type ('text' or 'code') and content/language/code
+   */
+  parseMarkdownCodeBlocks(text) {
+    const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      // Add text before the code block
+      if (match.index > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: text.substring(lastIndex, match.index)
+        });
+      }
+      // Add the code block
+      parts.push({
+        type: 'code',
+        language: match[1] || 'plain',
+        code: match[2]
+      });
+      lastIndex = codeBlockRegex.lastIndex;
+    }
+
+    // Add remaining text after last code block
+    if (lastIndex < text.length) {
+      parts.push({
+        type: 'text',
+        content: text.substring(lastIndex)
+      });
+    }
+
+    // If no code blocks found, return the text as-is
+    if (parts.length === 0) {
+      return [{ type: 'text', content: text }];
+    }
+
+    return parts;
+  }
+
+  /**
+   * Render a markdown code block part
+   */
+  renderCodeBlock(language, code) {
+    if (language.toLowerCase() === 'html') {
+      return `
+        <div class="message-code">
+          <div class="html-rendered-label mb-2 p-2 bg-blue-50 dark:bg-blue-900 rounded border border-blue-200 dark:border-blue-700 text-xs text-blue-700 dark:text-blue-300">
+            Rendered HTML
+          </div>
+          <div class="html-content bg-white dark:bg-gray-800 p-4 rounded border border-gray-200 dark:border-gray-700 overflow-x-auto">
+            ${code}
+          </div>
+        </div>
+      `;
+    } else {
+      return `<div class="message-code"><pre>${this.escapeHtml(code)}</pre></div>`;
+    }
+  }
+
+  /**
    * Render message content based on type
    */
   renderMessageContent(content) {
@@ -374,7 +437,15 @@ class AgentGUIClient {
       if (content.blocks && Array.isArray(content.blocks)) {
         content.blocks.forEach(block => {
           if (block.type === 'text') {
-            html += `<div class="message-text">${this.escapeHtml(block.text)}</div>`;
+            // Parse markdown code blocks from text
+            const parts = this.parseMarkdownCodeBlocks(block.text);
+            parts.forEach(part => {
+              if (part.type === 'text') {
+                html += `<div class="message-text">${this.escapeHtml(part.content)}</div>`;
+              } else if (part.type === 'code') {
+                html += this.renderCodeBlock(part.language, part.code);
+              }
+            });
           } else if (block.type === 'code_block') {
             // Render HTML code blocks as actual HTML elements
             if (block.language === 'html') {
