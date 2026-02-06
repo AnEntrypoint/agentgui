@@ -243,7 +243,6 @@ const server = http.createServer(async (req, res) => {
 
       const prompt = body.content || '';
       const agentId = body.agentId || 'claude-code';
-      const skipPermissions = body.skipPermissions || false;
 
       const userMessage = queries.createMessage(conversationId, 'user', prompt);
       queries.createEvent('message.created', { role: 'user', messageId: userMessage.id }, conversationId);
@@ -253,7 +252,7 @@ const server = http.createServer(async (req, res) => {
       if (activeExecutions.has(conversationId)) {
         debugLog(`[stream] Conversation ${conversationId} is busy, queuing message`);
         if (!messageQueues.has(conversationId)) messageQueues.set(conversationId, []);
-        messageQueues.get(conversationId).push({ content: prompt, agentId, skipPermissions, messageId: userMessage.id });
+        messageQueues.get(conversationId).push({ content: prompt, agentId, messageId: userMessage.id });
 
         const queueLength = messageQueues.get(conversationId).length;
         broadcastSync({ type: 'queue_status', conversationId, queueLength, messageId: userMessage.id, timestamp: Date.now() });
@@ -278,7 +277,7 @@ const server = http.createServer(async (req, res) => {
         timestamp: Date.now()
       });
 
-      processMessageWithStreaming(conversationId, userMessage.id, session.id, prompt, agentId, skipPermissions)
+      processMessageWithStreaming(conversationId, userMessage.id, session.id, prompt, agentId)
         .catch(err => debugLog(`[stream] Uncaught error: ${err.message}`));
       return;
     }
@@ -533,7 +532,7 @@ function persistChunkWithRetry(sessionId, conversationId, sequence, blockType, b
   return null;
 }
 
-async function processMessageWithStreaming(conversationId, messageId, sessionId, content, agentId, skipPermissions = false) {
+async function processMessageWithStreaming(conversationId, messageId, sessionId, content, agentId) {
   const startTime = Date.now();
   activeExecutions.set(conversationId, true);
   queries.setIsStreaming(conversationId, true);
@@ -644,7 +643,6 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     };
 
     const config = {
-      skipPermissions,
       verbose: true,
       outputFormat: 'stream-json',
       timeout: 1800000,
@@ -726,7 +724,7 @@ function drainMessageQueue(conversationId) {
     timestamp: Date.now()
   });
 
-  processMessageWithStreaming(conversationId, next.messageId, session.id, next.content, next.agentId, next.skipPermissions)
+  processMessageWithStreaming(conversationId, next.messageId, session.id, next.content, next.agentId)
     .catch(err => debugLog(`[queue] Error processing queued message: ${err.message}`));
 }
 

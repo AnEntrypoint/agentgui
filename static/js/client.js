@@ -780,7 +780,7 @@ class AgentGUIClient {
       const response = await fetch(`${window.__BASE_URL}/api/conversations/${conversationId}/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: prompt, agentId, skipPermissions: false })
+        body: JSON.stringify({ content: prompt, agentId })
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
