@@ -4,8 +4,14 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
 import { execSync } from 'child_process';
+import { createRequire } from 'module';
 import { queries } from './database.js';
 import { runClaudeWithStreaming } from './lib/claude-runner.js';
+
+const require = createRequire(import.meta.url);
+const express = require('express');
+const Busboy = require('busboy');
+const fsbrowse = require('fsbrowse');
 
 // System prompt for Claude to format responses as HTML
 const SYSTEM_PROMPT = `Always write your responses in ripple-ui enhanced HTML. Avoid overriding light/dark mode CSS variables. Use all the benefits of HTML to express technical details with proper semantic markup, tables, code blocks, headings, and lists. Write clean, well-structured HTML that respects the existing design system.`;
@@ -23,6 +29,70 @@ const watch = process.argv.includes('--no-watch') ? false : (process.argv.includ
 
 const staticDir = path.join(__dirname, 'static');
 if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
+
+// Express sub-app for fsbrowse file browser and file upload
+const expressApp = express();
+
+// File upload endpoint - copies dropped files to conversation workingDirectory
+expressApp.post(BASE_URL + '/api/upload/:conversationId', (req, res) => {
+  try {
+    const conv = queries.getConversation(req.params.conversationId);
+    if (!conv) return res.status(404).json({ error: 'Conversation not found' });
+    if (!conv.workingDirectory) return res.status(400).json({ error: 'No working directory set for this conversation' });
+
+    const uploadDir = conv.workingDirectory;
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const bb = Busboy({ headers: req.headers });
+    const fileNames = [];
+    const writePromises = [];
+
+    bb.on('file', (fieldname, file, info) => {
+      const safeName = path.basename(info.filename);
+      const filePath = path.join(uploadDir, safeName);
+      fileNames.push(safeName);
+      const p = new Promise((resolve) => {
+        const writeStream = fs.createWriteStream(filePath);
+        file.pipe(writeStream);
+        writeStream.on('finish', resolve);
+        writeStream.on('error', () => { file.resume(); resolve(); });
+      });
+      writePromises.push(p);
+    });
+
+    bb.on('finish', () => {
+      Promise.all(writePromises).then(() => {
+        res.json({ ok: true, files: fileNames, count: fileNames.length });
+      }).catch(() => {
+        res.json({ ok: true, files: fileNames, count: fileNames.length });
+      });
+    });
+
+    bb.on('error', (err) => {
+      res.status(500).json({ error: 'Upload failed: ' + err.message });
+    });
+
+    req.pipe(bb);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// fsbrowse file browser - mounted per conversation workingDirectory
+// Route: /gm/files/:conversationId/*
+expressApp.use(BASE_URL + '/files/:conversationId', (req, res, next) => {
+  const conv = queries.getConversation(req.params.conversationId);
+  if (!conv || !conv.workingDirectory) {
+    return res.status(404).json({ error: 'Conversation not found or no working directory' });
+  }
+  // Create a fresh fsbrowse router for this conversation's directory
+  const router = fsbrowse({ baseDir: conv.workingDirectory });
+  // Strip the conversationId param from the path before passing to fsbrowse
+  req.baseUrl = BASE_URL + '/files/' + req.params.conversationId;
+  router(req, res, next);
+});
 
 function discoverAgents() {
   const agents = [];
@@ -58,6 +128,12 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+
+  // Route file upload and fsbrowse requests through Express sub-app
+  const pathOnly = req.url.split('?')[0];
+  if (pathOnly.startsWith(BASE_URL + '/api/upload/') || pathOnly.startsWith(BASE_URL + '/files/')) {
+    return expressApp(req, res);
+  }
 
   if (req.url === '/') { res.writeHead(302, { Location: BASE_URL + '/' }); res.end(); return; }
 

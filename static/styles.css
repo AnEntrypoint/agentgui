@@ -1201,18 +1201,21 @@ html, body {
 /* Responsive design */
 @media (max-width: 768px) {
   .sidebar {
-    position: absolute;
+    position: fixed;
     left: 0;
     top: 0;
     bottom: 0;
-    z-index: 400;
+    z-index: 1000;
     width: 280px;
     transform: translateX(-100%);
-    box-shadow: var(--shadow-lg);
+    box-shadow: none;
+    transition: transform 0.3s ease;
   }
 
-  .sidebar.open {
+  .sidebar.open,
+  .sidebar.mobile-visible {
     transform: translateX(0);
+    box-shadow: var(--shadow-lg);
   }
 
   .sidebar-toggle {
@@ -1229,6 +1232,7 @@ html, body {
 
   .chat-input-section {
     padding: 1rem 1.5rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 
   .chat-footer {
@@ -1845,4 +1849,42 @@ p code {
   white-space: pre-wrap;
   word-wrap: break-word;
   line-height: 1.5;
+}
+
+/* Touch-friendly interactive elements */
+@media (pointer: coarse) {
+  .chat-item,
+  .new-chat-btn,
+  .settings-btn,
+  .action-btn,
+  .gm-btn,
+  .chat-option-btn,
+  .close-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .chat-input {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .chat-messages {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Safe area padding for notched phones */
+@supports (padding-top: env(safe-area-inset-top)) {
+  #app {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .chat-input-section {
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+
+  .chat-footer {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
 }

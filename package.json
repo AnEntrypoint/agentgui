@@ -23,7 +23,9 @@
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.128",
     "better-sqlite3": "^12.6.2",
+    "busboy": "^1.6.0",
+    "express": "^5.2.1",
+    "fsbrowse": "file:../fsbrowse",
     "ws": "^8.14.2"
-  },
-  "devDependencies": {}
+  }
 }
