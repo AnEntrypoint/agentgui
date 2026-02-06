@@ -14,3 +14,4 @@ build/
 .glootie-stop-verified
 bun.lock
 tmp/
+test-results/
