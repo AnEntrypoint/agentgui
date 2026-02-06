@@ -86,7 +86,6 @@ html, body {
 .sidebar {
   width: 280px;
   background: var(--bg-primary);
-  border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -96,7 +95,6 @@ html, body {
 
 .sidebar-header {
   padding: 1.5rem 1.25rem;
-  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -133,7 +131,6 @@ html, body {
   margin: 1rem 1.25rem;
   padding: 0.625rem 1rem;
   background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
@@ -175,7 +172,6 @@ html, body {
 .chat-item {
   padding: 0.75rem;
   background: var(--bg-secondary);
-  border: 1px solid transparent;
   border-radius: 0.5rem;
   cursor: pointer;
   transition: var(--transition-smooth);
@@ -220,13 +216,11 @@ html, body {
 
 .chat-item:hover {
   background: var(--bg-tertiary);
-  border-color: var(--border-color);
 }
 
 .chat-item.active {
   background: var(--color-primary-lighter);
   color: var(--color-primary);
-  border-color: var(--color-primary);
   font-weight: 500;
 }
 
@@ -242,7 +236,6 @@ html, body {
 
 .sidebar-footer {
   padding: 0 1.25rem 1.5rem;
-  border-top: 1px solid var(--border-color);
   margin-top: 1rem;
 }
 
@@ -250,7 +243,6 @@ html, body {
   width: 100%;
   padding: 0.625rem 1rem;
   background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
@@ -301,7 +293,6 @@ html, body {
   gap: 0.75rem;
   padding: 1rem;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   font-size: 0.875rem;
   color: var(--text-secondary);
@@ -361,7 +352,6 @@ html, body {
 .agent-card {
   padding: 1rem 1.5rem;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   cursor: pointer;
   transition: var(--transition-smooth);
@@ -378,14 +368,12 @@ html, body {
 
 .agent-card:hover {
   background: var(--bg-tertiary);
-  border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
 .agent-card.active {
   background: var(--color-primary-lighter);
   color: var(--color-primary);
-  border-color: var(--color-primary);
   font-weight: 500;
 }
 
@@ -405,7 +393,6 @@ html, body {
 .chat-input-section {
   padding: 1.5rem 2rem;
   background: var(--bg-primary);
-  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
   min-height: 60px; /* Ensure input area never becomes too small */
 }
@@ -419,7 +406,6 @@ html, body {
 .chat-input {
   flex: 1;
   padding: 0.75rem 1rem;
-  border: 1px solid var(--border-color);
   border-radius: 0.75rem;
   font-family: inherit;
   font-size: 1rem;
@@ -447,7 +433,6 @@ html, body {
 .action-btn {
   padding: 0.625rem;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   cursor: pointer;
   color: var(--text-tertiary);
@@ -461,14 +446,12 @@ html, body {
 
 .action-btn:hover {
   background: var(--bg-tertiary);
-  border-color: var(--color-primary);
   color: var(--color-primary);
 }
 
 .action-btn.send-btn {
   background: var(--color-primary);
   color: white;
-  border-color: var(--color-primary);
 }
 
 .action-btn.send-btn:hover {
@@ -478,7 +461,6 @@ html, body {
 .action-btn.send-btn:disabled {
   background: var(--bg-tertiary);
   color: var(--text-tertiary);
-  border-color: var(--border-color);
   cursor: not-allowed;
 }
 
@@ -486,7 +468,6 @@ html, body {
 .chat-footer {
   padding: 1rem 2rem;
   background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
   flex-shrink: 0;
   font-size: 0.8rem;
 }
@@ -535,7 +516,6 @@ html, body {
 
 .settings-header {
   padding: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -568,7 +548,6 @@ html, body {
 
 .setting-group {
   padding: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
 }
 
 .setting-group:last-child {
@@ -595,7 +574,6 @@ html, body {
 .gm-input {
   width: 100%;
   padding: 0.75rem;
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   font-size: 0.875rem;
   font-family: inherit;
@@ -638,7 +616,6 @@ html, body {
 .message.assistant .message-bubble {
   background: var(--bg-secondary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
 }
 
 .message.system .message-bubble {
@@ -660,7 +637,6 @@ html, body {
 .stream-text-block {
   padding: 0.75rem 1rem;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   color: var(--text-primary);
   word-wrap: break-word;
@@ -680,14 +656,12 @@ html, body {
 .stream-error {
   padding: 0.5rem 0.75rem;
   background: rgba(239, 68, 68, 0.1);
-  border: 1px solid var(--color-danger);
   border-radius: 0.5rem;
   color: var(--color-danger);
   font-size: 0.875rem;
 }
 
 .thought-block {
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   overflow: hidden;
 }
@@ -716,7 +690,6 @@ html, body {
 }
 
 .tool-block {
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   overflow: hidden;
   font-size: 0.875rem;
@@ -793,7 +766,6 @@ html, body {
 }
 
 .plan-block {
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   overflow: hidden;
 }
@@ -813,7 +785,6 @@ html, body {
 }
 
 .html-block {
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   overflow: visible;
   background: var(--bg-secondary);
@@ -826,7 +797,6 @@ html, body {
   font-weight: 500;
   font-size: 0.75rem;
   color: white;
-  border-bottom: 1px solid var(--border-color);
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -837,7 +807,6 @@ html, body {
 }
 
 .code-block {
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   overflow-x: auto;
   background: var(--bg-tertiary);
@@ -860,7 +829,6 @@ html, body {
 
 .image-block {
   flex: 0 1 100%;
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   overflow: hidden;
   background: var(--bg-secondary);
@@ -873,7 +841,6 @@ html, body {
   font-weight: 500;
   font-size: 0.875rem;
   color: var(--text-primary);
-  border-bottom: 1px solid var(--border-color);
 }
 
 .image-content {
@@ -891,7 +858,6 @@ html, body {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
   transition: var(--transition-smooth);
 }
@@ -996,7 +962,6 @@ html, body {
 
 .gm-modal-header {
   padding: 1.5rem;
-  border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1018,7 +983,6 @@ html, body {
 
 .gm-modal-footer {
   padding: 1rem 1.5rem;
-  border-top: 1px solid var(--border-color);
   display: flex;
   gap: 0.75rem;
   justify-content: flex-end;
@@ -1030,7 +994,6 @@ html, body {
   gap: 1rem;
   padding: 1rem 1.25rem;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   border-radius: 0.5rem;
   cursor: pointer;
   transition: var(--transition-smooth);
@@ -1040,7 +1003,6 @@ html, body {
 
 .chat-option-btn:hover {
   background: var(--bg-tertiary);
-  border-color: var(--color-primary);
 }
 
 .chat-option-btn:active {
@@ -1112,7 +1074,6 @@ html, body {
 .gm-btn-secondary {
   background: var(--bg-tertiary);
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
 }
 
 .gm-btn-secondary:hover {
@@ -1502,7 +1463,6 @@ p code {
 /* Metadata display */
 .response-metadata {
   background: #f9f9f9;
-  border: 1px solid #e0e0e0;
   border-radius: 8px;
   padding: 1rem;
   margin: 1rem 0 0 0;
@@ -1551,7 +1511,6 @@ p code {
 
 .metadata-section.thinking {
   background: #fff9e6;
-  border: 1px solid #f5e6cc;
 }
 
 .metadata-section.thinking summary {
@@ -1707,7 +1666,6 @@ p code {
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
   background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   word-wrap: break-word;
 }
 
@@ -1765,18 +1723,15 @@ p code {
 .block-text a {
   color: var(--color-primary);
   text-decoration: none;
-  border-bottom: 1px solid transparent;
   transition: var(--transition-fast);
 }
 
 .block-text a:hover {
-  border-bottom-color: var(--color-primary);
   text-decoration: underline;
 }
 
 .block-tool-use {
   background: rgba(59, 130, 246, 0.05);
-  border: 1px solid rgba(59, 130, 246, 0.2);
   border-radius: 0.5rem;
   padding: 0.75rem;
 }
@@ -1816,7 +1771,6 @@ p code {
 
 .block-tool-result {
   background: rgba(16, 185, 129, 0.05);
-  border: 1px solid rgba(16, 185, 129, 0.2);
   border-radius: 0.5rem;
   padding: 0.75rem;
 }
@@ -1853,7 +1807,6 @@ p code {
 
 .block-file-op {
   background: rgba(245, 158, 11, 0.05);
-  border: 1px solid rgba(245, 158, 11, 0.2);
   border-radius: 0.5rem;
   padding: 0.75rem;
 }

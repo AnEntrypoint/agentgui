@@ -1,0 +1,77 @@
+# PRD: Remove All 1px Borders from Styles
+
+## Overview
+Remove all 1px border definitions from the CSS stylesheet to create a cleaner, more minimal UI appearance.
+
+## Requirements
+
+### 1. Identify All 1px Border Instances
+- **Status**: COMPLETE ✅
+- Search CSS file for all border: 1px definitions
+- Locate border-top, border-bottom, border-right, border-left with 1px values
+- Document all affected components
+
+### 2. Remove Border Definitions
+- **Status**: COMPLETE ✅
+- Remove border: 1px solid [color] from all elements
+- Remove border-top: 1px solid [color] declarations
+- Remove border-bottom: 1px solid [color] declarations
+- Remove border-right: 1px solid [color] declarations
+- Remove border-left: 1px solid [color] declarations
+- Clean up border-color references when only used for borders
+
+### 3. Verify Removal
+- **Status**: COMPLETE ✅
+- Confirm no 1px border declarations remain
+- Verify grep search returns no border.*1px matches
+- Check that non-border 1px references (shadows, transforms) remain intact
+
+## Completion Status
+
+✅ ALL WORK COMPLETE
+
+### Removed 1px Borders
+- Sidebar right border
+- Sidebar header bottom border
+- New chat button border
+- Chat items borders (transparent and colored states)
+- Sidebar footer top border
+- Settings button border
+- Chat context header border
+- Agent cards borders (base, hover, active states)
+- Chat input section top border
+- Chat input field border
+- Action buttons borders (base, hover, disabled states)
+- Chat footer top border
+- Settings header bottom border
+- Setting groups bottom border
+- Input fields borders
+- Message bubbles borders
+- Stream text blocks borders
+- Stream error borders
+- Thought blocks borders
+- Tool blocks borders
+- Plan blocks borders
+- HTML blocks and headers borders
+- Code blocks borders
+- Image blocks and headers borders
+- Connection status bottom border
+- Modal headers and footers borders
+- Chat option buttons borders
+- Secondary button border
+- Message blocks borders
+- Tool use/result blocks borders
+- File operation blocks borders
+- Response metadata borders
+- Metadata section thinking borders
+
+### Verification
+- No matching grep results for "border.*1px" or "1px.*border"
+- All remaining 1px references are for shadows and transforms (not borders)
+- Clean, minimal UI without divider lines
+
+## Notes
+- Changes only to static/styles.css
+- No HTML or JavaScript modifications needed
+- Border-radius preserved on all elements
+- Hover states and color transitions maintained
