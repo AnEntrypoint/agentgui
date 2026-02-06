@@ -475,10 +475,27 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     let eventCount = 0;
 
     const onEvent = (parsed) => {
-      if (parsed.type === 'assistant' && parsed.message?.content) {
+      eventCount++;
+
+      if (parsed.type === 'system') {
+        broadcastSync({
+          type: 'streaming_progress',
+          sessionId,
+          conversationId,
+          block: {
+            type: 'system',
+            subtype: parsed.subtype,
+            model: parsed.model,
+            cwd: parsed.cwd,
+            tools: parsed.tools,
+            session_id: parsed.session_id
+          },
+          blockIndex: allBlocks.length,
+          timestamp: Date.now()
+        });
+      } else if (parsed.type === 'assistant' && parsed.message?.content) {
         for (const block of parsed.message.content) {
           allBlocks.push(block);
-          eventCount++;
           broadcastSync({
             type: 'streaming_progress',
             sessionId,
@@ -488,16 +505,45 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
             timestamp: Date.now()
           });
         }
-      } else if (parsed.type === 'result' && parsed.result && allBlocks.length === 0) {
+      } else if (parsed.type === 'user' && parsed.message?.content) {
+        for (const block of parsed.message.content) {
+          if (block.type === 'tool_result') {
+            broadcastSync({
+              type: 'streaming_progress',
+              sessionId,
+              conversationId,
+              block: {
+                type: 'tool_result',
+                tool_use_id: block.tool_use_id,
+                content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+                is_error: block.is_error || false
+              },
+              blockIndex: allBlocks.length,
+              timestamp: Date.now()
+            });
+          }
+        }
+      } else if (parsed.type === 'result') {
         broadcastSync({
           type: 'streaming_progress',
           sessionId,
           conversationId,
-          block: { type: 'text', text: parsed.result },
-          blockIndex: 0,
+          block: {
+            type: 'result',
+            subtype: parsed.subtype,
+            duration_ms: parsed.duration_ms,
+            total_cost_usd: parsed.total_cost_usd,
+            num_turns: parsed.num_turns,
+            is_error: parsed.is_error || false,
+            result: parsed.result
+          },
+          blockIndex: allBlocks.length,
           isResult: true,
           timestamp: Date.now()
         });
+        if (parsed.result && allBlocks.length === 0) {
+          allBlocks.push({ type: 'text', text: String(parsed.result) });
+        }
       }
     };
 

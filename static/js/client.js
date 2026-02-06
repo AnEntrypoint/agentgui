@@ -274,7 +274,7 @@ class AgentGUIClient {
         <div class="message-blocks streaming-blocks"></div>
         <div class="streaming-indicator" style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;color:var(--color-text-secondary);font-size:0.875rem;">
           <span class="animate-spin" style="display:inline-block;width:1rem;height:1rem;border:2px solid var(--color-border);border-top-color:var(--color-primary);border-radius:50%;"></span>
-          Thinking...
+          <span class="streaming-indicator-label">Thinking...</span>
         </div>
       `;
       messagesEl.appendChild(streamingDiv);
@@ -300,37 +300,75 @@ class AgentGUIClient {
     if (!blocksEl) return;
 
     const indicator = streamingEl.querySelector('.streaming-indicator');
+    let indicatorText = 'Responding...';
 
-    if (block.type === 'text' && block.text) {
+    if (block.type === 'system') {
+      const div = document.createElement('div');
+      div.className = 'streaming-block-system';
+      const toolCount = block.tools ? block.tools.length : 0;
+      div.innerHTML = `<span class="system-model-badge">${this.escapeHtml(block.model || 'unknown')}</span> <span class="system-info">${toolCount} tools available</span>`;
+      blocksEl.appendChild(div);
+      indicatorText = 'Initializing...';
+    } else if (block.type === 'text' && block.text) {
       const existingTextEl = blocksEl.querySelector('.streaming-text-current');
       if (existingTextEl && !data.isResult) {
         existingTextEl.innerHTML = this.renderBlockContent(block);
       } else {
+        const prevTextEl = blocksEl.querySelector('.streaming-text-current');
+        if (prevTextEl) prevTextEl.classList.remove('streaming-text-current');
         const div = document.createElement('div');
         div.className = 'message-text streaming-text-current';
         div.innerHTML = this.renderBlockContent(block);
         blocksEl.appendChild(div);
       }
+      indicatorText = 'Responding...';
     } else if (block.type === 'tool_use') {
       const prevTextEl = blocksEl.querySelector('.streaming-text-current');
       if (prevTextEl) prevTextEl.classList.remove('streaming-text-current');
 
       const div = document.createElement('div');
-      div.className = 'message-tool';
-      div.textContent = `[Tool: ${block.name || 'unknown'}]`;
+      div.className = 'streaming-block-tool-use';
+      div.dataset.toolUseId = block.id || '';
+      let inputHtml = '';
+      if (block.input && Object.keys(block.input).length > 0) {
+        const inputStr = JSON.stringify(block.input, null, 2);
+        inputHtml = `<details class="tool-input-details"><summary class="tool-input-summary">Input</summary><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></details>`;
+      }
+      div.innerHTML = `<div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(block.name || 'unknown')}</span></div>${inputHtml}`;
       blocksEl.appendChild(div);
+      indicatorText = `Using ${block.name || 'tool'}...`;
     } else if (block.type === 'tool_result') {
       const div = document.createElement('div');
-      div.className = 'message-text';
-      div.innerHTML = `<em style="color:var(--color-text-secondary)">${this.escapeHtml(String(block.result || '').substring(0, 500))}</em>`;
+      div.className = 'streaming-block-tool-result' + (block.is_error ? ' tool-result-error' : '');
+      const content = block.content || '';
+      const displayContent = content.length > 2000 ? content.substring(0, 2000) + '\n... (truncated)' : content;
+      div.innerHTML = `<div class="tool-result-header">${block.is_error ? '<span class="tool-result-error-badge">Error</span>' : '<span class="tool-result-ok-badge">Result</span>'}</div><pre class="tool-result-pre">${this.escapeHtml(displayContent)}</pre>`;
       blocksEl.appendChild(div);
+      indicatorText = 'Processing result...';
+    } else if (block.type === 'result') {
+      const div = document.createElement('div');
+      div.className = 'streaming-block-result' + (block.is_error ? ' result-error' : '');
+      const duration = block.duration_ms ? (block.duration_ms / 1000).toFixed(1) + 's' : '';
+      const cost = block.total_cost_usd ? '$' + block.total_cost_usd.toFixed(4) : '';
+      const turns = block.num_turns ? block.num_turns + ' turns' : '';
+      const parts = [duration, cost, turns].filter(Boolean);
+      div.innerHTML = `<span class="result-status">${block.is_error ? 'Failed' : 'Complete'}</span>${parts.length ? ' <span class="result-stats">' + parts.join(' / ') + '</span>' : ''}`;
+      blocksEl.appendChild(div);
+      indicatorText = 'Complete';
     }
 
-    if (indicator) indicator.querySelector('span:last-child')?.remove();
     if (indicator) {
-      const label = document.createElement('span');
-      label.textContent = block.type === 'tool_use' ? `Using ${block.name}...` : 'Responding...';
-      indicator.appendChild(label);
+      const labelEl = indicator.querySelector('.streaming-indicator-label');
+      if (labelEl) {
+        labelEl.textContent = indicatorText;
+      } else {
+        const existingLabel = indicator.querySelector('span:last-child');
+        if (existingLabel && !existingLabel.classList.contains('animate-spin')) existingLabel.remove();
+        const label = document.createElement('span');
+        label.className = 'streaming-indicator-label';
+        label.textContent = indicatorText;
+        indicator.appendChild(label);
+      }
     }
 
     this.scrollToBottom();
@@ -555,7 +593,16 @@ class AgentGUIClient {
               html += `<div class="message-code"><pre>${this.escapeHtml(block.code)}</pre></div>`;
             }
           } else if (block.type === 'tool_use') {
-            html += `<div class="message-tool">[Tool: ${this.escapeHtml(block.name)}]</div>`;
+            let inputHtml = '';
+            if (block.input && Object.keys(block.input).length > 0) {
+              const inputStr = JSON.stringify(block.input, null, 2);
+              inputHtml = `<details class="tool-input-details"><summary class="tool-input-summary">Input</summary><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></details>`;
+            }
+            html += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(block.name || 'unknown')}</span></div>${inputHtml}</div>`;
+          } else if (block.type === 'tool_result') {
+            const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+            const displayContent = content.length > 2000 ? content.substring(0, 2000) + '\n... (truncated)' : content;
+            html += `<div class="streaming-block-tool-result${block.is_error ? ' tool-result-error' : ''}"><div class="tool-result-header">${block.is_error ? '<span class="tool-result-error-badge">Error</span>' : '<span class="tool-result-ok-badge">Result</span>'}</div><pre class="tool-result-pre">${this.escapeHtml(displayContent)}</pre></div>`;
           }
         });
       }
@@ -843,7 +890,16 @@ class AgentGUIClient {
                 contentHtml += `<div class="message-code"><pre>${this.escapeHtml(block.code)}</pre></div>`;
               }
             } else if (block.type === 'tool_use') {
-              contentHtml += `<div class="message-tool">[Tool: ${this.escapeHtml(block.name)}]</div>`;
+              let inputHtml = '';
+              if (block.input && Object.keys(block.input).length > 0) {
+                const inputStr = JSON.stringify(block.input, null, 2);
+                inputHtml = `<details class="tool-input-details"><summary class="tool-input-summary">Input</summary><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></details>`;
+              }
+              contentHtml += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(block.name || 'unknown')}</span></div>${inputHtml}</div>`;
+            } else if (block.type === 'tool_result') {
+              const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
+              const displayContent = content.length > 2000 ? content.substring(0, 2000) + '\n... (truncated)' : content;
+              contentHtml += `<div class="streaming-block-tool-result${block.is_error ? ' tool-result-error' : ''}"><div class="tool-result-header">${block.is_error ? '<span class="tool-result-error-badge">Error</span>' : '<span class="tool-result-ok-badge">Result</span>'}</div><pre class="tool-result-pre">${this.escapeHtml(displayContent)}</pre></div>`;
             }
           });
         }
