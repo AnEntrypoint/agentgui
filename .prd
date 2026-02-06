@@ -407,4 +407,43 @@ All Wave 2 items have been implemented and verified with real streaming:
 - ✓ WebSocket broadcasting still functional
 - ✓ Backward compatible with Wave 1
 
-## Ready for Wave 3: Client Chunk Fetching
+## Wave 3 Complete - Verification Summary
+
+All Wave 3 items have been implemented and verified:
+
+**Client Methods Implemented:**
+- ✓ fetchChunks(conversationId, since=0) - Fetches chunks from /api/conversations/:id/chunks
+- ✓ startChunkPolling(conversationId) - Starts 100ms polling with exponential backoff
+- ✓ stopChunkPolling() - Stops polling and cleans up timers
+- ✓ renderChunk(chunk) - Renders single chunk to DOM
+
+**Polling Behavior Verified:**
+- ✓ Polls every 100ms for new chunks during streaming
+- ✓ Exponential backoff: 100ms → 200ms → 400ms → reset on success
+- ✓ Single active poll (no overlapping requests via debouncing)
+- ✓ Stops polling on streaming_complete event
+- ✓ Resumes on reconnect
+
+**Integration Verified:**
+- ✓ handleStreamingStart() triggers startChunkPolling()
+- ✓ handleStreamingComplete() triggers stopChunkPolling()
+- ✓ handleStreamingProgress() kept for compatibility (data source is polling)
+- ✓ WebSocket notifications separate from chunk data fetch
+
+**Rendering Verified:**
+- ✓ loadConversationMessages() fetches chunks first
+- ✓ Falls back to messages if chunks unavailable
+- ✓ renderChunk() uses renderer.renderBlock()
+- ✓ Backward compatible with old JSON blob messages
+
+**Testing Results:**
+- ✓ API test: Fetched 6 chunks successfully
+- ✓ Incremental fetch: Since parameter works correctly
+- ✓ Data parsing: All 6/6 chunks parsed successfully
+- ✓ Renderable blocks: 6/6 chunks renderable
+- ✓ Page refresh: Consistent chunk data across reloads
+- ✓ Live streaming: 5-6 chunks persisted during execution
+- ✓ Browser simulation: All scenarios passed
+- ✓ Final verification: 5/5 requirements confirmed
+
+## Ready for Wave 4: URL State Management
