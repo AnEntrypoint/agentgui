@@ -155,11 +155,15 @@ class AgentGUIClient {
 
   /**
    * Router state management: restore conversation from URL
-   * Format: ?conversation=<id>&session=<id>
+   * Format: /conversations/<conversationId>?session=<sessionId>
    */
   restoreStateFromUrl() {
+    // Parse path-based URL: /conversations/<conversationId>
+    const pathMatch = window.location.pathname.match(/\/conversations\/([^\/]+)$/);
+    const conversationId = pathMatch ? pathMatch[1] : null;
+    
+    // Session ID still in query params
     const params = new URLSearchParams(window.location.search);
-    const conversationId = params.get('conversation');
     const sessionId = params.get('session');
 
     if (conversationId && this.isValidId(conversationId)) {
@@ -184,6 +188,7 @@ class AgentGUIClient {
   /**
    * Update URL when conversation is selected
    * Uses History API (pushState) for clean URLs
+   * Format: /conversations/<conversationId>?session=<sessionId>
    */
   updateUrlForConversation(conversationId, sessionId) {
     if (!this.isValidId(conversationId)) return;
@@ -193,13 +198,15 @@ class AgentGUIClient {
       this.routerState.currentSessionId = sessionId;
     }
 
-    const params = new URLSearchParams();
-    params.set('conversation', conversationId);
+    // Use path-based URL for conversation
+    const basePath = window.location.pathname.replace(/\/conversations\/[^\/]+$/, '').replace(/\/$/, '');
+    let url = `${basePath}/conversations/${conversationId}`;
+    
+    // Session ID still in query params for optional state
     if (sessionId && this.isValidId(sessionId)) {
-      params.set('session', sessionId);
+      url += `?session=${sessionId}`;
     }
-
-    const url = `${window.location.pathname}?${params.toString()}`;
+    
     window.history.pushState({ conversationId, sessionId }, '', url);
   }
 

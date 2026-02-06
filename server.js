@@ -11,7 +11,14 @@ import { runClaudeWithStreaming } from './lib/claude-runner.js';
 const require = createRequire(import.meta.url);
 const express = require('express');
 const Busboy = require('busboy');
-const fsbrowse = require('fsbrowse');
+// const fsbrowse = require('fsbrowse');
+
+// Stub fsbrowse function for file browsing endpoint
+const fsbrowse = (options) => {
+  return (req, res) => {
+    res.status(501).json({ error: 'File browsing not yet implemented' });
+  };
+};
 
 const SYSTEM_PROMPT = `Always write your responses in ripple-ui enhanced HTML. Avoid overriding light/dark mode CSS variables. Use all the benefits of HTML to express technical details with proper semantic markup, tables, code blocks, headings, and lists. Write clean, well-structured HTML that respects the existing design system.`;
 
@@ -174,9 +181,10 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (req.method === 'POST') {
+      if (req.method === 'POST' || req.method === 'PUT') {
         const body = await parseBody(req);
         const conv = queries.updateConversation(convMatch[1], body);
+        if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Conversation not found' })); return; }
         queries.createEvent('conversation.updated', body, convMatch[1]);
         broadcastSync({ type: 'conversation_updated', conversation: conv });
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -208,6 +216,8 @@ const server = http.createServer(async (req, res) => {
 
       if (req.method === 'POST') {
         const conversationId = messagesMatch[1];
+        const conv = queries.getConversation(conversationId);
+        if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Conversation not found' })); return; }
         const body = await parseBody(req);
         const idempotencyKey = body.idempotencyKey || null;
         const message = queries.createMessage(conversationId, 'user', body.content, idempotencyKey);
@@ -446,6 +456,13 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
       }
+      return;
+    }
+
+    // Handle conversation detail routes - serve index.html for client-side routing
+    if (pathOnly.match(/^\/conversations\/[^\/]+$/)) {
+      const indexPath = path.join(staticDir, 'index.html');
+      serveFile(indexPath, res);
       return;
     }
 
@@ -899,6 +916,12 @@ function onServerReady() {
   console.log(`GMGUI running on http://localhost:${PORT}${BASE_URL}/`);
   console.log(`Agents: ${discoveredAgents.map(a => a.name).join(', ') || 'none'}`);
   console.log(`Hot reload: ${watch ? 'on' : 'off'}`);
+
+  // Clean up empty conversations on startup
+  const deletedCount = queries.cleanupEmptyConversations();
+  if (deletedCount > 0) {
+    console.log(`Cleaned up ${deletedCount} empty conversation(s) on startup`);
+  }
 
   // Run auto-import immediately
   performAutoImport();

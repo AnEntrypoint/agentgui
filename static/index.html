@@ -160,6 +160,54 @@
 
     .conversation-item.active .conversation-item-meta { color: rgba(255,255,255,0.7); }
 
+    .conversation-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .conversation-item-content {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .conversation-item-delete {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      color: var(--color-text-secondary);
+      opacity: 0;
+      transition: all 0.15s;
+    }
+
+    .conversation-item:hover .conversation-item-delete {
+      opacity: 1;
+    }
+
+    .conversation-item-delete:hover {
+      background-color: var(--color-error);
+      color: white;
+    }
+
+    .conversation-item.active .conversation-item-delete {
+      color: rgba(255,255,255,0.8);
+    }
+
+    .conversation-item.active .conversation-item-delete:hover {
+      background-color: rgba(255,255,255,0.2);
+      color: white;
+    }
+
     .sidebar-empty {
       padding: 2rem 1rem;
       text-align: center;
