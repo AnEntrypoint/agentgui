@@ -468,7 +468,15 @@ class AgentGUIClient {
         return this.escapeHtml(part.content);
       }).join('');
     }
-    return this.escapeHtml(JSON.stringify(block));
+    // Fallback for unknown block types: show formatted key-value pairs
+    const fieldsHtml = Object.entries(block)
+      .filter(([key]) => key !== 'type')
+      .map(([key, value]) => {
+        let displayValue = typeof value === 'string' ? value : JSON.stringify(value);
+        if (displayValue.length > 100) displayValue = displayValue.substring(0, 100) + '...';
+        return `<div style="font-size:0.75rem;margin-bottom:0.25rem"><span style="font-weight:600">${this.escapeHtml(key)}:</span> <code>${this.escapeHtml(displayValue)}</code></div>`;
+      }).join('');
+    return `<div style="padding:0.5rem;background:var(--color-bg-secondary);border-radius:0.375rem;border:1px solid var(--color-border)"><div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;margin-bottom:0.25rem">${this.escapeHtml(block.type)}</div>${fieldsHtml}</div>`;
   }
 
   scrollToBottom() {
@@ -708,7 +716,17 @@ class AgentGUIClient {
       html += '</div>';
       return html;
     } else {
-      return `<div class="message-text">${this.escapeHtml(JSON.stringify(content))}</div>`;
+      // Fallback for non-array content: format as key-value pairs
+      if (typeof content === 'object' && content !== null) {
+        const fieldsHtml = Object.entries(content)
+          .map(([key, value]) => {
+            let displayValue = typeof value === 'string' ? value : JSON.stringify(value);
+            if (displayValue.length > 150) displayValue = displayValue.substring(0, 150) + '...';
+            return `<div style="font-size:0.8rem;margin-bottom:0.375rem"><span style="font-weight:600">${this.escapeHtml(key)}:</span> <code style="background:var(--color-bg-secondary);padding:0.125rem 0.25rem;border-radius:0.25rem">${this.escapeHtml(displayValue)}</code></div>`;
+          }).join('');
+        return `<div class="message-text" style="background:var(--color-bg-secondary);padding:0.75rem;border-radius:0.375rem">${fieldsHtml}</div>`;
+      }
+      return `<div class="message-text">${this.escapeHtml(String(content))}</div>`;
     }
   }
 
@@ -1223,7 +1241,18 @@ class AgentGUIClient {
         }
         contentHtml += '</div>';
       } else {
-        contentHtml = `<div class="message-text">${this.escapeHtml(JSON.stringify(msg.content))}</div>`;
+        // Fallback for non-array msg.content: format as key-value pairs
+        if (typeof msg.content === 'object' && msg.content !== null) {
+          const fieldsHtml = Object.entries(msg.content)
+            .map(([key, value]) => {
+              let displayValue = typeof value === 'string' ? value : JSON.stringify(value);
+              if (displayValue.length > 150) displayValue = displayValue.substring(0, 150) + '...';
+              return `<div style="font-size:0.8rem;margin-bottom:0.375rem"><span style="font-weight:600">${this.escapeHtml(key)}:</span> <code style="background:var(--color-bg-secondary);padding:0.125rem 0.25rem;border-radius:0.25rem">${this.escapeHtml(displayValue)}</code></div>`;
+            }).join('');
+          contentHtml = `<div class="message-text" style="background:var(--color-bg-secondary);padding:0.75rem;border-radius:0.375rem">${fieldsHtml}</div>`;
+        } else {
+          contentHtml = `<div class="message-text">${this.escapeHtml(String(msg.content))}</div>`;
+        }
       }
 
       return `

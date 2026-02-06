@@ -1,0 +1,22 @@
+## Agent Output Beautification - PRD
+
+### Wave 1: Fix SVG/Icon Sizing (no dependencies)
+- [ ] Add explicit SVG sizing CSS to index.html that constrains all SVGs inside streaming blocks to proper sizes (w-4=1rem, w-5=1.25rem, w-6=1.5rem) since Tailwind utility classes are not loaded
+- [ ] Add missing Tailwind-like utility classes used by streaming-renderer.js (flex, items-center, gap-*, px-*, py-*, rounded-lg, text-xs, font-mono, font-semibold, mb-*, border-*, overflow-*, whitespace-pre-wrap, leading-relaxed, uppercase, tracking-wider, select-none, transition-colors, transition-transform, animate-bounce, animate-spin, flex-shrink-0, grid, grid-cols-2)
+
+### Wave 2: Smart Tool Parameter Rendering (depends on Wave 1 CSS)
+- [ ] Replace renderBlockToolUse JSON.stringify with tool-specific parameter rendering: Read/Glob/Grep show file_path with file icon + breadcrumb path, Bash shows terminal-style command, Edit shows file_path + old/new diff, Write shows file_path + content preview, WebFetch shows URL, WebSearch shows query, TodoWrite shows task list
+- [ ] Replace renderToolUse (backward compat) with same smart parameter rendering
+- [ ] Add result block renderer: renderBlockResult for type=result showing duration, cost, turns in a summary card instead of raw JSON
+- [ ] Update renderBlockToolResult to detect content type: syntax-highlight code output, format JSON output, collapse long output behind details/summary, color error stack traces
+
+### Wave 3: Fix Raw JSON Fallbacks (depends on Wave 2)
+- [ ] Fix renderBlockGeneric to display unknown block types with formatted key-value pairs instead of raw JSON dump
+- [ ] Fix renderGeneric to display unknown event types with formatted key-value pairs instead of raw JSON dump
+- [ ] Fix client.js renderBlockContent fallback (line 471) to format objects instead of JSON.stringify
+- [ ] Fix client.js renderMessageContent fallback (line 711) to format objects instead of JSON.stringify
+- [ ] Fix client.js renderMessages fallback (line 1226) to format objects instead of JSON.stringify
+
+### Wave 4: CSS Consolidation for Streaming Blocks (depends on Wave 1)
+- [ ] Add CSS in index.html for all block-* classes used by streaming-renderer.js (block-text, block-code, block-thinking, block-tool-use, block-tool-result, block-image, block-bash, block-system, block-generic, block-error) with proper colors, borders, backgrounds matching the Tailwind classes used inline
+- [ ] Add dark mode variants for all new block-* CSS classes using html.dark selector

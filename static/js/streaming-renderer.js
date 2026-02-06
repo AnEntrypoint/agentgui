@@ -373,6 +373,8 @@ class StreamingRenderer {
           return this.renderBlockBash(block, context);
         case 'system':
           return this.renderBlockSystem(block, context);
+        case 'result':
+          return this.renderBlockResult(block, context);
         default:
           return this.renderBlockGeneric(block, context);
       }
@@ -387,11 +389,9 @@ class StreamingRenderer {
    */
   renderBlockText(block, context) {
     const div = document.createElement('div');
-    div.className = 'block-text mb-4 p-4 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 leading-relaxed';
+    div.className = 'block-text';
 
     const text = block.text || '';
-
-    // Parse markdown code blocks and links
     const html = this.parseAndRenderMarkdown(text);
     div.innerHTML = html;
 
@@ -428,36 +428,30 @@ class StreamingRenderer {
    */
   renderBlockCode(block, context) {
     const div = document.createElement('div');
-    div.className = 'block-code mb-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800';
+    div.className = 'block-code';
 
     const code = block.code || '';
     const language = (block.language || 'plaintext').toLowerCase();
 
-    // Create header with language badge
     const header = document.createElement('div');
-    header.className = 'flex items-center justify-between gap-2 bg-gray-900 dark:bg-gray-950 px-4 py-3 border-b border-gray-800';
+    header.className = 'code-header';
     header.innerHTML = `
-      <span class="text-xs font-mono text-gray-400 uppercase tracking-wider">${this.escapeHtml(language)}</span>
-      <button class="copy-code-btn text-gray-400 hover:text-gray-200 transition-colors p-1 rounded hover:bg-gray-800" title="Copy code">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-        </svg>
+      <span class="lang-badge">${this.escapeHtml(language)}</span>
+      <button class="copy-code-btn" title="Copy code">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
       </button>
     `;
 
-    // Add copy functionality
     const copyBtn = header.querySelector('.copy-code-btn');
     copyBtn.addEventListener('click', () => {
       navigator.clipboard.writeText(code).then(() => {
-        const originalText = copyBtn.innerHTML;
-        copyBtn.innerHTML = '<svg class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>';
-        setTimeout(() => { copyBtn.innerHTML = originalText; }, 2000);
+        const orig = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<svg viewBox="0 0 20 20" fill="#34d399"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>';
+        setTimeout(() => { copyBtn.innerHTML = orig; }, 2000);
       });
     });
 
-    // Create code container
     const codeContainer = document.createElement('pre');
-    codeContainer.className = 'bg-gray-900 dark:bg-gray-950 text-gray-100 p-4 overflow-x-auto';
     codeContainer.innerHTML = `<code class="language-${this.escapeHtml(language)}">${this.escapeHtml(code)}</code>`;
 
     div.appendChild(header);
@@ -471,20 +465,16 @@ class StreamingRenderer {
    */
   renderBlockThinking(block, context) {
     const div = document.createElement('div');
-    div.className = 'block-thinking mb-4 rounded-lg border-2 border-purple-200 dark:border-purple-800 bg-purple-50 dark:bg-purple-950';
+    div.className = 'block-thinking';
 
     const thinking = block.thinking || '';
     div.innerHTML = `
-      <details class="group">
-        <summary class="px-4 py-3 cursor-pointer flex items-center gap-2 font-semibold text-purple-900 dark:text-purple-200 select-none hover:bg-purple-100 dark:hover:bg-purple-900 transition-colors">
-          <svg class="w-5 h-5 transition-transform group-open:rotate-90" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
-          </svg>
-          <span>Claude's Thinking Process</span>
+      <details>
+        <summary>
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/></svg>
+          <span>Thinking Process</span>
         </summary>
-        <div class="px-4 py-3 border-t border-purple-200 dark:border-purple-800 text-sm text-purple-900 dark:text-purple-200 whitespace-pre-wrap leading-relaxed">
-          ${this.escapeHtml(thinking)}
-        </div>
+        <div class="thinking-content">${this.escapeHtml(thinking)}</div>
       </details>
     `;
 
@@ -492,69 +482,170 @@ class StreamingRenderer {
   }
 
   /**
-   * Render tool use block
+   * Get a tool-specific icon SVG string
+   */
+  getToolIcon(toolName) {
+    const icons = {
+      Read: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/></svg>',
+      Write: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/></svg>',
+      Edit: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z"/><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd"/></svg>',
+      Bash: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 5a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V5zm3.293 1.293a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 01-1.414-1.414L7.586 10 5.293 7.707a1 1 0 010-1.414zM11 12a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>',
+      Glob: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/></svg>',
+      Grep: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>',
+      WebFetch: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM4.332 8.027a6.012 6.012 0 011.912-2.706C6.512 5.73 6.974 6 7.5 6A1.5 1.5 0 019 7.5V8a2 2 0 004 0 2 2 0 012 2v1a2 2 0 01-2 2 2 2 0 01-2 2v.5a6.003 6.003 0 01-6.668-7.473z" clip-rule="evenodd"/></svg>',
+      WebSearch: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg>',
+      TodoWrite: '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 011 1v3.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 111.414-1.414L6 11.586V8a1 1 0 011-1z" clip-rule="evenodd"/></svg>',
+      Task: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>',
+      NotebookEdit: '<svg viewBox="0 0 20 20" fill="currentColor"><path d="M9 4.804A7.968 7.968 0 005.5 4c-1.255 0-2.443.29-3.5.804v10A7.969 7.969 0 015.5 14c1.669 0 3.218.51 4.5 1.385A7.962 7.962 0 0114.5 14c1.255 0 2.443.29 3.5.804v-10A7.968 7.968 0 0014.5 4c-1.255 0-2.443.29-3.5.804V12a1 1 0 11-2 0V4.804z"/></svg>'
+    };
+    return icons[toolName] || '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10.666a1 1 0 11-1.64-1.118L9.687 10H5a1 1 0 01-.82-1.573l7-10.666a1 1 0 011.12-.373z" clip-rule="evenodd"/></svg>';
+  }
+
+  /**
+   * Render a file path with icon, directory breadcrumb, and filename
+   */
+  renderFilePath(filePath) {
+    if (!filePath) return '';
+    const parts = filePath.split('/');
+    const fileName = parts.pop();
+    const dir = parts.join('/');
+    return `<div class="tool-param-file"><span class="file-icon">&#128196;</span>${dir ? `<span class="file-dir">${this.escapeHtml(dir)}/</span>` : ''}<span class="file-name">${this.escapeHtml(fileName)}</span></div>`;
+  }
+
+  /**
+   * Render smart tool parameters based on tool type
+   */
+  renderSmartParams(toolName, input) {
+    if (!input || Object.keys(input).length === 0) return '';
+
+    const normalizedName = toolName.replace(/^mcp__[^_]+__/, '');
+
+    switch (normalizedName) {
+      case 'Read':
+        return `<div class="tool-params">${this.renderFilePath(input.file_path)}${input.offset ? `<div style="margin-top:0.375rem;font-size:0.75rem;color:var(--color-text-secondary)">Lines ${input.offset}${input.limit ? '–' + (input.offset + input.limit) : '+'}</div>` : ''}</div>`;
+
+      case 'Write':
+        return `<div class="tool-params">${this.renderFilePath(input.file_path)}${input.content ? this.renderContentPreview(input.content, 'Content') : ''}</div>`;
+
+      case 'Edit': {
+        let html = `<div class="tool-params">${this.renderFilePath(input.file_path)}`;
+        if (input.old_string || input.new_string) {
+          html += `<div class="tool-param-diff" style="margin-top:0.5rem">`;
+          if (input.old_string) {
+            html += `<div class="diff-header">Remove</div><div class="diff-old">${this.escapeHtml(this.truncateContent(input.old_string, 500))}</div>`;
+          }
+          if (input.new_string) {
+            html += `<div class="diff-header">Add</div><div class="diff-new">${this.escapeHtml(this.truncateContent(input.new_string, 500))}</div>`;
+          }
+          html += '</div>';
+        }
+        return html + '</div>';
+      }
+
+      case 'Bash': {
+        const cmd = input.command || input.commands || '';
+        const cmdText = typeof cmd === 'string' ? cmd : JSON.stringify(cmd);
+        let html = `<div class="tool-params"><div class="tool-param-command"><span class="prompt-char">$</span><span class="command-text">${this.escapeHtml(cmdText)}</span></div>`;
+        if (input.description) html += `<div style="margin-top:0.375rem;font-size:0.75rem;color:var(--color-text-secondary)">${this.escapeHtml(input.description)}</div>`;
+        return html + '</div>';
+      }
+
+      case 'Glob':
+        return `<div class="tool-params"><div class="tool-param-query"><span class="query-icon">&#128193;</span><code style="font-size:0.85rem">${this.escapeHtml(input.pattern || '')}</code></div>${input.path ? `<div style="margin-top:0.25rem;font-size:0.75rem;color:var(--color-text-secondary)">in ${this.escapeHtml(input.path)}</div>` : ''}</div>`;
+
+      case 'Grep':
+        return `<div class="tool-params"><div class="tool-param-query"><span class="query-icon">&#128269;</span><code style="font-size:0.85rem">${this.escapeHtml(input.pattern || '')}</code></div>${input.path ? `<div style="margin-top:0.25rem;font-size:0.75rem;color:var(--color-text-secondary)">in ${this.escapeHtml(input.path)}</div>` : ''}${input.glob ? `<div style="margin-top:0.125rem;font-size:0.7rem;color:var(--color-text-secondary)">files: ${this.escapeHtml(input.glob)}</div>` : ''}</div>`;
+
+      case 'WebFetch':
+        return `<div class="tool-params"><div class="tool-param-url"><span class="url-icon">&#127760;</span>${this.escapeHtml(input.url || '')}</div>${input.prompt ? `<div style="margin-top:0.375rem;font-size:0.8rem;color:var(--color-text-secondary)">${this.escapeHtml(this.truncateContent(input.prompt, 150))}</div>` : ''}</div>`;
+
+      case 'WebSearch':
+        return `<div class="tool-params"><div class="tool-param-query"><span class="query-icon">&#128269;</span><strong style="font-size:0.85rem">${this.escapeHtml(input.query || '')}</strong></div></div>`;
+
+      case 'TodoWrite':
+        if (input.todos && Array.isArray(input.todos)) {
+          const statusIcons = { completed: '&#9989;', in_progress: '&#9881;', pending: '&#9744;' };
+          const items = input.todos.map(t => `<div class="todo-item"><span class="todo-status">${statusIcons[t.status] || '&#9744;'}</span><span class="todo-text">${this.escapeHtml(t.content || '')}</span></div>`).join('');
+          return `<div class="tool-params"><div class="tool-param-todos">${items}</div></div>`;
+        }
+        return this.renderJsonParams(input);
+
+      case 'Task':
+        return `<div class="tool-params">${input.description ? `<div style="font-weight:600;font-size:0.85rem;margin-bottom:0.375rem">${this.escapeHtml(input.description)}</div>` : ''}${input.prompt ? `<div style="font-size:0.8rem;color:var(--color-text-secondary);max-height:100px;overflow-y:auto;white-space:pre-wrap;word-break:break-word">${this.escapeHtml(this.truncateContent(input.prompt, 300))}</div>` : ''}${input.subagent_type ? `<div style="margin-top:0.375rem;font-size:0.7rem"><code style="background:var(--color-bg-secondary);padding:0.125rem 0.375rem;border-radius:0.25rem">${this.escapeHtml(input.subagent_type)}</code></div>` : ''}</div>`;
+
+      case 'NotebookEdit':
+        return `<div class="tool-params">${this.renderFilePath(input.notebook_path)}${input.new_source ? this.renderContentPreview(input.new_source, 'Cell content') : ''}</div>`;
+
+      default:
+        return this.renderJsonParams(input);
+    }
+  }
+
+  /**
+   * Render content preview with truncation
+   */
+  renderContentPreview(content, label) {
+    const maxLen = 500;
+    const truncated = content.length > maxLen;
+    const displayContent = truncated ? content.substring(0, maxLen) : content;
+    const lineCount = content.split('\n').length;
+    return `<div class="tool-param-content-preview" style="margin-top:0.5rem"><div class="preview-header"><span>${this.escapeHtml(label)}</span><span style="font-weight:400">${lineCount} lines${truncated ? ' (truncated)' : ''}</span></div><div class="preview-body">${this.escapeHtml(displayContent)}</div>${truncated ? '<div class="preview-truncated">... ' + (content.length - maxLen) + ' more characters</div>' : ''}</div>`;
+  }
+
+  /**
+   * Render params as formatted JSON (default fallback for unknown tools)
+   */
+  renderJsonParams(input) {
+    return `<div class="tool-params"><div class="tool-param-json"><pre>${this.escapeHtml(JSON.stringify(input, null, 2))}</pre></div></div>`;
+  }
+
+  /**
+   * Render tool use block with smart parameter display
    */
   renderBlockToolUse(block, context) {
     const div = document.createElement('div');
-    div.className = 'block-tool-use mb-4 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950 overflow-hidden';
+    div.className = 'block-tool-use';
 
     const toolName = block.name || 'unknown';
     const input = block.input || {};
 
     div.innerHTML = `
-      <div class="px-4 py-3 border-b border-cyan-200 dark:border-cyan-800 flex items-center gap-2 bg-cyan-100 dark:bg-cyan-900">
-        <svg class="w-5 h-5 text-cyan-600 dark:text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10.666a1 1 0 11-1.64-1.118L9.687 10H5a1 1 0 01-.82-1.573l7-10.666a1 1 0 011.12-.373zM14.6 15.477l-5.223-7.912h-3.5l5.223 7.912h3.5z" clip-rule="evenodd"></path>
-        </svg>
-        <span class="font-semibold text-cyan-900 dark:text-cyan-200">Tool: <code class="font-mono bg-cyan-200 dark:bg-cyan-800 px-2 py-1 rounded text-sm">${this.escapeHtml(toolName)}</code></span>
+      <div class="tool-header">
+        <span class="tool-icon">${this.getToolIcon(toolName)}</span>
+        <span class="tool-name"><code>${this.escapeHtml(toolName)}</code></span>
       </div>
-      ${Object.keys(input).length > 0 ? `
-        <div class="px-4 py-3">
-          <div class="text-xs uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-semibold mb-2">Parameters:</div>
-          <pre class="bg-white dark:bg-gray-900 p-3 rounded border border-cyan-200 dark:border-cyan-800 text-xs overflow-x-auto"><code class="language-json">${this.escapeHtml(JSON.stringify(input, null, 2))}</code></pre>
-        </div>
-      ` : '<div class="px-4 py-2 text-sm text-cyan-700 dark:text-cyan-400">No parameters</div>'}
+      ${Object.keys(input).length > 0 ? this.renderSmartParams(toolName, input) : ''}
     `;
 
     return div;
   }
 
   /**
-   * Render tool result block
+   * Render tool result block with smart content display
    */
   renderBlockToolResult(block, context) {
     const div = document.createElement('div');
     const isError = block.is_error || false;
-    const className = isError
-      ? 'block-tool-result mb-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 overflow-hidden'
-      : 'block-tool-result mb-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 overflow-hidden';
-
-    div.className = className;
+    div.className = `block-tool-result ${isError ? 'result-error' : 'result-success'}`;
 
     const content = block.content || '';
+    const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
     const toolUseId = block.tool_use_id || '';
-    const statusColor = isError ? 'red' : 'green';
+    const isLong = contentStr.length > 1500;
+
+    const iconSvg = isError
+      ? '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>'
+      : '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>';
+
+    const displayContent = isLong ? contentStr.substring(0, 1500) : contentStr;
 
     div.innerHTML = `
-      <div class="px-4 py-3 border-b border-${statusColor}-200 dark:border-${statusColor}-800 flex items-center justify-between bg-${statusColor}-100 dark:bg-${statusColor}-900">
-        <div class="flex items-center gap-2">
-          ${isError ? `
-            <svg class="w-5 h-5 text-${statusColor}-600 dark:text-${statusColor}-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
-            </svg>
-            <span class="font-semibold text-${statusColor}-900 dark:text-${statusColor}-200">Error</span>
-          ` : `
-            <svg class="w-5 h-5 text-${statusColor}-600 dark:text-${statusColor}-400" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
-            </svg>
-            <span class="font-semibold text-${statusColor}-900 dark:text-${statusColor}-200">Success</span>
-          `}
-        </div>
-        ${toolUseId ? `<code class="text-xs text-${statusColor}-700 dark:text-${statusColor}-300">${this.escapeHtml(toolUseId)}</code>` : ''}
+      <div class="result-header">
+        <span class="status-label">${iconSvg} ${isError ? 'Error' : 'Success'}</span>
+        ${toolUseId ? `<span class="result-id">${this.escapeHtml(toolUseId)}</span>` : ''}
       </div>
-      <div class="px-4 py-3 text-sm text-${statusColor}-900 dark:text-${statusColor}-200 whitespace-pre-wrap leading-relaxed overflow-x-auto">
-        ${this.escapeHtml(typeof content === 'string' ? content : JSON.stringify(content, null, 2))}
-      </div>
+      <div class="result-body${isLong ? ' collapsed' : ''}">${this.escapeHtml(displayContent)}</div>
+      ${isLong ? '<button class="expand-btn" onclick="this.previousElementSibling.classList.toggle(\'collapsed\');this.textContent=this.textContent===\'Show more\'?\'Show less\':\'Show more\'">Show more</button>' : ''}
     `;
 
     return div;
@@ -565,14 +656,19 @@ class StreamingRenderer {
    */
   renderBlockImage(block, context) {
     const div = document.createElement('div');
-    div.className = 'block-image mb-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800';
+    div.className = 'block-image';
 
-    const src = block.image || block.src || '';
+    let src = block.image || block.src || '';
     const alt = block.alt || 'Image';
 
+    // Handle base64 data
+    if (block.data && block.media_type) {
+      src = `data:${block.media_type};base64,${block.data}`;
+    }
+
     div.innerHTML = `
-      <img src="${this.escapeHtml(src)}" alt="${this.escapeHtml(alt)}" class="w-full h-auto max-h-96 object-cover">
-      ${block.alt ? `<div class="px-4 py-2 bg-gray-50 dark:bg-gray-900 text-sm text-gray-700 dark:text-gray-300">${this.escapeHtml(alt)}</div>` : ''}
+      <img src="${this.escapeHtml(src)}" alt="${this.escapeHtml(alt)}" loading="lazy">
+      ${block.alt ? `<div class="image-caption">${this.escapeHtml(alt)}</div>` : ''}
     `;
 
     return div;
@@ -583,19 +679,14 @@ class StreamingRenderer {
    */
   renderBlockBash(block, context) {
     const div = document.createElement('div');
-    div.className = 'block-bash mb-4 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800 bg-gray-900 dark:bg-gray-950';
+    div.className = 'block-bash';
 
     const command = block.command || block.code || '';
     const output = block.output || '';
 
     div.innerHTML = `
-      <div class="px-4 py-3 border-b border-gray-700 flex items-center gap-2">
-        <span class="text-green-400 font-semibold">$</span>
-        <code class="font-mono text-gray-200 text-sm overflow-x-auto w-full">${this.escapeHtml(command)}</code>
-      </div>
-      ${output ? `
-        <pre class="px-4 py-3 text-gray-300 text-sm overflow-x-auto"><code>${this.escapeHtml(output)}</code></pre>
-      ` : ''}
+      <div class="bash-command"><span class="prompt">$</span><code>${this.escapeHtml(command)}</code></div>
+      ${output ? `<pre class="bash-output"><code>${this.escapeHtml(output)}</code></pre>` : ''}
     `;
 
     return div;
@@ -606,24 +697,15 @@ class StreamingRenderer {
    */
   renderBlockSystem(block, context) {
     const div = document.createElement('div');
-    div.className = 'block-system mb-4 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950 overflow-hidden';
+    div.className = 'block-system';
 
     div.innerHTML = `
-      <div class="px-4 py-3 bg-indigo-100 dark:bg-indigo-900 border-b border-indigo-200 dark:border-indigo-800">
-        <h4 class="font-semibold text-indigo-900 dark:text-indigo-200">Session Information</h4>
-      </div>
-      <div class="px-4 py-3 text-sm text-indigo-900 dark:text-indigo-200">
-        ${block.model ? `<div class="mb-2"><strong>Model:</strong> ${this.escapeHtml(block.model)}</div>` : ''}
-        ${block.cwd ? `<div class="mb-2"><strong>Directory:</strong> <code class="bg-indigo-200 dark:bg-indigo-800 px-1 rounded">${this.escapeHtml(block.cwd)}</code></div>` : ''}
-        ${block.session_id ? `<div class="mb-2"><strong>Session:</strong> <code class="bg-indigo-200 dark:bg-indigo-800 px-1 rounded text-xs">${this.escapeHtml(block.session_id)}</code></div>` : ''}
-        ${block.tools && Array.isArray(block.tools) ? `
-          <div class="mb-2">
-            <strong>Available Tools:</strong>
-            <div class="mt-1 flex flex-wrap gap-1">
-              ${block.tools.map(t => `<span class="badge badge-xs bg-indigo-200 dark:bg-indigo-800 text-indigo-900 dark:text-indigo-200">${this.escapeHtml(t)}</span>`).join('')}
-            </div>
-          </div>
-        ` : ''}
+      <div class="system-header">Session Information</div>
+      <div class="system-body">
+        ${block.model ? `<div class="sys-field"><span class="sys-label">Model</span><span class="sys-value"><code>${this.escapeHtml(block.model)}</code></span></div>` : ''}
+        ${block.cwd ? `<div class="sys-field"><span class="sys-label">Directory</span><span class="sys-value"><code>${this.escapeHtml(block.cwd)}</code></span></div>` : ''}
+        ${block.session_id ? `<div class="sys-field"><span class="sys-label">Session</span><span class="sys-value"><code>${this.escapeHtml(block.session_id)}</code></span></div>` : ''}
+        ${block.tools && Array.isArray(block.tools) ? `<div class="sys-field" style="flex-direction:column;gap:0.375rem"><span class="sys-label">Tools (${block.tools.length})</span><div class="tools-list">${block.tools.map(t => `<span class="tool-badge">${this.escapeHtml(t)}</span>`).join('')}</div></div>` : ''}
       </div>
     `;
 
@@ -631,15 +713,61 @@ class StreamingRenderer {
   }
 
   /**
-   * Render generic block
+   * Render result block (execution summary)
+   */
+  renderBlockResult(block, context) {
+    const div = document.createElement('div');
+    const isError = block.is_error || false;
+    div.className = `block-result ${isError ? 'result-err' : 'result-ok'}`;
+
+    const duration = block.duration_ms ? (block.duration_ms / 1000).toFixed(1) + 's' : '';
+    const cost = block.total_cost_usd ? '$' + block.total_cost_usd.toFixed(4) : '';
+    const turns = block.num_turns || '';
+
+    div.innerHTML = `
+      <div class="result-summary-header">
+        ${isError
+          ? '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/></svg>'
+          : '<svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>'}
+        <span class="result-title">${isError ? 'Execution Failed' : 'Execution Complete'}</span>
+      </div>
+      <div class="result-stats">
+        ${duration ? `<div class="result-stat"><span class="stat-icon">&#9202;</span><span class="stat-value">${this.escapeHtml(duration)}</span><span class="stat-label">duration</span></div>` : ''}
+        ${cost ? `<div class="result-stat"><span class="stat-icon">&#128176;</span><span class="stat-value">${this.escapeHtml(cost)}</span><span class="stat-label">cost</span></div>` : ''}
+        ${turns ? `<div class="result-stat"><span class="stat-icon">&#128260;</span><span class="stat-value">${this.escapeHtml(String(turns))}</span><span class="stat-label">turns</span></div>` : ''}
+      </div>
+      ${block.result ? `<div class="result-content">${this.escapeHtml(typeof block.result === 'string' ? block.result : JSON.stringify(block.result, null, 2))}</div>` : ''}
+    `;
+
+    return div;
+  }
+
+  /**
+   * Render generic block with formatted key-value pairs
    */
   renderBlockGeneric(block, context) {
     const div = document.createElement('div');
-    div.className = 'block-generic mb-4 p-4 rounded-lg border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900';
+    div.className = 'block-generic';
+
+    // Show key-value pairs instead of raw JSON
+    const fieldsHtml = Object.entries(block)
+      .filter(([key]) => key !== 'type')
+      .map(([key, value]) => {
+        let displayValue;
+        if (typeof value === 'string') {
+          displayValue = value.length > 200 ? value.substring(0, 200) + '...' : value;
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          displayValue = String(value);
+        } else {
+          displayValue = JSON.stringify(value, null, 2);
+          if (displayValue.length > 200) displayValue = displayValue.substring(0, 200) + '...';
+        }
+        return `<div class="generic-field"><span class="field-key">${this.escapeHtml(key)}:</span><span class="field-value">${this.escapeHtml(displayValue)}</span></div>`;
+      }).join('');
 
     div.innerHTML = `
-      <div class="text-xs uppercase tracking-wider text-gray-600 dark:text-gray-400 font-semibold mb-2">${this.escapeHtml(block.type)}</div>
-      <pre class="text-xs overflow-x-auto bg-white dark:bg-gray-950 p-3 rounded border border-gray-200 dark:border-gray-800"><code>${this.escapeHtml(JSON.stringify(block, null, 2))}</code></pre>
+      <div class="generic-type">${this.escapeHtml(block.type)}</div>
+      <div class="generic-fields">${fieldsHtml}</div>
     `;
 
     return div;
@@ -650,16 +778,16 @@ class StreamingRenderer {
    */
   renderBlockError(block, error) {
     const div = document.createElement('div');
-    div.className = 'block-error mb-4 p-4 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950';
+    div.className = 'block-error';
 
     div.innerHTML = `
-      <div class="flex items-start gap-3">
-        <svg class="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+      <div style="display:flex;align-items:flex-start;gap:0.625rem">
+        <svg viewBox="0 0 20 20" fill="currentColor" style="color:#ef4444;flex-shrink:0;margin-top:0.125rem">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
         </svg>
-        <div class="flex-1">
-          <h4 class="font-semibold text-red-900 dark:text-red-200">Block Render Error</h4>
-          <p class="text-sm text-red-800 dark:text-red-300 mt-1">${this.escapeHtml(error.message)}</p>
+        <div>
+          <div style="font-weight:600;color:#991b1b">Render Error</div>
+          <div style="font-size:0.85rem;color:#7f1d1d;margin-top:0.25rem">${this.escapeHtml(error.message)}</div>
         </div>
       </div>
     `;
@@ -1053,33 +1181,21 @@ class StreamingRenderer {
    * Render tool use event - for backward compatibility
    */
   renderToolUse(event) {
-    const div = document.createElement('div');
-    div.className = 'event-tool-use mb-3 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50 dark:bg-cyan-950 overflow-hidden';
+    // Use the new block-based renderer for consistency
+    const block = {
+      type: 'tool_use',
+      name: event.toolName || event.tool || 'unknown',
+      input: event.input || {}
+    };
+    const div = this.renderBlockToolUse(block, event);
+    div.className = 'event-tool-use mb-3';
     div.dataset.eventId = event.id || '';
     div.dataset.eventType = 'tool_use';
-
-    const toolName = event.toolName || event.tool || 'unknown';
-    const input = event.input || {};
-
-    div.innerHTML = `
-      <div class="px-4 py-3 border-b border-cyan-200 dark:border-cyan-800 flex items-center gap-2 bg-cyan-100 dark:bg-cyan-900">
-        <svg class="w-5 h-5 text-cyan-600 dark:text-cyan-400" fill="currentColor" viewBox="0 0 20 20">
-          <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10.666a1 1 0 11-1.64-1.118L9.687 10H5a1 1 0 01-.82-1.573l7-10.666a1 1 0 011.12-.373zM14.6 15.477l-5.223-7.912h-3.5l5.223 7.912h3.5z" clip-rule="evenodd"></path>
-        </svg>
-        <span class="font-semibold text-cyan-900 dark:text-cyan-200">Tool Call: <code class="font-mono bg-cyan-200 dark:bg-cyan-800 px-2 py-1 rounded text-sm">${this.escapeHtml(toolName)}</code></span>
-      </div>
-      ${Object.keys(input).length > 0 ? `
-        <div class="px-4 py-3">
-          <div class="text-xs uppercase tracking-wider text-cyan-700 dark:text-cyan-400 font-semibold mb-2">Input Parameters:</div>
-          <pre class="bg-white dark:bg-gray-900 p-3 rounded border border-cyan-200 dark:border-cyan-800 text-xs overflow-x-auto"><code class="language-json">${this.escapeHtml(JSON.stringify(input, null, 2))}</code></pre>
-        </div>
-      ` : '<div class="px-4 py-2 text-sm text-cyan-700 dark:text-cyan-400">No input parameters</div>'}
-    `;
     return div;
   }
 
   /**
-   * Render generic event
+   * Render generic event with formatted key-value pairs
    */
   renderGeneric(event) {
     const div = document.createElement('div');
@@ -1088,12 +1204,31 @@ class StreamingRenderer {
     div.dataset.eventType = event.type;
 
     const time = new Date(event.timestamp).toLocaleTimeString();
+
+    // Format event data as key-value pairs
+    const fieldsHtml = Object.entries(event)
+      .filter(([key]) => !['type', 'timestamp'].includes(key))
+      .map(([key, value]) => {
+        let displayValue;
+        if (typeof value === 'string') {
+          displayValue = value.length > 100 ? value.substring(0, 100) + '...' : value;
+        } else if (typeof value === 'number' || typeof value === 'boolean') {
+          displayValue = String(value);
+        } else if (value === null) {
+          displayValue = 'null';
+        } else {
+          displayValue = JSON.stringify(value);
+          if (displayValue.length > 100) displayValue = displayValue.substring(0, 100) + '...';
+        }
+        return `<div style="font-size:0.75rem;margin-bottom:0.25rem"><span style="font-weight:600;color:var(--color-text-secondary)">${this.escapeHtml(key)}:</span> <span style="font-family:'Monaco','Menlo','Ubuntu Mono',monospace">${this.escapeHtml(displayValue)}</span></div>`;
+      }).join('');
+
     div.innerHTML = `
-      <div class="flex items-center justify-between mb-2">
-        <span class="font-semibold text-gray-900 dark:text-gray-100">${this.escapeHtml(event.type)}</span>
-        <span class="text-xs text-gray-600 dark:text-gray-400">${time}</span>
+      <div style="display:flex;justify-content:space-between;margin-bottom:0.5rem">
+        <span style="font-weight:600;color:var(--color-text-primary)">${this.escapeHtml(event.type)}</span>
+        <span style="font-size:0.75rem;color:var(--color-text-secondary)">${time}</span>
       </div>
-      <pre class="text-xs overflow-x-auto"><code>${this.escapeHtml(JSON.stringify(event, null, 2))}</code></pre>
+      <div>${fieldsHtml || '<span style="color:var(--color-text-secondary);font-size:0.75rem">No additional data</span>'}</div>
     `;
     return div;
   }
