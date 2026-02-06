@@ -383,6 +383,20 @@ const outputs = await runClaudeWithStreaming(prompt, cwd, agentId, config);
 - WCAG AA accessibility compliance
 - Dark mode support with CSS custom properties
 
+### ✅ Advanced Event Rendering System
+- **Text blocks** with markdown support (bold, italic, inline code, links)
+- **Code blocks** with syntax highlighting and copy buttons
+- **Thinking blocks** expandable sections for Claude's reasoning
+- **Tool use blocks** with formatted parameters
+- **Tool result blocks** with success/error status
+- **Bash blocks** with command and output formatting
+- **System blocks** with session metadata and tools list
+- **Image blocks** with responsive sizing and captions
+- **Streaming events** with animated indicators
+- **Semantic HTML** with proper accessibility
+- **Dark mode** with automatic color adaptation
+- **Copy functionality** for code with visual feedback
+
 ### ✅ Real-Time Streaming Visualization
 - Progress bar with percentage and event counter
 - Real-time event display as JSON parsed
@@ -418,6 +432,74 @@ const outputs = await runClaudeWithStreaming(prompt, cwd, agentId, config);
 - Event broadcasting to all clients
 - Session-based filtering
 - Ping/pong keepalive
+
+---
+
+## Event Rendering System
+
+The agentgui interface features a sophisticated HTML rendering system for displaying Claude events with beautiful, semantic styling.
+
+### Block Types Supported
+
+Each Claude message block type has dedicated rendering with optimized styling:
+
+| Type | Styling | Features |
+|------|---------|----------|
+| **text** | White bg, gray border | Markdown (bold, italic, links, inline code) |
+| **code** | Dark theme | Language badge, copy button, syntax highlighting |
+| **thinking** | Purple, expandable | Hidden by default, arrow animation on expand |
+| **tool_use** | Cyan highlight | Tool name badge, formatted JSON parameters |
+| **tool_result** | Green/Red | Success/error status, result content display |
+| **bash** | Terminal style | Green prompt, monospace command and output |
+| **system** | Indigo, table | Model, directory, session ID, tools list |
+| **image** | Responsive | Max height constraint, optional caption |
+
+### Rendering Pipeline
+
+```
+Claude Streaming Event
+    ↓
+WebSocket Broadcast (streaming_progress)
+    ↓
+renderEvent() / renderBlock()
+    ↓
+Specific Handler (renderBlockText, renderBlockCode, etc.)
+    ↓
+Semantic HTML with Tailwind Classes
+    ↓
+DOM Fragment → Batch Rendering
+    ↓
+Auto-scroll to Latest Content
+```
+
+### Key Rendering Features
+
+1. **Semantic HTML** - Proper use of elements for accessibility
+2. **Dark Mode** - CSS variables for automatic theme switching
+3. **Markdown Support** - Bold, italic, inline code, links in text blocks
+4. **Code Highlighting** - Language detection, syntax coloring
+5. **Copy Buttons** - One-click clipboard for code blocks
+6. **Expandable Sections** - Details/summary for thinking blocks
+7. **Error Handling** - Graceful fallback for unknown block types
+8. **Performance** - Batch processing, document fragments, virtual scrolling
+
+### Implementation Location
+
+Main implementation: `static/js/streaming-renderer.js`
+- `renderEvent()` - Routes broadcast events
+- `renderBlock()` - Routes message blocks
+- `renderBlockText()` - Text with markdown
+- `renderBlockCode()` - Syntax highlighted code
+- `renderBlockThinking()` - Expandable thinking
+- `renderBlockToolUse()` - Tool invocation
+- `renderBlockToolResult()` - Tool output
+- `renderBlockBash()` - Shell commands
+- `renderBlockSystem()` - Session info
+- `renderBlockImage()` - Responsive images
+
+### Showcase
+
+View complete rendered examples at `/gm/event-rendering-showcase.html`
 
 ---
 
