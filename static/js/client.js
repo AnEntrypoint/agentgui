@@ -726,7 +726,14 @@ class AgentGUIClient {
         if (msg.content.blocks && Array.isArray(msg.content.blocks)) {
           msg.content.blocks.forEach(block => {
             if (block.type === 'text') {
-              contentHtml += `<div class="message-text">${this.escapeHtml(block.text)}</div>`;
+              const parts = this.parseMarkdownCodeBlocks(block.text);
+              parts.forEach(part => {
+                if (part.type === 'text') {
+                  contentHtml += `<div class="message-text">${this.escapeHtml(part.content)}</div>`;
+                } else if (part.type === 'code') {
+                  contentHtml += this.renderCodeBlock(part.language, part.code);
+                }
+              });
             } else if (block.type === 'code_block') {
               // Render HTML code blocks as actual HTML elements
               if (block.language === 'html') {

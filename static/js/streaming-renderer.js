@@ -570,6 +570,34 @@ class StreamingRenderer {
   }
 
   /**
+   * Parse markdown code blocks from text
+   */
+  parseMarkdownCodeBlocks(text) {
+    const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(text)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', content: text.substring(lastIndex, match.index) });
+      }
+      parts.push({ type: 'code', language: match[1] || 'plain', code: match[2] });
+      lastIndex = codeBlockRegex.lastIndex;
+    }
+
+    if (lastIndex < text.length) {
+      parts.push({ type: 'text', content: text.substring(lastIndex) });
+    }
+
+    if (parts.length === 0) {
+      return [{ type: 'text', content: text }];
+    }
+
+    return parts;
+  }
+
+  /**
    * Render text block event
    */
   renderText(event) {
@@ -579,7 +607,21 @@ class StreamingRenderer {
     div.dataset.eventType = 'text_block';
 
     const text = event.text || event.content || '';
-    div.innerHTML = `<p class="text-sm leading-relaxed">${this.escapeHtml(text)}</p>`;
+    const parts = this.parseMarkdownCodeBlocks(text);
+    let html = '';
+    parts.forEach(part => {
+      if (part.type === 'text') {
+        html += `<p class="text-sm leading-relaxed">${this.escapeHtml(part.content)}</p>`;
+      } else if (part.type === 'code') {
+        if (part.language.toLowerCase() === 'html') {
+          html += `<div class="html-rendered-label mb-2 p-2 bg-blue-50 rounded border text-xs" style="color:#1d4ed8;background:#eff6ff;border-color:#bfdbfe;">Rendered HTML</div>`;
+          html += `<div class="html-content bg-white p-4 rounded border overflow-x-auto" style="background:#fff;border-color:#e5e7eb;">${part.code}</div>`;
+        } else {
+          html += `<pre class="bg-gray-900 text-gray-100 p-4 rounded overflow-x-auto"><code>${this.escapeHtml(part.code)}</code></pre>`;
+        }
+      }
+    });
+    div.innerHTML = html;
     return div;
   }
 
