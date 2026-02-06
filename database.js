@@ -105,6 +105,22 @@ function initSchema() {
 
     CREATE INDEX IF NOT EXISTS idx_stream_updates_session ON stream_updates(sessionId);
     CREATE INDEX IF NOT EXISTS idx_stream_updates_created ON stream_updates(created_at);
+
+    CREATE TABLE IF NOT EXISTS chunks (
+      id TEXT PRIMARY KEY,
+      sessionId TEXT NOT NULL,
+      conversationId TEXT NOT NULL,
+      sequence INTEGER NOT NULL,
+      type TEXT NOT NULL,
+      data BLOB NOT NULL,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (sessionId) REFERENCES sessions(id),
+      FOREIGN KEY (conversationId) REFERENCES conversations(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_chunks_session ON chunks(sessionId, sequence);
+    CREATE INDEX IF NOT EXISTS idx_chunks_conversation ON chunks(conversationId, sequence);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_unique ON chunks(sessionId, sequence);
   `);
 }
 
@@ -883,6 +899,111 @@ export const queries = {
     }
 
     return imported;
+  },
+
+  createChunk(sessionId, conversationId, sequence, type, data) {
+    const id = generateId('chunk');
+    const now = Date.now();
+    const dataBlob = typeof data === 'string' ? data : JSON.stringify(data);
+
+    const stmt = db.prepare(
+      `INSERT INTO chunks (id, sessionId, conversationId, sequence, type, data, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    stmt.run(id, sessionId, conversationId, sequence, type, dataBlob, now);
+
+    return {
+      id,
+      sessionId,
+      conversationId,
+      sequence,
+      type,
+      data,
+      created_at: now
+    };
+  },
+
+  getChunk(id) {
+    const stmt = db.prepare(
+      `SELECT id, sessionId, conversationId, sequence, type, data, created_at FROM chunks WHERE id = ?`
+    );
+    const row = stmt.get(id);
+    if (!row) return null;
+
+    try {
+      return {
+        ...row,
+        data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+      };
+    } catch (e) {
+      return row;
+    }
+  },
+
+  getSessionChunks(sessionId) {
+    const stmt = db.prepare(
+      `SELECT id, sessionId, conversationId, sequence, type, data, created_at
+       FROM chunks WHERE sessionId = ? ORDER BY sequence ASC`
+    );
+    const rows = stmt.all(sessionId);
+    return rows.map(row => {
+      try {
+        return {
+          ...row,
+          data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+        };
+      } catch (e) {
+        return row;
+      }
+    });
+  },
+
+  getConversationChunks(conversationId) {
+    const stmt = db.prepare(
+      `SELECT id, sessionId, conversationId, sequence, type, data, created_at
+       FROM chunks WHERE conversationId = ? ORDER BY created_at ASC`
+    );
+    const rows = stmt.all(conversationId);
+    return rows.map(row => {
+      try {
+        return {
+          ...row,
+          data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+        };
+      } catch (e) {
+        return row;
+      }
+    });
+  },
+
+  getChunksSince(sessionId, timestamp) {
+    const stmt = db.prepare(
+      `SELECT id, sessionId, conversationId, sequence, type, data, created_at
+       FROM chunks WHERE sessionId = ? AND created_at > ? ORDER BY sequence ASC`
+    );
+    const rows = stmt.all(sessionId, timestamp);
+    return rows.map(row => {
+      try {
+        return {
+          ...row,
+          data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+        };
+      } catch (e) {
+        return row;
+      }
+    });
+  },
+
+  deleteSessionChunks(sessionId) {
+    const stmt = db.prepare('DELETE FROM chunks WHERE sessionId = ?');
+    const result = stmt.run(sessionId);
+    return result.changes || 0;
+  },
+
+  getMaxSequence(sessionId) {
+    const stmt = db.prepare('SELECT MAX(sequence) as max FROM chunks WHERE sessionId = ?');
+    const result = stmt.get(sessionId);
+    return result?.max ?? -1;
   }
 };
 

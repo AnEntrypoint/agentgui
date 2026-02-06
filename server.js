@@ -292,6 +292,38 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const conversationChunksMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/chunks$/);
+    if (conversationChunksMatch && req.method === 'GET') {
+      const conversationId = conversationChunksMatch[1];
+      const conv = queries.getConversation(conversationId);
+      if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Conversation not found' })); return; }
+
+      const url = new URL(req.url, 'http://localhost');
+      const since = parseInt(url.searchParams.get('since') || '0');
+
+      const allChunks = queries.getConversationChunks(conversationId);
+      debugLog(`[chunks] Conv ${conversationId}: ${allChunks.length} total chunks`);
+      const chunks = since > 0 ? allChunks.filter(c => c.created_at > since) : allChunks;
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, chunks }));
+      return;
+    }
+
+    const sessionChunksMatch = pathOnly.match(/^\/api\/sessions\/([^/]+)\/chunks$/);
+    if (sessionChunksMatch && req.method === 'GET') {
+      const sessionId = sessionChunksMatch[1];
+      const sess = queries.getSession(sessionId);
+      if (!sess) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Session not found' })); return; }
+
+      const url = new URL(req.url, 'http://localhost');
+      const since = parseInt(url.searchParams.get('since') || '0');
+
+      const chunks = queries.getChunksSince(sessionId, since);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, chunks }));
+      return;
+    }
+
     if (pathOnly.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/) && req.method === 'GET') {
       const convId = pathOnly.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/)[1];
       const latestSession = queries.getLatestSession(convId);
@@ -459,6 +491,31 @@ function serveFile(filePath, res) {
   });
 }
 
+function persistChunkWithRetry(sessionId, conversationId, sequence, blockType, blockData, maxRetries = 3) {
+  let lastError = null;
+  const backoffs = [100, 200, 400];
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const chunk = queries.createChunk(sessionId, conversationId, sequence, blockType, blockData);
+      return chunk;
+    } catch (err) {
+      lastError = err;
+      debugLog(`[chunk] Persist attempt ${attempt + 1}/${maxRetries} failed: ${err.message}`);
+      if (attempt < maxRetries - 1) {
+        const delayMs = backoffs[attempt] || 400;
+        const endTime = Date.now() + delayMs;
+        while (Date.now() < endTime) {
+          // Synchronous sleep for backoff
+        }
+      }
+    }
+  }
+
+  debugLog(`[chunk] Failed to persist after ${maxRetries} retries: ${lastError?.message}`);
+  return null;
+}
+
 async function processMessageWithStreaming(conversationId, messageId, sessionId, content, agentId, skipPermissions = false) {
   const startTime = Date.now();
   activeExecutions.set(conversationId, true);
@@ -473,29 +530,40 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
 
     let allBlocks = [];
     let eventCount = 0;
+    let currentSequence = queries.getMaxSequence(sessionId) ?? -1;
 
     const onEvent = (parsed) => {
       eventCount++;
+      debugLog(`[stream] Event ${eventCount}: type=${parsed.type}`);
 
       if (parsed.type === 'system') {
+        const systemBlock = {
+          type: 'system',
+          subtype: parsed.subtype,
+          model: parsed.model,
+          cwd: parsed.cwd,
+          tools: parsed.tools,
+          session_id: parsed.session_id
+        };
+
+        currentSequence++;
+        persistChunkWithRetry(sessionId, conversationId, currentSequence, 'system', systemBlock);
+
         broadcastSync({
           type: 'streaming_progress',
           sessionId,
           conversationId,
-          block: {
-            type: 'system',
-            subtype: parsed.subtype,
-            model: parsed.model,
-            cwd: parsed.cwd,
-            tools: parsed.tools,
-            session_id: parsed.session_id
-          },
+          block: systemBlock,
           blockIndex: allBlocks.length,
           timestamp: Date.now()
         });
       } else if (parsed.type === 'assistant' && parsed.message?.content) {
         for (const block of parsed.message.content) {
           allBlocks.push(block);
+
+          currentSequence++;
+          persistChunkWithRetry(sessionId, conversationId, currentSequence, block.type || 'assistant', block);
+
           broadcastSync({
             type: 'streaming_progress',
             sessionId,
@@ -508,39 +576,50 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
       } else if (parsed.type === 'user' && parsed.message?.content) {
         for (const block of parsed.message.content) {
           if (block.type === 'tool_result') {
+            const toolResultBlock = {
+              type: 'tool_result',
+              tool_use_id: block.tool_use_id,
+              content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+              is_error: block.is_error || false
+            };
+
+            currentSequence++;
+            persistChunkWithRetry(sessionId, conversationId, currentSequence, 'tool_result', toolResultBlock);
+
             broadcastSync({
               type: 'streaming_progress',
               sessionId,
               conversationId,
-              block: {
-                type: 'tool_result',
-                tool_use_id: block.tool_use_id,
-                content: typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
-                is_error: block.is_error || false
-              },
+              block: toolResultBlock,
               blockIndex: allBlocks.length,
               timestamp: Date.now()
             });
           }
         }
       } else if (parsed.type === 'result') {
+        const resultBlock = {
+          type: 'result',
+          subtype: parsed.subtype,
+          duration_ms: parsed.duration_ms,
+          total_cost_usd: parsed.total_cost_usd,
+          num_turns: parsed.num_turns,
+          is_error: parsed.is_error || false,
+          result: parsed.result
+        };
+
+        currentSequence++;
+        persistChunkWithRetry(sessionId, conversationId, currentSequence, 'result', resultBlock);
+
         broadcastSync({
           type: 'streaming_progress',
           sessionId,
           conversationId,
-          block: {
-            type: 'result',
-            subtype: parsed.subtype,
-            duration_ms: parsed.duration_ms,
-            total_cost_usd: parsed.total_cost_usd,
-            num_turns: parsed.num_turns,
-            is_error: parsed.is_error || false,
-            result: parsed.result
-          },
+          block: resultBlock,
           blockIndex: allBlocks.length,
           isResult: true,
           timestamp: Date.now()
         });
+
         if (parsed.result && allBlocks.length === 0) {
           allBlocks.push({ type: 'text', text: String(parsed.result) });
         }
@@ -566,42 +645,13 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
       debugLog(`[stream] Stored claudeSessionId=${claudeSessionId}`);
     }
 
-    let messageContent = null;
-    if (allBlocks.length > 0) {
-      messageContent = JSON.stringify({
-        type: 'claude_execution',
-        blocks: allBlocks,
-        timestamp: Date.now()
-      });
-    } else {
-      let textParts = [];
-      for (const output of outputs) {
-        if (output.type === 'result' && output.result) {
-          textParts.push(String(output.result));
-        } else if (typeof output === 'string') {
-          textParts.push(output);
-        }
-      }
-      messageContent = textParts.join('\n').trim();
-    }
-
-    if (messageContent) {
-      const assistantMessage = queries.createMessage(conversationId, 'assistant', messageContent);
-      broadcastSync({
-        type: 'streaming_complete',
-        sessionId,
-        conversationId,
-        messageId: assistantMessage.id,
-        eventCount,
-        timestamp: Date.now()
-      });
-      broadcastSync({
-        type: 'message_created',
-        conversationId,
-        message: assistantMessage,
-        timestamp: Date.now()
-      });
-    }
+    broadcastSync({
+      type: 'streaming_complete',
+      sessionId,
+      conversationId,
+      eventCount,
+      timestamp: Date.now()
+    });
 
     debugLog(`[stream] Completed: ${outputs.length} outputs, ${eventCount} events`);
   } catch (error) {

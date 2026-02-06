@@ -103,10 +103,29 @@ Distinguish clearly: HTML response rendering ≠ file write operations
 
 ## Dependencies & Blocking
 
-### Wave 1: Foundation (No Dependencies)
-- [ ] Add `chunks` table to database schema
-- [ ] Create migration script
-- [ ] Update database-service.ts with chunk persistence methods
+### Wave 1: Foundation (No Dependencies) - COMPLETE
+- [x] Add `chunks` table to database schema - VERIFIED
+  - Created chunks table with proper schema in database.js initSchema()
+  - All columns defined: id, sessionId, conversationId, sequence, type, data, created_at
+  - Foreign keys configured for sessionId and conversationId
+- [x] Create indexes - VERIFIED
+  - idx_chunks_session (sessionId, sequence) - non-unique
+  - idx_chunks_conversation (conversationId, sequence) - non-unique
+  - idx_chunks_unique (sessionId, sequence) - unique constraint
+- [x] Add chunk persistence methods to database.js - VERIFIED
+  - createChunk(sessionId, conversationId, sequence, type, data)
+  - getChunk(id)
+  - getSessionChunks(sessionId)
+  - getConversationChunks(conversationId)
+  - getChunksSince(sessionId, timestamp)
+  - deleteSessionChunks(sessionId)
+  - getMaxSequence(sessionId)
+- [x] Test schema creation with real database - VERIFIED
+  - Schema initializes without errors
+  - All indexes created correctly
+  - Foreign key constraints active
+  - Data persistence working
+  - Existing databases compatible (no breaking changes)
 
 ### Wave 2: Backend Stream Persistence (Blocked By: Wave 1)
 - [ ] Modify `processMessageWithStreaming()` to persist chunks immediately
