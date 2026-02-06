@@ -18,12 +18,14 @@ try {
   db = new Database(dbFilePath);
   db.run('PRAGMA journal_mode = WAL');
   db.run('PRAGMA foreign_keys = ON');
+  db.run('PRAGMA encoding = "UTF-8"');
 } catch (e) {
   try {
     const sqlite3 = require('better-sqlite3');
     db = new sqlite3(dbFilePath);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
+    db.pragma('encoding = "UTF-8"');
   } catch (e2) {
     throw new Error('SQLite database is required. Please run with bun (recommended) or install better-sqlite3: npm install better-sqlite3');
   }
@@ -565,7 +567,13 @@ export const queries = {
     const conv = this.getConversation(id);
     if (!conv) return false;
 
+    // Delete associated Claude Code session file if it exists
+    if (conv.claudeSessionId) {
+      this.deleteClaudeSessionFile(conv.claudeSessionId);
+    }
+
     const deleteStmt = db.transaction(() => {
+      db.prepare('DELETE FROM chunks WHERE conversationId = ?').run(id);
       db.prepare('DELETE FROM events WHERE conversationId = ?').run(id);
       db.prepare('DELETE FROM sessions WHERE conversationId = ?').run(id);
       db.prepare('DELETE FROM messages WHERE conversationId = ?').run(id);
@@ -574,6 +582,35 @@ export const queries = {
 
     deleteStmt();
     return true;
+  },
+
+  deleteClaudeSessionFile(sessionId) {
+    try {
+      const claudeDir = path.join(os.homedir(), '.claude');
+      const projectsDir = path.join(claudeDir, 'projects');
+      
+      if (!fs.existsSync(projectsDir)) {
+        return false;
+      }
+
+      // Search for session file in all project directories
+      const projects = fs.readdirSync(projectsDir);
+      for (const project of projects) {
+        const projectPath = path.join(projectsDir, project);
+        const sessionFile = path.join(projectPath, `${sessionId}.jsonl`);
+        
+        if (fs.existsSync(sessionFile)) {
+          fs.unlinkSync(sessionFile);
+          console.log(`[deleteClaudeSessionFile] Deleted Claude session: ${sessionFile}`);
+          return true;
+        }
+      }
+      
+      return false;
+    } catch (err) {
+      console.error(`[deleteClaudeSessionFile] Error deleting session ${sessionId}:`, err.message);
+      return false;
+    }
   },
 
   cleanup() {
@@ -1004,6 +1041,56 @@ export const queries = {
     const stmt = db.prepare('SELECT MAX(sequence) as max FROM chunks WHERE sessionId = ?');
     const result = stmt.get(sessionId);
     return result?.max ?? -1;
+  },
+
+  getEmptyConversations() {
+    const stmt = db.prepare(`
+      SELECT c.* FROM conversations c
+      LEFT JOIN messages m ON c.id = m.conversationId
+      WHERE c.status != 'deleted'
+      GROUP BY c.id
+      HAVING COUNT(m.id) = 0
+    `);
+    return stmt.all();
+  },
+
+  permanentlyDeleteConversation(id) {
+    const conv = this.getConversation(id);
+    if (!conv) return false;
+
+    // Delete associated Claude Code session file if it exists
+    if (conv.claudeSessionId) {
+      this.deleteClaudeSessionFile(conv.claudeSessionId);
+    }
+
+    const deleteStmt = db.transaction(() => {
+      db.prepare('DELETE FROM chunks WHERE conversationId = ?').run(id);
+      db.prepare('DELETE FROM events WHERE conversationId = ?').run(id);
+      db.prepare('DELETE FROM sessions WHERE conversationId = ?').run(id);
+      db.prepare('DELETE FROM messages WHERE conversationId = ?').run(id);
+      db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+    });
+
+    deleteStmt();
+    return true;
+  },
+
+  cleanupEmptyConversations() {
+    const emptyConvs = this.getEmptyConversations();
+    let deletedCount = 0;
+
+    for (const conv of emptyConvs) {
+      console.log(`[cleanup] Deleting empty conversation: ${conv.id} (${conv.title || 'Untitled'})`);
+      if (this.permanentlyDeleteConversation(conv.id)) {
+        deletedCount++;
+      }
+    }
+
+    if (deletedCount > 0) {
+      console.log(`[cleanup] Deleted ${deletedCount} empty conversation(s)`);
+    }
+
+    return deletedCount;
   }
 };
 

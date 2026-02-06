@@ -233,12 +233,51 @@ class ConversationManager {
     if (wd) metaParts.push(wd);
 
     li.innerHTML = `
-      <div class="conversation-item-title">${this.escapeHtml(title)}</div>
-      <div class="conversation-item-meta">${metaParts.join(' \u2022 ')}</div>
+      <div class="conversation-item-content">
+        <div class="conversation-item-title">${this.escapeHtml(title)}</div>
+        <div class="conversation-item-meta">${metaParts.join(' • ')}</div>
+      </div>
+      <button class="conversation-item-delete" title="Delete conversation" data-delete-conv="${conv.id}">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+        </svg>
+      </button>
     `;
+
+    // Handle delete button click
+    const deleteBtn = li.querySelector('[data-delete-conv]');
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.confirmDelete(conv.id, title);
+    });
 
     li.addEventListener('click', () => this.select(conv.id));
     return li;
+  }
+
+  async confirmDelete(convId, title) {
+    const confirmed = confirm(`Delete conversation "${title || 'Untitled'}"?\n\nThis will also delete any associated Claude Code session data. This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch((window.__BASE_URL || '') + `/api/conversations/${convId}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (res.ok) {
+        console.log(`[ConversationManager] Deleted conversation ${convId}`);
+        // Remove from local list immediately for responsive UI
+        this.deleteConversation(convId);
+      } else {
+        const error = await res.json().catch(() => ({ error: 'Failed to delete' }));
+        alert('Failed to delete conversation: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('[ConversationManager] Delete error:', err);
+      alert('Failed to delete conversation: ' + err.message);
+    }
   }
 
   select(convId) {
