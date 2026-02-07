@@ -760,16 +760,22 @@ class StreamingRenderer {
       }
     }
 
-    // Check if this looks like `cat -n` output (line numbers followed by →)
+    // Check if this looks like `cat -n` output or grep with line numbers
     const lines = trimmed.split('\n');
     const isCatNOutput = lines.length > 1 && lines[0].match(/^\s*\d+→/);
+    const isGrepOutput = lines.length > 1 && lines[0].match(/^\s*\d+-/);
 
-    if (isCatNOutput) {
-      // Strip line numbers and arrows from cat -n output
+    if (isCatNOutput || isGrepOutput) {
+      // Strip line numbers and arrows/hyphens from output
       const cleanedLines = lines.map(line => {
-        const match = line.match(/^\s*\d+→(.*)/);
+        // Skip grep context separator lines
+        if (line === '--') return null;
+
+        // Handle both cat -n (→) and grep (-n) formats
+        // Also handle grep with colon (:) for matching lines
+        const match = line.match(/^\s*\d+[→\-:](.*)/);
         return match ? match[1] : line;
-      });
+      }).filter(line => line !== null);
       const cleanedContent = cleanedLines.join('\n');
 
       // Try to detect and highlight code based on content patterns
