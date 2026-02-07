@@ -845,6 +845,7 @@ class AgentGUIClient {
   /**
    * Poll for new chunks at regular intervals
    * Uses exponential backoff on errors
+   * Also checks session status to detect completion
    */
   async startChunkPolling(conversationId) {
     if (!conversationId) return;
@@ -862,6 +863,32 @@ class AgentGUIClient {
       if (!pollState.isPolling) return;
 
       try {
+        // Check session status periodically
+        if (this.state.currentSession?.id) {
+          const sessionResponse = await fetch(`${window.__BASE_URL}/api/sessions/${this.state.currentSession.id}`);
+          if (sessionResponse.ok) {
+            const { session } = await sessionResponse.json();
+            if (session && (session.status === 'complete' || session.status === 'error')) {
+              // Session has finished, trigger appropriate handler
+              if (session.status === 'complete') {
+                this.handleStreamingComplete({
+                  sessionId: session.id,
+                  conversationId: conversationId,
+                  timestamp: Date.now()
+                });
+              } else {
+                this.handleStreamingError({
+                  sessionId: session.id,
+                  conversationId: conversationId,
+                  error: session.error || 'Unknown error',
+                  timestamp: Date.now()
+                });
+              }
+              return; // Stop polling
+            }
+          }
+        }
+
         const chunks = await this.fetchChunks(conversationId, pollState.lastFetchTimestamp);
 
         if (chunks.length > 0) {
@@ -1072,8 +1099,11 @@ class AgentGUIClient {
 
   async loadConversationMessages(conversationId) {
     try {
+      // Stop any existing polling when switching conversations
+      this.stopChunkPolling();
+
       const convResponse = await fetch(window.__BASE_URL + `/api/conversations/${conversationId}`);
-      const { conversation } = await convResponse.json();
+      const { conversation, isActivelyStreaming, latestSession } = await convResponse.json();
       this.state.currentConversation = conversation;
 
       // Update URL with conversation ID
@@ -1082,6 +1112,9 @@ class AgentGUIClient {
       if (this.wsManager.isConnected) {
         this.wsManager.sendMessage({ type: 'subscribe', conversationId });
       }
+
+      // Check if there's an active streaming session that needs to be resumed
+      const shouldResumeStreaming = isActivelyStreaming && latestSession && latestSession.status === 'active';
 
       // Try to fetch chunks first (Wave 3 architecture)
       try {
@@ -1112,10 +1145,11 @@ class AgentGUIClient {
 
             // Render each session's chunks
             Object.entries(sessionChunks).forEach(([sessionId, sessionChunkList]) => {
+              const isCurrentActiveSession = shouldResumeStreaming && latestSession && latestSession.id === sessionId;
               const messageDiv = document.createElement('div');
-              messageDiv.className = 'message message-assistant';
-              messageDiv.id = `message-${sessionId}`;
-              messageDiv.innerHTML = '<div class="message-role">Assistant</div><div class="message-blocks"></div>';
+              messageDiv.className = `message message-assistant${isCurrentActiveSession ? ' streaming-message' : ''}`;
+              messageDiv.id = isCurrentActiveSession ? `streaming-${sessionId}` : `message-${sessionId}`;
+              messageDiv.innerHTML = '<div class="message-role">Assistant</div><div class="message-blocks streaming-blocks"></div>';
 
               const blocksEl = messageDiv.querySelector('.message-blocks');
               sessionChunkList.forEach(chunk => {
@@ -1127,10 +1161,22 @@ class AgentGUIClient {
                 }
               });
 
-              const ts = document.createElement('div');
-              ts.className = 'message-timestamp';
-              ts.textContent = new Date(sessionChunkList[sessionChunkList.length - 1].created_at).toLocaleString();
-              messageDiv.appendChild(ts);
+              // Add streaming indicator for active session
+              if (isCurrentActiveSession) {
+                const indicatorDiv = document.createElement('div');
+                indicatorDiv.className = 'streaming-indicator';
+                indicatorDiv.style = 'display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;color:var(--color-text-secondary);font-size:0.875rem;';
+                indicatorDiv.innerHTML = `
+                  <span class="animate-spin" style="display:inline-block;width:1rem;height:1rem;border:2px solid var(--color-border);border-top-color:var(--color-primary);border-radius:50%;"></span>
+                  <span class="streaming-indicator-label">Processing...</span>
+                `;
+                messageDiv.appendChild(indicatorDiv);
+              } else {
+                const ts = document.createElement('div');
+                ts.className = 'message-timestamp';
+                ts.textContent = new Date(sessionChunkList[sessionChunkList.length - 1].created_at).toLocaleString();
+                messageDiv.appendChild(ts);
+              }
 
               messagesEl.appendChild(messageDiv);
             });
@@ -1141,6 +1187,37 @@ class AgentGUIClient {
               const messagesData = await messagesResponse.json();
               messagesEl.innerHTML = this.renderMessages(messagesData.messages || []);
             }
+          }
+
+          // Resume streaming if needed
+          if (shouldResumeStreaming && latestSession) {
+            console.log('Resuming live streaming for session:', latestSession.id);
+
+            // Set streaming state
+            this.state.isStreaming = true;
+            this.state.currentSession = {
+              id: latestSession.id,
+              conversationId: conversationId,
+              agentId: conversation.agentType || 'claude-code',
+              startTime: latestSession.created_at
+            };
+
+            // Subscribe to WebSocket updates
+            if (this.wsManager.isConnected) {
+              this.wsManager.subscribeToSession(latestSession.id);
+            }
+
+            // Get the timestamp of the last chunk to start polling from
+            const lastChunkTime = chunks.length > 0
+              ? chunks[chunks.length - 1].created_at
+              : Date.now();
+
+            // Start polling for new chunks
+            this.chunkPollState.lastFetchTimestamp = lastChunkTime;
+            this.startChunkPolling(conversationId);
+
+            // Disable controls while streaming
+            this.disableControls();
           }
 
           // Restore scroll position after rendering

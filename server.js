@@ -11,14 +11,7 @@ import { runClaudeWithStreaming } from './lib/claude-runner.js';
 const require = createRequire(import.meta.url);
 const express = require('express');
 const Busboy = require('busboy');
-// const fsbrowse = require('fsbrowse');
-
-// Stub fsbrowse function for file browsing endpoint
-const fsbrowse = (options) => {
-  return (req, res) => {
-    res.status(501).json({ error: 'File browsing not yet implemented' });
-  };
-};
+const fsbrowse = require('../fsbrowse');
 
 const SYSTEM_PROMPT = `Always write your responses in ripple-ui enhanced HTML. Avoid overriding light/dark mode CSS variables. Use all the benefits of HTML to express technical details with proper semantic markup, tables, code blocks, headings, and lists. Write clean, well-structured HTML that respects the existing design system.`;
 
@@ -107,6 +100,17 @@ function discoverAgents() {
   const binaries = [
     { cmd: 'claude', id: 'claude-code', name: 'Claude Code', icon: 'C' },
     { cmd: 'opencode', id: 'opencode', name: 'OpenCode', icon: 'O' },
+    { cmd: 'gemini', id: 'gemini', name: 'Gemini CLI', icon: 'G' },
+    { cmd: 'goose', id: 'goose', name: 'Goose', icon: 'g' },
+    { cmd: 'openhands', id: 'openhands', name: 'OpenHands', icon: 'H' },
+    { cmd: 'augment', id: 'augment', name: 'Augment Code', icon: 'A' },
+    { cmd: 'cline', id: 'cline', name: 'Cline', icon: 'c' },
+    { cmd: 'kimi', id: 'kimi', name: 'Kimi CLI', icon: 'K' },
+    { cmd: 'qwen-code', id: 'qwen', name: 'Qwen Code', icon: 'Q' },
+    { cmd: 'codex', id: 'codex', name: 'Codex CLI', icon: 'X' },
+    { cmd: 'mistral-vibe', id: 'mistral', name: 'Mistral Vibe', icon: 'M' },
+    { cmd: 'kiro', id: 'kiro', name: 'Kiro CLI', icon: 'k' },
+    { cmd: 'fast-agent', id: 'fast-agent', name: 'fast-agent', icon: 'F' },
   ];
   for (const bin of binaries) {
     try {
@@ -176,8 +180,18 @@ const server = http.createServer(async (req, res) => {
       if (req.method === 'GET') {
         const conv = queries.getConversation(convMatch[1]);
         if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+
+        // Check both in-memory and database for active streaming status
+        const latestSession = queries.getLatestSession(convMatch[1]);
+        const isActivelyStreaming = activeExecutions.has(convMatch[1]) ||
+          (latestSession && latestSession.status === 'active');
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ conversation: conv }));
+        res.end(JSON.stringify({
+          conversation: conv,
+          isActivelyStreaming,
+          latestSession
+        }));
         return;
       }
 
@@ -422,7 +436,7 @@ const server = http.createServer(async (req, res) => {
           folderPath.replace('~', process.env.HOME || '/config') : folderPath;
         const entries = fs.readdirSync(expandedPath, { withFileTypes: true });
         const folders = entries
-          .filter(e => e.isDirectory())
+          .filter(e => e.isDirectory() && !e.name.startsWith('.'))
           .map(e => ({ name: e.name }))
           .sort((a, b) => a.name.localeCompare(b.name));
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -660,6 +674,13 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
       debugLog(`[stream] Stored claudeSessionId=${claudeSessionId}`);
     }
 
+    // Mark session as complete
+    queries.updateSession(sessionId, {
+      status: 'complete',
+      response: JSON.stringify({ outputs, eventCount }),
+      completed_at: Date.now()
+    });
+
     broadcastSync({
       type: 'streaming_complete',
       sessionId,
@@ -672,6 +693,13 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
   } catch (error) {
     const elapsed = Date.now() - startTime;
     debugLog(`[stream] Error after ${elapsed}ms: ${error.message}`);
+
+    // Mark session as error
+    queries.updateSession(sessionId, {
+      status: 'error',
+      error: error.message,
+      completed_at: Date.now()
+    });
 
     broadcastSync({
       type: 'streaming_error',

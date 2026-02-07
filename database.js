@@ -249,17 +249,17 @@ function generateId(prefix) {
 }
 
 export const queries = {
-  createConversation(agentId, title = null, workingDirectory = null) {
+  createConversation(agentType, title = null, workingDirectory = null) {
     const id = generateId('conv');
     const now = Date.now();
     const stmt = db.prepare(
-      `INSERT INTO conversations (id, agentId, title, created_at, updated_at, status, workingDirectory) VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO conversations (id, agentType, title, created_at, updated_at, status, workingDirectory) VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
-    stmt.run(id, agentId, title, now, now, 'active', workingDirectory);
+    stmt.run(id, agentType, title, now, now, 'active', workingDirectory);
 
     return {
       id,
-      agentId,
+      agentType,
       title,
       workingDirectory,
       created_at: now,

@@ -576,6 +576,50 @@ class StreamingRenderer {
       case 'NotebookEdit':
         return `<div class="tool-params">${this.renderFilePath(input.notebook_path)}${input.new_source ? this.renderContentPreview(input.new_source, 'Cell content') : ''}</div>`;
 
+      case 'dev__execute':
+      case 'dev_execute':
+      case 'execute': {
+        // Handle mcp__plugin_gm_dev__execute and similar dev execution tools
+        let html = '<div class="tool-params">';
+
+        // Show working directory if present
+        if (input.workingDirectory) {
+          html += `<div style="margin-bottom:0.5rem;font-size:0.75rem;color:var(--color-text-secondary)">
+            <span style="opacity:0.7">📁</span> ${this.escapeHtml(input.workingDirectory)}
+          </div>`;
+        }
+
+        // Show timeout if present
+        if (input.timeout) {
+          const seconds = Math.round(input.timeout / 1000);
+          html += `<div style="margin-bottom:0.5rem;font-size:0.75rem;color:var(--color-text-secondary)">
+            <span style="opacity:0.7">⏱️</span> Timeout: ${seconds}s
+          </div>`;
+        }
+
+        // Render code in a styled code block
+        if (input.code) {
+          const lines = input.code.split('\n');
+          const lineCount = lines.length;
+          const truncated = lineCount > 50;
+          const displayLines = truncated ? lines.slice(0, 50) : lines;
+
+          html += `<div style="margin-top:0.5rem">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
+              <span style="font-size:0.7rem;font-weight:600;color:#0891b2;text-transform:uppercase">JavaScript Code</span>
+              <span style="font-size:0.7rem;color:var(--color-text-secondary)">${lineCount} lines</span>
+            </div>
+            <div style="background:var(--color-bg-code);border-radius:0.375rem;padding:0.75rem;overflow-x:auto">
+              <pre style="margin:0;font-family:'Monaco','Menlo','Ubuntu Mono',monospace;font-size:0.75rem;line-height:1.5;color:#d1d5db">${this.escapeHtml(displayLines.join('\n'))}</pre>
+              ${truncated ? `<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--color-border);font-size:0.7rem;color:var(--color-text-secondary);text-align:center">... ${lineCount - 50} more lines truncated ...</div>` : ''}
+            </div>
+          </div>`;
+        }
+
+        html += '</div>';
+        return html;
+      }
+
       default:
         return this.renderJsonParams(input);
     }
@@ -677,7 +721,8 @@ class StreamingRenderer {
     if (Array.isArray(data)) {
       if (data.length === 0) return `<span style="color:var(--color-text-secondary)">[]</span>`;
       if (data.every(i => typeof i === 'string') && data.length <= 20) {
-        return `<div style="display:flex;flex-wrap:wrap;gap:0.25rem">${data.map(i => `<span style="display:inline-block;padding:0.125rem 0.5rem;background:var(--color-bg-secondary);border-radius:1rem;font-size:0.7rem;font-family:'Monaco','Menlo','Ubuntu Mono',monospace">${this.escapeHtml(i)}</span>`).join('')}</div>`;
+        // Render as an itemized list instead of inline badges
+        return `<div style="display:flex;flex-direction:column;gap:0.125rem;${depth > 0 ? 'padding-left:1rem' : ''}">${data.map((i, idx) => `<div style="display:flex;align-items:center;gap:0.375rem"><span style="color:var(--color-text-secondary);font-size:0.65rem;opacity:0.5">•</span><span style="font-family:'Monaco','Menlo','Ubuntu Mono',monospace;font-size:0.75rem">${this.escapeHtml(i)}</span></div>`).join('')}</div>`;
       }
       return `<div style="display:flex;flex-direction:column;gap:0.25rem;${depth > 0 ? 'padding-left:1rem' : ''}">${data.map((item, i) => `<div style="display:flex;gap:0.5rem;align-items:flex-start"><span style="color:var(--color-text-secondary);font-size:0.7rem;min-width:1.5rem;text-align:right;flex-shrink:0">${i}</span><div style="flex:1;min-width:0">${this.renderParametersBeautiful(item, depth + 1)}</div></div>`).join('')}</div>`;
     }
@@ -702,14 +747,159 @@ class StreamingRenderer {
       return `<div style="padding:0.5rem"><img src="${esc(trimmed)}" style="max-width:100%;max-height:24rem;border-radius:0.375rem" loading="lazy"></div>`;
     }
 
+    // Instead of rendering JSON as parameters, check if it looks like code output
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
       try {
-        const parsed = JSON.parse(trimmed);
-        return `<div style="padding:0.625rem 1rem">${StreamingRenderer.renderParamsHTML(parsed, 0, esc)}</div>`;
-      } catch (e) {}
+        // Validate it's JSON, then render as highlighted code
+        JSON.parse(trimmed);
+        // Format JSON with proper indentation
+        const formatted = JSON.stringify(JSON.parse(trimmed), null, 2);
+        return StreamingRenderer.renderCodeWithHighlight(formatted, esc);
+      } catch (e) {
+        // Not valid JSON, might be code with braces
+      }
     }
 
+    // Check if this looks like `cat -n` output (line numbers followed by →)
     const lines = trimmed.split('\n');
+    const isCatNOutput = lines.length > 1 && lines[0].match(/^\s*\d+→/);
+
+    if (isCatNOutput) {
+      // Strip line numbers and arrows from cat -n output
+      const cleanedLines = lines.map(line => {
+        const match = line.match(/^\s*\d+→(.*)/);
+        return match ? match[1] : line;
+      });
+      const cleanedContent = cleanedLines.join('\n');
+
+      // Try to detect and highlight code based on content patterns
+      return StreamingRenderer.renderCodeWithHighlight(cleanedContent, esc);
+    }
+
+    // Check for system reminder tags and format them specially
+    const systemReminderPattern = /<system-reminder>([\s\S]*?)<\/system-reminder>/g;
+    const systemReminders = [];
+    let contentWithoutReminders = trimmed;
+
+    let reminderMatch;
+    while ((reminderMatch = systemReminderPattern.exec(trimmed)) !== null) {
+      systemReminders.push(reminderMatch[1].trim());
+      contentWithoutReminders = contentWithoutReminders.replace(reminderMatch[0], '');
+    }
+
+    // Clean up the content after removing reminders
+    contentWithoutReminders = contentWithoutReminders.trim();
+
+    // Check if this looks like a tool success message with formatted output
+    const successPatterns = [
+      /^Success\s+toolu_[\w]+$/m,
+      /^The file .* has been (updated|created|modified)/,
+      /^Here's the result of running `cat -n`/,
+      /^Applied \d+ edits? to/,
+      /^\w+ tool completed successfully/
+    ];
+
+    const hasSuccessPattern = successPatterns.some(pattern => pattern.test(contentWithoutReminders));
+
+    if (hasSuccessPattern) {
+      const contentLines = contentWithoutReminders.split('\n');
+      let successEndIndex = -1;
+      let codeStartIndex = -1;
+
+      // Find the success message and where code starts
+      for (let i = 0; i < contentLines.length; i++) {
+        const line = contentLines[i];
+        if (line.match(/^Success\s+toolu_/)) {
+          successEndIndex = i;
+          // Look for the next non-empty line that contains code
+          for (let j = i + 1; j < contentLines.length; j++) {
+            if (contentLines[j].trim() && !contentLines[j].match(/^The file|^Here's the result/)) {
+              codeStartIndex = j;
+              break;
+            }
+          }
+          break;
+        } else if (line.match(/^The file .* has been|^Applied \d+ edits? to|^Replaced|^Created|^Deleted/)) {
+          // For edit/write operations, code typically starts after the success message
+          // Look for "Here's the result" line or line numbers
+          for (let j = i + 1; j < contentLines.length; j++) {
+            if (contentLines[j].match(/^Here's the result|^\s*\d+→/)) {
+              // If it's "Here's the result", code starts on next line
+              if (contentLines[j].match(/^Here's the result/)) {
+                codeStartIndex = j + 1;
+              } else {
+                codeStartIndex = j;
+              }
+              break;
+            } else if (contentLines[j].trim() && !contentLines[j].match(/^cat -n|^Running/)) {
+              // If we find non-empty content that's not a command, assume it's code
+              codeStartIndex = j;
+              break;
+            }
+          }
+          if (codeStartIndex === -1) {
+            // No line numbers found, treat next content as code
+            codeStartIndex = i + 2;
+          }
+          successEndIndex = codeStartIndex - 1;
+          break;
+        }
+      }
+
+      if (codeStartIndex > 0 && codeStartIndex < contentLines.length) {
+        const beforeCode = contentLines.slice(0, codeStartIndex).join('\n');
+        let codeContent = contentLines.slice(codeStartIndex).join('\n');
+
+        // Check if code has line numbers and strip them
+        if (codeContent.match(/^\s*\d+→/m)) {
+          const codeLines = codeContent.split('\n');
+          codeContent = codeLines.map(line => {
+            const match = line.match(/^\s*\d+→(.*)/);
+            return match ? match[1] : line;
+          }).join('\n');
+        }
+
+        // Build the formatted output
+        let html = '';
+
+        // Add success message
+        if (beforeCode.trim()) {
+          html += `<div style="color:var(--color-success);font-weight:600;margin-bottom:0.75rem;font-size:0.9rem">${esc(beforeCode.trim())}</div>`;
+        }
+
+        // Add highlighted code
+        if (codeContent.trim()) {
+          html += StreamingRenderer.renderCodeWithHighlight(codeContent, esc);
+        }
+
+        // Add system reminders if any
+        if (systemReminders.length > 0) {
+          html += StreamingRenderer.renderSystemReminders(systemReminders, esc);
+        }
+
+        return html;
+      }
+    }
+
+    // If there are system reminders but no success pattern, render them separately
+    if (systemReminders.length > 0) {
+      let html = '';
+
+      // Render the main content
+      if (contentWithoutReminders) {
+        // Check if remaining content looks like code
+        if (StreamingRenderer.detectCodeContent(contentWithoutReminders)) {
+          html += StreamingRenderer.renderCodeWithHighlight(contentWithoutReminders, esc);
+        } else {
+          html += `<pre class="tool-result-pre">${esc(contentWithoutReminders)}</pre>`;
+        }
+      }
+
+      // Add system reminders
+      html += StreamingRenderer.renderSystemReminders(systemReminders, esc);
+      return html;
+    }
+
     const allFilePaths = lines.length > 1 && lines.every(l => l.trim() === '' || l.trim().startsWith('/'));
     if (allFilePaths && lines.filter(l => l.trim()).length > 0) {
       const fileHtml = lines.filter(l => l.trim()).map(l => {
@@ -722,8 +912,144 @@ class StreamingRenderer {
       return `<div style="padding:0.625rem 1rem">${fileHtml}</div>`;
     }
 
+    // Check if this looks like code
+    const looksLikeCode = StreamingRenderer.detectCodeContent(trimmed);
+    if (looksLikeCode) {
+      return StreamingRenderer.renderCodeWithHighlight(trimmed, esc);
+    }
+
     const displayContent = trimmed.length > 2000 ? trimmed.substring(0, 2000) + '\n... (truncated)' : trimmed;
     return `<pre class="tool-result-pre">${esc(displayContent)}</pre>`;
+  }
+
+  /**
+   * Render system reminders in a clean, formatted way
+   */
+  static renderSystemReminders(reminders, esc) {
+    if (!reminders || reminders.length === 0) return '';
+
+    const reminderHtml = reminders.map(reminder => {
+      // Parse reminder content for better formatting
+      const lines = reminder.split('\n').filter(l => l.trim());
+      const formattedLines = lines.map(line => {
+        // Make key points stand out
+        if (line.includes('IMPORTANT:') || line.includes('WARNING:')) {
+          return `<div style="font-weight:600;color:var(--color-warning);margin:0.25rem 0">${esc(line)}</div>`;
+        }
+        return `<div style="margin:0.125rem 0">${esc(line)}</div>`;
+      }).join('');
+
+      return formattedLines;
+    }).join('');
+
+    return `
+      <div style="margin-top:1rem;padding:0.75rem;background:var(--color-bg-secondary);border-left:3px solid var(--color-info);border-radius:0.25rem;font-size:0.8rem;color:var(--color-text-secondary)">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+          <span style="color:var(--color-info)">ℹ</span>
+          <span style="font-weight:600;font-size:0.85rem;color:var(--color-text-primary)">System Reminder</span>
+        </div>
+        ${reminderHtml}
+      </div>
+    `;
+  }
+
+  /**
+   * Detect if content looks like code
+   */
+  static detectCodeContent(content) {
+    // Common code patterns
+    const codePatterns = [
+      /^\s*(function|const|let|var|class|import|export|async|await)/m,  // JavaScript
+      /^\s*(def|class|import|from|if __name__|lambda|async def)/m,      // Python
+      /^\s*(public|private|protected|class|interface|package|import)/m,  // Java/TypeScript
+      /^\s*(<\?php|namespace|use|trait)/m,                              // PHP
+      /^\s*(#include|int main|void|struct|typedef)/m,                   // C/C++
+      /[{}\[\];()]/,                                                    // Brackets and semicolons
+      /=>|->|::/,                                                         // Arrow functions, pointers
+    ];
+
+    return codePatterns.some(pattern => pattern.test(content));
+  }
+
+  /**
+   * Render code with basic syntax highlighting
+   */
+  static renderCodeWithHighlight(code, esc) {
+    // Escape HTML first
+    let highlighted = esc(code);
+
+    // Detect if this is JSON and apply JSON-specific highlighting
+    const isJSON = (code.trim().startsWith('{') || code.trim().startsWith('[')) &&
+                   code.includes('"') && (code.includes(':') || code.includes(','));
+
+    if (isJSON) {
+      // JSON-specific highlighting
+      const jsonHighlights = [
+        // Property names (keys) in quotes
+        { pattern: /"([^"]+)"\s*:/g, replacement: '"<span style="color:#3b82f6;font-weight:600">$1</span>":' },
+        // String values
+        { pattern: /:\s*"([^"]*)"/g, replacement: ': "<span style="color:#10b981">$1</span>"' },
+        // Numbers
+        { pattern: /:\s*(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g, replacement: ': <span style="color:#f59e0b">$1</span>' },
+        // Booleans and null
+        { pattern: /:\s*(true|false|null)/g, replacement: ': <span style="color:#ef4444">$1</span>' },
+        // Array/object brackets
+        { pattern: /([\[\]{}])/g, replacement: '<span style="color:#6b7280;font-weight:600">$1</span>' },
+      ];
+
+      jsonHighlights.forEach(({ pattern, replacement }) => {
+        highlighted = highlighted.replace(pattern, replacement);
+      });
+    } else {
+      // General code syntax highlighting
+      const highlights = [
+        // Comments (do these first to avoid conflicts)
+        { pattern: /(\/\/[^\n]*)/g, replacement: '<span style="color:#6b7280;font-style:italic">$1</span>' },
+        { pattern: /(\/\*[\s\S]*?\*\/)/g, replacement: '<span style="color:#6b7280;font-style:italic">$1</span>' },
+        { pattern: /(#[^\n]*)/g, replacement: '<span style="color:#6b7280;font-style:italic">$1</span>' },
+
+        // Strings (improved to handle escaped quotes)
+        { pattern: /(["'])(?:[^\\]|\\.)*?\1/g, replacement: (match) => `<span style="color:#10b981">${match}</span>` },
+
+        // Template literals (backticks)
+        { pattern: /`([^`]*)`/g, replacement: '<span style="color:#10b981">`$1`</span>' },
+
+        // Keywords
+        { pattern: /\b(function|const|let|var|class|import|export|async|await|return|if|else|for|while|try|catch|throw|new|typeof|instanceof|this|super|switch|case|default|break|continue|do)\b/g,
+          replacement: '<span style="color:#8b5cf6;font-weight:600">$1</span>' },
+        { pattern: /\b(def|class|import|from|return|if|elif|else|for|while|try|except|raise|with|as|lambda|pass|break|continue|yield|global|nonlocal)\b/g,
+          replacement: '<span style="color:#8b5cf6;font-weight:600">$1</span>' },
+        { pattern: /\b(public|private|protected|static|final|abstract|interface|extends|implements|package|void|int|string|boolean|float|double|char)\b/g,
+          replacement: '<span style="color:#8b5cf6;font-weight:600">$1</span>' },
+
+        // Type annotations
+        { pattern: /:\s*([A-Z][a-zA-Z0-9_]*)/g, replacement: ': <span style="color:#0891b2">$1</span>' },
+
+        // Numbers
+        { pattern: /\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)\b/g, replacement: '<span style="color:#f59e0b">$1</span>' },
+
+        // Booleans and null
+        { pattern: /\b(true|false|null|undefined|None|True|False|nil)\b/g, replacement: '<span style="color:#ef4444">$1</span>' },
+
+        // Function/method names (improved)
+        { pattern: /\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\s*\()/g, replacement: '<span style="color:#3b82f6">$1</span>' },
+
+        // Operators
+        { pattern: /(===|!==|==|!=|<=|>=|&&|\|\||\+=|-=|\*=|\/=|%=|=>|->)/g, replacement: '<span style="color:#a855f7">$1</span>' },
+      ];
+
+      // Apply highlights
+      highlights.forEach(({ pattern, replacement }) => {
+        if (typeof replacement === 'function') {
+          highlighted = highlighted.replace(pattern, replacement);
+        } else {
+          highlighted = highlighted.replace(pattern, replacement);
+        }
+      });
+    }
+
+    // Use a dark theme that works well for code
+    return `<pre style="background:#1e293b;padding:1rem;border-radius:0.375rem;overflow-x:auto;font-family:'Monaco','Menlo','Ubuntu Mono',monospace;font-size:0.875rem;line-height:1.6;color:#e2e8f0;border:1px solid #334155;box-shadow:0 2px 4px rgba(0,0,0,0.1)">${highlighted}</pre>`;
   }
 
   /**
@@ -750,7 +1076,8 @@ class StreamingRenderer {
     if (Array.isArray(data)) {
       if (data.length === 0) return `<span style="color:var(--color-text-secondary)">[]</span>`;
       if (data.every(i => typeof i === 'string') && data.length <= 20) {
-        return `<div style="display:flex;flex-wrap:wrap;gap:0.25rem">${data.map(i => `<span style="display:inline-block;padding:0.125rem 0.5rem;background:var(--color-bg-secondary);border-radius:1rem;font-size:0.7rem;font-family:'Monaco','Menlo','Ubuntu Mono',monospace">${esc(i)}</span>`).join('')}</div>`;
+        // Render as an itemized list instead of inline badges
+        return `<div style="display:flex;flex-direction:column;gap:0.125rem;${depth > 0 ? 'padding-left:1rem' : ''}">${data.map((i, idx) => `<div style="display:flex;align-items:center;gap:0.375rem"><span style="color:var(--color-text-secondary);font-size:0.65rem;opacity:0.5">•</span><span style="font-family:'Monaco','Menlo','Ubuntu Mono',monospace;font-size:0.75rem">${esc(i)}</span></div>`).join('')}</div>`;
       }
       return `<div style="display:flex;flex-direction:column;gap:0.25rem;${depth > 0 ? 'padding-left:1rem' : ''}">${data.map((item, i) => `<div style="display:flex;gap:0.5rem;align-items:flex-start"><span style="color:var(--color-text-secondary);font-size:0.7rem;min-width:1.5rem;text-align:right;flex-shrink:0">${i}</span><div style="flex:1;min-width:0">${StreamingRenderer.renderParamsHTML(item, depth + 1, esc)}</div></div>`).join('')}</div>`;
     }
@@ -785,7 +1112,7 @@ class StreamingRenderer {
         <span class="status-label">${iconSvg} ${isError ? 'Error' : 'Success'}</span>
         ${toolUseId ? `<span class="result-id">${this.escapeHtml(toolUseId)}</span>` : ''}
       </div>
-      ${this.renderSmartContent(contentStr)}
+      ${StreamingRenderer.renderSmartContentHTML(contentStr, this.escapeHtml.bind(this))}
     `;
 
     return div;
