@@ -21,7 +21,7 @@
     "dev": "node server.js --watch"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^1.0.128",
+    "@anthropic-ai/claude-code": "^2.1.37",
     "better-sqlite3": "^12.6.2",
     "busboy": "^1.6.0",
     "express": "^5.2.1",
