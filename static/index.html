@@ -161,6 +161,26 @@
 
     .conversation-item.active .conversation-item-meta { color: rgba(255,255,255,0.7); }
 
+    .conversation-streaming-badge {
+      display: inline-flex;
+      align-items: center;
+      margin-right: 0.375rem;
+      vertical-align: middle;
+    }
+
+    .streaming-dot {
+      display: inline-block;
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 50%;
+      background-color: var(--color-success);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .conversation-item.active .streaming-dot {
+      background-color: #fff;
+    }
+
     .conversation-item {
       display: flex;
       align-items: center;

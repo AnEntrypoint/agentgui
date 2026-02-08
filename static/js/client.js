@@ -344,6 +344,9 @@ class AgentGUIClient {
 
   handleWebSocketMessage(data) {
     try {
+      // Dispatch to window so other modules (conversations.js) can listen
+      window.dispatchEvent(new CustomEvent('ws-message', { detail: data }));
+
       switch (data.type) {
         case 'streaming_start':
           this.handleStreamingStart(data);
@@ -388,6 +391,15 @@ class AgentGUIClient {
 
   handleStreamingStart(data) {
     console.log('Streaming started:', data);
+
+    // If this streaming event is for a different conversation than what we are viewing,
+    // just track the state but do not modify the DOM or start polling
+    if (this.state.currentConversation?.id !== data.conversationId) {
+      console.log('Streaming started for non-active conversation:', data.conversationId);
+      this.emit('streaming:start', data);
+      return;
+    }
+
     this.state.isStreaming = true;
     this.state.currentSession = {
       id: data.sessionId,
@@ -490,7 +502,20 @@ class AgentGUIClient {
 
   handleStreamingError(data) {
     console.error('Streaming error:', data);
+
+    const conversationId = data.conversationId || this.state.currentSession?.conversationId;
+
+    // If this event is for a conversation we are NOT currently viewing, just track state
+    if (conversationId && this.state.currentConversation?.id !== conversationId) {
+      console.log('Streaming error for non-active conversation:', conversationId);
+      this.emit('streaming:error', data);
+      return;
+    }
+
     this.state.isStreaming = false;
+
+    // Stop polling for chunks
+    this.stopChunkPolling();
 
     const sessionId = data.sessionId || this.state.currentSession?.id;
     const streamingEl = document.getElementById(`streaming-${sessionId}`);
@@ -507,6 +532,16 @@ class AgentGUIClient {
 
   handleStreamingComplete(data) {
     console.log('Streaming completed:', data);
+
+    const conversationId = data.conversationId || this.state.currentSession?.conversationId;
+
+    // If this event is for a conversation we are NOT currently viewing, just track state
+    if (conversationId && this.state.currentConversation?.id !== conversationId) {
+      console.log('Streaming completed for non-active conversation:', conversationId);
+      this.emit('streaming:complete', data);
+      return;
+    }
+
     this.state.isStreaming = false;
 
     // Stop polling for chunks
@@ -528,7 +563,6 @@ class AgentGUIClient {
     }
 
     // Save scroll position after streaming completes
-    const conversationId = data.conversationId || this.state.currentSession?.conversationId;
     if (conversationId) {
       this.saveScrollPosition(conversationId);
     }
@@ -1099,8 +1133,20 @@ class AgentGUIClient {
 
   async loadConversationMessages(conversationId) {
     try {
+      // Save scroll position of current conversation before switching
+      if (this.state.currentConversation?.id) {
+        this.saveScrollPosition(this.state.currentConversation.id);
+      }
+
       // Stop any existing polling when switching conversations
       this.stopChunkPolling();
+
+      // Clear streaming state from previous conversation view
+      // (the actual streaming continues on the server, we just stop tracking it on the UI side)
+      if (this.state.isStreaming && this.state.currentConversation?.id !== conversationId) {
+        this.state.isStreaming = false;
+        this.state.currentSession = null;
+      }
 
       const convResponse = await fetch(window.__BASE_URL + `/api/conversations/${conversationId}`);
       const { conversation, isActivelyStreaming, latestSession } = await convResponse.json();
@@ -1114,7 +1160,10 @@ class AgentGUIClient {
       }
 
       // Check if there's an active streaming session that needs to be resumed
-      const shouldResumeStreaming = isActivelyStreaming && latestSession && latestSession.status === 'active';
+      // isActivelyStreaming comes from the server checking both in-memory activeExecutions map
+      // AND database session status. Use it as primary signal, with session status as confirmation.
+      const shouldResumeStreaming = isActivelyStreaming && latestSession &&
+        (latestSession.status === 'active' || latestSession.status === 'pending');
 
       // Try to fetch chunks first (Wave 3 architecture)
       try {
@@ -1202,17 +1251,22 @@ class AgentGUIClient {
               startTime: latestSession.created_at
             };
 
-            // Subscribe to WebSocket updates
+            // Subscribe to WebSocket updates for BOTH conversation and session
             if (this.wsManager.isConnected) {
               this.wsManager.subscribeToSession(latestSession.id);
+              this.wsManager.sendMessage({ type: 'subscribe', conversationId });
             }
 
+            // Update URL with session ID
+            this.updateUrlForConversation(conversationId, latestSession.id);
+
             // Get the timestamp of the last chunk to start polling from
+            // Use the last chunk's created_at to avoid re-fetching already-rendered chunks
             const lastChunkTime = chunks.length > 0
               ? chunks[chunks.length - 1].created_at
-              : Date.now();
+              : 0;
 
-            // Start polling for new chunks
+            // Start polling for new chunks from where we left off
             this.chunkPollState.lastFetchTimestamp = lastChunkTime;
             this.startChunkPolling(conversationId);
 

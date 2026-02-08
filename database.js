@@ -280,7 +280,7 @@ export const queries = {
 
   getConversationsList() {
     const stmt = db.prepare(
-      'SELECT id, title, agentType, created_at, updated_at, messageCount, workingDirectory FROM conversations WHERE status != ? ORDER BY updated_at DESC'
+      'SELECT id, title, agentType, created_at, updated_at, messageCount, workingDirectory, isStreaming FROM conversations WHERE status != ? ORDER BY updated_at DESC'
     );
     return stmt.all('deleted');
   },

@@ -12,6 +12,7 @@ class ConversationManager {
     this.emptyEl = document.querySelector('[data-conversation-empty]');
     this.newBtn = document.querySelector('[data-new-conversation]');
     this.sidebarEl = document.querySelector('[data-sidebar]');
+    this.streamingConversations = new Set();
 
     this.folderBrowser = {
       modal: null,
@@ -191,6 +192,14 @@ class ConversationManager {
 
       const data = await res.json();
       this.conversations = data.conversations || [];
+
+      // Seed streaming state from database isStreaming flag
+      for (const conv of this.conversations) {
+        if (conv.isStreaming === 1 || conv.isStreaming === true) {
+          this.streamingConversations.add(conv.id);
+        }
+      }
+
       this.render();
     } catch (err) {
       console.error('Failed to load conversations:', err);
@@ -225,6 +234,8 @@ class ConversationManager {
     li.dataset.convId = conv.id;
     if (conv.id === this.activeId) li.classList.add('active');
 
+    const isStreaming = conv.isStreaming === 1 || conv.isStreaming === true || this.streamingConversations?.has(conv.id);
+
     const title = conv.title || `Conversation ${conv.id.slice(0, 8)}`;
     const timestamp = conv.created_at ? new Date(conv.created_at).toLocaleDateString() : 'Unknown';
     const agent = conv.agentType || 'unknown';
@@ -232,9 +243,13 @@ class ConversationManager {
     const metaParts = [agent, timestamp];
     if (wd) metaParts.push(wd);
 
+    const streamingBadge = isStreaming
+      ? '<span class="conversation-streaming-badge" title="Streaming in progress"><span class="streaming-dot"></span></span>'
+      : '';
+
     li.innerHTML = `
       <div class="conversation-item-content">
-        <div class="conversation-item-title">${this.escapeHtml(title)}</div>
+        <div class="conversation-item-title">${streamingBadge}${this.escapeHtml(title)}</div>
         <div class="conversation-item-meta">${metaParts.join(' • ')}</div>
       </div>
       <button class="conversation-item-delete" title="Delete conversation" data-delete-conv="${conv.id}">
@@ -335,6 +350,12 @@ class ConversationManager {
         this.updateConversation(msg.conversation.id, msg.conversation);
       } else if (msg.type === 'conversation_deleted') {
         this.deleteConversation(msg.conversationId);
+      } else if (msg.type === 'streaming_start' && msg.conversationId) {
+        this.streamingConversations.add(msg.conversationId);
+        this.render();
+      } else if ((msg.type === 'streaming_complete' || msg.type === 'streaming_error') && msg.conversationId) {
+        this.streamingConversations.delete(msg.conversationId);
+        this.render();
       }
     });
   }

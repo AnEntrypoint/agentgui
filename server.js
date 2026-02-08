@@ -550,6 +550,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
   const startTime = Date.now();
   activeExecutions.set(conversationId, true);
   queries.setIsStreaming(conversationId, true);
+  queries.updateSession(sessionId, { status: 'active' });
 
   try {
     debugLog(`[stream] Starting: conversationId=${conversationId}, sessionId=${sessionId}`);
@@ -886,7 +887,7 @@ function broadcastSync(event) {
       shouldSend = true;
     } else if (event.conversationId && ws.subscriptions?.has(`conv-${event.conversationId}`)) {
       shouldSend = true;
-    } else if (event.type === 'message_created' || event.type === 'conversation_created' || event.type === 'conversations_updated' || event.type === 'conversation_deleted' || event.type === 'queue_status') {
+    } else if (event.type === 'message_created' || event.type === 'conversation_created' || event.type === 'conversations_updated' || event.type === 'conversation_deleted' || event.type === 'queue_status' || event.type === 'streaming_start' || event.type === 'streaming_complete' || event.type === 'streaming_error') {
       shouldSend = true;
     }
 
