@@ -581,22 +581,14 @@ class StreamingRenderer {
       case 'dev__execute':
       case 'dev_execute':
       case 'execute': {
-        // Handle mcp__plugin_gm_dev__execute and similar dev execution tools
         let html = '<div class="tool-params">';
 
-        // Show working directory if present
         if (input.workingDirectory) {
-          html += `<div style="margin-bottom:0.5rem;font-size:0.75rem;color:var(--color-text-secondary)">
-            <span style="opacity:0.7">📁</span> ${this.escapeHtml(input.workingDirectory)}
-          </div>`;
+          html += `<div style="margin-bottom:0.5rem;font-size:0.75rem;color:var(--color-text-secondary)"><span style="opacity:0.7">📁</span> ${this.escapeHtml(input.workingDirectory)}</div>`;
         }
 
-        // Show timeout if present
         if (input.timeout) {
-          const seconds = Math.round(input.timeout / 1000);
-          html += `<div style="margin-bottom:0.5rem;font-size:0.75rem;color:var(--color-text-secondary)">
-            <span style="opacity:0.7">⏱️</span> Timeout: ${seconds}s
-          </div>`;
+          html += `<div style="margin-bottom:0.5rem;font-size:0.75rem;color:var(--color-text-secondary)"><span style="opacity:0.7">⏱️</span> Timeout: ${Math.round(input.timeout / 1000)}s</div>`;
         }
 
         // Render code with syntax highlighting
@@ -605,16 +597,16 @@ class StreamingRenderer {
           const lineCount = codeLines.length;
           const truncated = lineCount > 50;
           const displayCode = truncated ? codeLines.slice(0, 50).join('\n') : input.code;
-
           const lang = input.runtime || 'javascript';
-          html += `<div style="margin-top:0.5rem">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
-              <span style="font-size:0.7rem;font-weight:600;color:#0891b2;text-transform:uppercase">${this.escapeHtml(lang)}</span>
-              <span style="font-size:0.7rem;color:var(--color-text-secondary)">${lineCount} lines</span>
-            </div>
-            ${StreamingRenderer.renderCodeWithHighlight(displayCode, this.escapeHtml.bind(this))}
-            ${truncated ? `<div style="font-size:0.7rem;color:var(--color-text-secondary);text-align:center;padding:0.25rem">... ${lineCount - 50} more lines</div>` : ''}
-          </div>`;
+          html += `<div style="margin-top:0.5rem"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem"><span style="font-size:0.7rem;font-weight:600;color:#0891b2;text-transform:uppercase">${this.escapeHtml(lang)}</span><span style="font-size:0.7rem;color:var(--color-text-secondary)">${lineCount} lines</span></div>${StreamingRenderer.renderCodeWithHighlight(displayCode, this.escapeHtml.bind(this))}${truncated ? `<div style="font-size:0.7rem;color:var(--color-text-secondary);text-align:center;padding:0.25rem">... ${lineCount - 50} more lines</div>` : ''}</div>`;
+        }
+
+        // Render commands (bash commands)
+        if (input.commands) {
+          const cmds = Array.isArray(input.commands) ? input.commands : [input.commands];
+          cmds.forEach(cmd => {
+            html += `<div style="margin-top:0.375rem"><div class="tool-param-command"><span class="prompt-char">$</span><span class="command-text">${this.escapeHtml(typeof cmd === 'string' ? cmd : JSON.stringify(cmd))}</span></div></div>`;
+          });
         }
 
         html += '</div>';
@@ -756,14 +748,23 @@ class StreamingRenderer {
       return `<div style="padding:0.5rem"><img src="${esc(trimmed)}" style="max-width:100%;max-height:24rem;border-radius:0.375rem" loading="lazy"></div>`;
     }
 
-    // Instead of rendering JSON as parameters, check if it looks like code output
+    // Parse JSON and render as structured content
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
       try {
-        // Validate it's JSON, then render as highlighted code
-        JSON.parse(trimmed);
-        // Format JSON with proper indentation
-        const formatted = JSON.stringify(JSON.parse(trimmed), null, 2);
-        return StreamingRenderer.renderCodeWithHighlight(formatted, esc);
+        const parsed = JSON.parse(trimmed);
+
+        // Handle Claude content block arrays: [{type:"text", text:"..."}]
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0] && parsed[0].type === 'text') {
+          const textParts = parsed.filter(b => b.type === 'text' && b.text);
+          if (textParts.length > 0) {
+            const combined = textParts.map(b => b.text).join('\n');
+            // Re-enter renderSmartContentHTML with the extracted text
+            return StreamingRenderer.renderSmartContentHTML(combined, esc);
+          }
+        }
+
+        // For other JSON, render as itemized key-value structure
+        return `<div style="padding:0.5rem 0.75rem">${StreamingRenderer.renderParamsHTML(parsed, 0, esc)}</div>`;
       } catch (e) {
         // Not valid JSON, might be code with braces
       }
@@ -1076,6 +1077,11 @@ class StreamingRenderer {
     if (typeof data === 'number') return `<span style="color:#7c3aed;font-weight:600">${data}</span>`;
 
     if (typeof data === 'string') {
+      if (data.length > 200 && StreamingRenderer.detectCodeContent(data)) {
+        const displayData = data.length > 1000 ? data.substring(0, 1000) : data;
+        const suffix = data.length > 1000 ? `<div style="font-size:0.7rem;color:var(--color-text-secondary);text-align:center;padding:0.25rem">... ${data.length - 1000} more characters</div>` : '';
+        return `<div style="max-height:200px;overflow-y:auto">${StreamingRenderer.renderCodeWithHighlight(displayData, esc)}${suffix}</div>`;
+      }
       if (data.length > 500) {
         return `<div style="font-family:'Monaco','Menlo','Ubuntu Mono',monospace;font-size:0.75rem;white-space:pre-wrap;word-break:break-all;max-height:200px;overflow-y:auto;background:var(--color-bg-code);color:#d1d5db;padding:0.5rem;border-radius:0.375rem;line-height:1.5">${esc(data.substring(0, 1000))}${data.length > 1000 ? '\n... (' + (data.length - 1000) + ' more chars)' : ''}</div>`;
       }
