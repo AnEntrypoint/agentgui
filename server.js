@@ -28,6 +28,7 @@ const PORT = process.env.PORT || 3000;
 const BASE_URL = (process.env.BASE_URL || '/gm').replace(/\/+$/, '');
 const watch = process.argv.includes('--no-watch') ? false : (process.argv.includes('--watch') || process.env.HOT_RELOAD !== 'false');
 
+const STARTUP_CWD = process.cwd();
 const staticDir = path.join(__dirname, 'static');
 if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
 
@@ -424,13 +425,13 @@ const server = http.createServer(async (req, res) => {
 
     if (routePath === '/api/home' && req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ home: process.env.HOME || '/config' }));
+      res.end(JSON.stringify({ home: process.env.HOME || '/config', cwd: STARTUP_CWD }));
       return;
     }
 
     if (routePath === '/api/folders' && req.method === 'POST') {
       const body = await parseBody(req);
-      const folderPath = body.path || '/config';
+      const folderPath = body.path || STARTUP_CWD;
       try {
         const expandedPath = folderPath.startsWith('~') ?
           folderPath.replace('~', process.env.HOME || '/config') : folderPath;
@@ -556,7 +557,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     debugLog(`[stream] Starting: conversationId=${conversationId}, sessionId=${sessionId}`);
 
     const conv = queries.getConversation(conversationId);
-    const cwd = conv?.workingDirectory || '/config';
+    const cwd = conv?.workingDirectory || STARTUP_CWD;
     const resumeSessionId = conv?.claudeSessionId || null;
 
     let allBlocks = [];
@@ -762,7 +763,7 @@ async function processMessage(conversationId, messageId, content, agentId) {
     debugLog(`[processMessage] Starting: conversationId=${conversationId}, agentId=${agentId}`);
 
     const conv = queries.getConversation(conversationId);
-    const cwd = conv?.workingDirectory || '/config';
+    const cwd = conv?.workingDirectory || STARTUP_CWD;
     const resumeSessionId = conv?.claudeSessionId || null;
 
     let contentStr = typeof content === 'object' ? JSON.stringify(content) : content;

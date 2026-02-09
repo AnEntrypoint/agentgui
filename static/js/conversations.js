@@ -19,7 +19,8 @@ class ConversationManager {
       listEl: null,
       breadcrumbEl: null,
       currentPath: '~',
-      homePath: '~'
+      homePath: '~',
+      cwdPath: null
     };
 
     if (!this.listEl) return;
@@ -64,6 +65,7 @@ class ConversationManager {
       if (res.ok) {
         const data = await res.json();
         this.folderBrowser.homePath = data.home || '~';
+        this.folderBrowser.cwdPath = data.cwd || null;
       }
     } catch (e) {
       console.error('Failed to fetch home path:', e);
@@ -75,9 +77,10 @@ class ConversationManager {
       this.createNew();
       return;
     }
-    this.folderBrowser.currentPath = '~';
+    const startPath = this.folderBrowser.cwdPath || '~';
+    this.folderBrowser.currentPath = startPath;
     this.folderBrowser.modal.classList.add('visible');
-    this.loadFolders('~');
+    this.loadFolders(startPath);
   }
 
   closeFolderBrowser() {
