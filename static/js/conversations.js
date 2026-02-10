@@ -20,7 +20,8 @@ class ConversationManager {
       breadcrumbEl: null,
       currentPath: '~',
       homePath: '~',
-      cwdPath: null
+      cwdPath: null,
+      homePathReady: null
     };
 
     if (!this.listEl) return;
@@ -56,7 +57,7 @@ class ConversationManager {
       if (e.target === this.folderBrowser.modal) this.closeFolderBrowser();
     });
 
-    this.fetchHomePath();
+    this.folderBrowser.homePathReady = this.fetchHomePath();
   }
 
   async fetchHomePath() {
@@ -72,10 +73,13 @@ class ConversationManager {
     }
   }
 
-  openFolderBrowser() {
+  async openFolderBrowser() {
     if (!this.folderBrowser.modal) {
       this.createNew();
       return;
+    }
+    if (this.folderBrowser.homePathReady) {
+      await this.folderBrowser.homePathReady;
     }
     const startPath = this.folderBrowser.cwdPath || '~';
     this.folderBrowser.currentPath = startPath;
