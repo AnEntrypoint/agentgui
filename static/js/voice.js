@@ -1,29 +1,90 @@
-/**
- * Voice Module
- * Provides STT (Speech Recognition) and TTS (Speech Synthesis) for the Voice tab.
- * Filters streaming blocks to show only text and result types.
- * Uses browser-native Web Speech API.
- */
+import { STT, TTS } from '/gm/webtalk/sdk.js';
 
 (function() {
   const BASE = window.__BASE_URL || '';
-  let recognition = null;
+  let stt = null;
+  let tts = null;
   let isRecording = false;
   let ttsEnabled = true;
-  let currentUtterance = null;
-  let speechQueue = [];
-  let isSpeaking = false;
   let voiceActive = false;
   let lastSpokenBlockIndex = -1;
   let currentConversationId = null;
-  let pendingBlocks = [];
+  let sttReady = false;
+  let ttsReady = false;
+  let speechQueue = [];
+  let isSpeaking = false;
 
-  function init() {
-    setupSTT();
-    setupTTS();
+  async function init() {
+    setupTTSToggle();
     setupUI();
     setupStreamingListener();
     setupAgentSelector();
+    initSTT();
+    initTTS();
+  }
+
+  async function initSTT() {
+    try {
+      stt = new STT({
+        basePath: BASE + '/webtalk',
+        onTranscript: function(text) {
+          var el = document.getElementById('voiceTranscript');
+          if (el) {
+            el.textContent = text;
+            el.setAttribute('data-final', text);
+          }
+        },
+        onPartial: function(text) {
+          var el = document.getElementById('voiceTranscript');
+          if (el) {
+            var existing = el.getAttribute('data-final') || '';
+            el.textContent = existing + text;
+          }
+        },
+        onStatus: function(status) {
+          var micBtn = document.getElementById('voiceMicBtn');
+          if (!micBtn) return;
+          if (status === 'recording') {
+            micBtn.classList.add('recording');
+          } else {
+            micBtn.classList.remove('recording');
+          }
+        }
+      });
+      await stt.init();
+      sttReady = true;
+    } catch (e) {
+      console.warn('STT init failed:', e.message);
+    }
+  }
+
+  async function initTTS() {
+    try {
+      tts = new TTS({
+        basePath: BASE + '/webtalk',
+        apiBasePath: BASE,
+        onStatus: function() {},
+        onAudioReady: function(url) {
+          var audio = new Audio(url);
+          audio.onended = function() {
+            isSpeaking = false;
+            processQueue();
+          };
+          audio.onerror = function() {
+            isSpeaking = false;
+            processQueue();
+          };
+          audio.play().catch(function() {
+            isSpeaking = false;
+            processQueue();
+          });
+        }
+      });
+      await tts.init();
+      ttsReady = true;
+    } catch (e) {
+      console.warn('TTS init failed:', e.message);
+    }
   }
 
   function setupAgentSelector() {
@@ -42,52 +103,7 @@
     }
   }
 
-  function setupSTT() {
-    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
-
-    recognition = new SpeechRecognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onresult = function(event) {
-      var transcript = '';
-      var final = '';
-      for (var i = event.resultIndex; i < event.results.length; i++) {
-        var result = event.results[i];
-        if (result.isFinal) {
-          final += result[0].transcript;
-        } else {
-          transcript += result[0].transcript;
-        }
-      }
-      var el = document.getElementById('voiceTranscript');
-      if (el) {
-        var existing = el.getAttribute('data-final') || '';
-        if (final) {
-          existing += final;
-          el.setAttribute('data-final', existing);
-        }
-        el.textContent = existing + transcript;
-      }
-    };
-
-    recognition.onerror = function(event) {
-      if (event.error !== 'aborted' && event.error !== 'no-speech') {
-        console.warn('Speech recognition error:', event.error);
-      }
-      stopRecording();
-    };
-
-    recognition.onend = function() {
-      if (isRecording) {
-        stopRecording();
-      }
-    };
-  }
-
-  function setupTTS() {
+  function setupTTSToggle() {
     var toggle = document.getElementById('voiceTTSToggle');
     if (toggle) {
       var saved = localStorage.getItem('voice-tts-enabled');
@@ -101,7 +117,6 @@
         if (!ttsEnabled) stopSpeaking();
       });
     }
-
     var stopBtn = document.getElementById('voiceStopSpeaking');
     if (stopBtn) {
       stopBtn.addEventListener('click', stopSpeaking);
@@ -120,38 +135,33 @@
         }
       });
     }
-
     var sendBtn = document.getElementById('voiceSendBtn');
     if (sendBtn) {
       sendBtn.addEventListener('click', sendVoiceMessage);
     }
   }
 
-  function startRecording() {
-    if (!recognition || isRecording) return;
+  async function startRecording() {
+    if (!stt || !sttReady || isRecording) return;
     var el = document.getElementById('voiceTranscript');
     if (el) {
       el.textContent = '';
       el.setAttribute('data-final', '');
     }
     isRecording = true;
-    var micBtn = document.getElementById('voiceMicBtn');
-    if (micBtn) micBtn.classList.add('recording');
     try {
-      recognition.start();
+      await stt.startRecording();
     } catch (e) {
       isRecording = false;
-      if (micBtn) micBtn.classList.remove('recording');
+      console.warn('Recording start failed:', e.message);
     }
   }
 
-  function stopRecording() {
-    if (!recognition || !isRecording) return;
+  async function stopRecording() {
+    if (!stt || !isRecording) return;
     isRecording = false;
-    var micBtn = document.getElementById('voiceMicBtn');
-    if (micBtn) micBtn.classList.remove('recording');
     try {
-      recognition.stop();
+      await stt.stopRecording();
     } catch (e) {}
   }
 
@@ -160,11 +170,9 @@
     if (!el) return;
     var text = el.textContent.trim();
     if (!text) return;
-
     addVoiceBlock(text, true);
     el.textContent = '';
     el.setAttribute('data-final', '');
-
     if (typeof agentGUIClient !== 'undefined' && agentGUIClient) {
       var input = agentGUIClient.ui.messageInput;
       if (input) {
@@ -174,13 +182,35 @@
     }
   }
 
+  function speak(text) {
+    if (!ttsEnabled || !tts || !ttsReady) return;
+    var clean = text.replace(/<[^>]*>/g, '').trim();
+    if (!clean) return;
+    speechQueue.push(clean);
+    processQueue();
+  }
+
+  function processQueue() {
+    if (isSpeaking || speechQueue.length === 0) return;
+    isSpeaking = true;
+    var text = speechQueue.shift();
+    tts.generate(text).catch(function() {
+      isSpeaking = false;
+      processQueue();
+    });
+  }
+
+  function stopSpeaking() {
+    speechQueue = [];
+    isSpeaking = false;
+    if (tts) tts.stop();
+  }
+
   function addVoiceBlock(text, isUser) {
     var container = document.getElementById('voiceMessages');
     if (!container) return;
-
     var emptyMsg = container.querySelector('.voice-empty');
     if (emptyMsg) emptyMsg.remove();
-
     var div = document.createElement('div');
     div.className = 'voice-block' + (isUser ? ' voice-block-user' : '');
     div.textContent = text;
@@ -192,22 +222,17 @@
   function addVoiceResultBlock(block) {
     var container = document.getElementById('voiceMessages');
     if (!container) return;
-
     var emptyMsg = container.querySelector('.voice-empty');
     if (emptyMsg) emptyMsg.remove();
-
     var div = document.createElement('div');
     div.className = 'voice-block';
-
     var isError = block.is_error || false;
     var duration = block.duration_ms ? (block.duration_ms / 1000).toFixed(1) + 's' : '';
     var cost = block.total_cost_usd ? '$' + block.total_cost_usd.toFixed(4) : '';
-
     var resultText = '';
     if (block.result) {
       resultText = typeof block.result === 'string' ? block.result : JSON.stringify(block.result);
     }
-
     var html = '';
     if (resultText) {
       html += '<div>' + escapeHtml(resultText) + '</div>';
@@ -222,11 +247,9 @@
     if (!html) {
       html = isError ? 'Execution failed' : 'Execution complete';
     }
-
     div.innerHTML = html;
     container.appendChild(div);
     scrollVoiceToBottom();
-
     if (ttsEnabled && resultText) {
       speak(resultText);
     }
@@ -242,79 +265,11 @@
     }
   }
 
-  function speak(text) {
-    if (!ttsEnabled || !window.speechSynthesis) return;
-    var clean = text.replace(/<[^>]*>/g, '').trim();
-    if (!clean) return;
-    speechQueue.push(clean);
-    processQueue();
-  }
-
-  function processQueue() {
-    if (isSpeaking || speechQueue.length === 0) return;
-    isSpeaking = true;
-    var text = speechQueue.shift();
-
-    var chunks = splitTextForSpeech(text);
-    speakChunks(chunks, 0);
-  }
-
-  function splitTextForSpeech(text) {
-    var maxLen = 200;
-    if (text.length <= maxLen) return [text];
-    var sentences = text.match(/[^.!?\n]+[.!?\n]?/g) || [text];
-    var chunks = [];
-    var current = '';
-    for (var i = 0; i < sentences.length; i++) {
-      if (current.length + sentences[i].length > maxLen && current) {
-        chunks.push(current.trim());
-        current = '';
-      }
-      current += sentences[i];
-    }
-    if (current.trim()) chunks.push(current.trim());
-    return chunks;
-  }
-
-  function speakChunks(chunks, index) {
-    if (index >= chunks.length) {
-      isSpeaking = false;
-      processQueue();
-      return;
-    }
-    var utterance = new SpeechSynthesisUtterance(chunks[index]);
-    utterance.rate = 1.1;
-    utterance.pitch = 1.0;
-    currentUtterance = utterance;
-
-    utterance.onend = function() {
-      currentUtterance = null;
-      speakChunks(chunks, index + 1);
-    };
-    utterance.onerror = function() {
-      currentUtterance = null;
-      isSpeaking = false;
-      processQueue();
-    };
-
-    window.speechSynthesis.speak(utterance);
-  }
-
-  function stopSpeaking() {
-    speechQueue = [];
-    isSpeaking = false;
-    currentUtterance = null;
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-  }
-
   function setupStreamingListener() {
     window.addEventListener('ws-message', function(e) {
       if (!voiceActive) return;
       var data = e.detail;
       if (!data) return;
-
       if (data.type === 'streaming_progress' && data.block) {
         handleVoiceBlock(data.block);
       }
@@ -322,7 +277,6 @@
         lastSpokenBlockIndex = -1;
       }
     });
-
     window.addEventListener('conversation-selected', function(e) {
       currentConversationId = e.detail.conversationId;
       if (voiceActive) {
@@ -349,12 +303,10 @@
     var container = document.getElementById('voiceMessages');
     if (!container) return;
     container.innerHTML = '';
-
     if (!conversationId) {
       showVoiceEmpty(container);
       return;
     }
-
     fetch(BASE + '/api/conversations/' + conversationId + '/chunks')
       .then(function(res) { return res.json(); })
       .then(function(data) {

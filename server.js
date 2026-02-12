@@ -149,21 +149,9 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
-  // Route webtalk (voice STT/TTS) through isolated Express app (COEP/COOP scoped)
   const pathOnly = req.url.split('?')[0];
   if (pathOnly.startsWith(BASE_URL + '/webtalk') || pathOnly.startsWith('/webtalk') || pathOnly.startsWith('/assets/') || pathOnly.startsWith('/tts/') || pathOnly.startsWith('/models/')) {
-    // Serve sdk.js directly with correct MIME type to avoid Express routing edge cases
-    const sdkPaths = [BASE_URL + '/webtalk/sdk.js', '/webtalk/sdk.js'];
-    if (sdkPaths.includes(pathOnly)) {
-      const sdkFile = path.join(path.dirname(require.resolve('webtalk')), 'sdk.js');
-      res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cross-Origin-Embedder-Policy': 'require-corp', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'cross-origin' });
-      fs.createReadStream(sdkFile).pipe(res);
-      return;
-    }
-    // Rewrite bare /webtalk/* paths to include BASE_URL prefix so webtalk middleware routes match
-    if (!req.url.startsWith(BASE_URL) && (pathOnly.startsWith('/webtalk') || pathOnly.startsWith('/assets/') || pathOnly.startsWith('/tts/') || pathOnly.startsWith('/models/'))) {
-      req.url = BASE_URL + req.url;
-    }
+    if (!req.url.startsWith(BASE_URL)) req.url = BASE_URL + req.url;
     return webtalkApp(req, res);
   }
 
