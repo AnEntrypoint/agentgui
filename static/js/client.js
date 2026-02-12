@@ -192,6 +192,7 @@ class AgentGUIClient {
    */
   updateUrlForConversation(conversationId, sessionId) {
     if (!this.isValidId(conversationId)) return;
+    if (!this.routerState) return;
 
     this.routerState.currentConversationId = conversationId;
     if (sessionId && this.isValidId(sessionId)) {

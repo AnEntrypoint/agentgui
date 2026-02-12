@@ -6,7 +6,7 @@
 class SyntaxHighlighter {
   constructor(config = {}) {
     this.config = {
-      cdnUrl: config.cdnUrl || 'https://unpkg.com/prism@1.29.0',
+      cdnUrl: config.cdnUrl || 'https://cdn.jsdelivr.net/npm/prismjs@1.29.0',
       lazyLoad: config.lazyLoad !== false,
       enableCache: config.enableCache !== false,
       maxCacheSize: config.maxCacheSize || 500,
