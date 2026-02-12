@@ -821,7 +821,6 @@
     /* ===== File browser ===== */
     .file-browser-container { flex:1; min-height:0; overflow:hidden; }
     .file-browser-iframe { width:100%; height:100%; border:none; }
-    .voice-container { flex:1; min-height:0; overflow:hidden; }
     .voice-iframe { width:100%; height:100%; border:none; }
 
     /* ===== RESPONSIVE: MOBILE ===== */
@@ -914,6 +913,179 @@
 
     html.dark * {
       scrollbar-color: #475569 transparent;
+    }
+
+    /* ===== VOICE VIEW ===== */
+    .voice-container {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .voice-scroll {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 1.5rem 2rem;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .voice-messages {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .voice-block {
+      padding: 1rem 1.25rem;
+      border-radius: 0.75rem;
+      background: var(--color-bg-secondary);
+      line-height: 1.7;
+      font-size: 1rem;
+      max-width: 85%;
+      margin-right: auto;
+      position: relative;
+    }
+
+    .voice-block.speaking {
+      box-shadow: 0 0 0 2px var(--color-primary);
+    }
+
+    .voice-block-user {
+      background: var(--color-primary);
+      color: white;
+      margin-left: auto;
+      margin-right: 0;
+    }
+
+    .voice-input-section {
+      flex-shrink: 0;
+      background: var(--color-bg-primary);
+      padding: 0.75rem 1rem;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .voice-input-wrapper {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .voice-transcript {
+      flex: 1;
+      min-height: 40px;
+      max-height: 100px;
+      padding: 0.5rem 0.875rem;
+      border-radius: 0.75rem;
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .voice-transcript:empty::before {
+      content: attr(data-placeholder);
+      color: var(--color-text-secondary);
+    }
+
+    .voice-mic-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      background: var(--color-bg-secondary);
+      color: var(--color-text-secondary);
+      border: 2px solid var(--color-border);
+      border-radius: 50%;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+
+    .voice-mic-btn:hover {
+      border-color: var(--color-primary);
+      color: var(--color-primary);
+    }
+
+    .voice-mic-btn.recording {
+      background: var(--color-error);
+      border-color: var(--color-error);
+      color: white;
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    .voice-mic-btn svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .voice-send-btn {
+      flex-shrink: 0;
+    }
+
+    .voice-tts-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: var(--color-text-secondary);
+    }
+
+    .voice-toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .voice-toggle-label input[type="checkbox"] {
+      accent-color: var(--color-primary);
+    }
+
+    .voice-stop-btn {
+      padding: 0.25rem 0.75rem;
+      background: var(--color-bg-secondary);
+      border: 1px solid var(--color-border);
+      border-radius: 0.375rem;
+      cursor: pointer;
+      font-size: 0.75rem;
+      color: var(--color-text-secondary);
+      transition: all 0.15s;
+    }
+
+    .voice-stop-btn:hover {
+      background: var(--color-error);
+      color: white;
+      border-color: var(--color-error);
+    }
+
+    .voice-empty {
+      text-align: center;
+      color: var(--color-text-secondary);
+      padding: 4rem 2rem;
+      font-size: 1rem;
+    }
+
+    .voice-empty-icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      opacity: 0.3;
+    }
+
+    .voice-block .voice-result-stats {
+      font-size: 0.8rem;
+      color: var(--color-text-secondary);
+      margin-top: 0.5rem;
+      padding-top: 0.5rem;
+      border-top: 1px solid var(--color-border);
     }
 
     /* ===== RESPONSIVE: TABLET ===== */
@@ -1672,8 +1844,38 @@
         <iframe id="fileBrowserIframe" class="file-browser-iframe" sandbox="allow-same-origin allow-scripts allow-forms allow-popups"></iframe>
       </div>
 
-      <!-- Voice STT/TTS (lazy-loaded on first click) -->
-      <div id="voiceContainer" class="voice-container" style="display:none;"></div>
+      <!-- Voice STT/TTS view -->
+      <div id="voiceContainer" class="voice-container" style="display:none;">
+        <div id="voiceScroll" class="voice-scroll">
+          <div class="voice-messages" id="voiceMessages"></div>
+        </div>
+        <div class="voice-input-section">
+          <div class="voice-input-wrapper">
+            <select class="agent-selector voice-agent-selector" data-voice-agent-selector title="Select agent"></select>
+            <div class="voice-transcript" id="voiceTranscript" data-placeholder="Tap mic and speak..."></div>
+            <button class="voice-mic-btn" id="voiceMicBtn" title="Toggle recording" aria-label="Voice input">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <button class="send-btn voice-send-btn" id="voiceSendBtn" title="Send message" aria-label="Send message">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+              </svg>
+            </button>
+          </div>
+          <div class="voice-tts-controls">
+            <label class="voice-toggle-label">
+              <input type="checkbox" id="voiceTTSToggle" checked>
+              <span>Auto-speak responses</span>
+            </label>
+            <button class="voice-stop-btn" id="voiceStopSpeaking" title="Stop speaking">Stop</button>
+          </div>
+        </div>
+      </div>
 
       <!-- Input area: fixed at bottom -->
       <div class="input-section">
@@ -1736,6 +1938,7 @@
   <script src="/gm/js/ui-components.js"></script>
   <script src="/gm/js/conversations.js"></script>
   <script src="/gm/js/client.js"></script>
+  <script src="/gm/js/voice.js"></script>
   <script src="/gm/js/features.js"></script>
 
   <script>

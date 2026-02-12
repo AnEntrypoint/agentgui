@@ -151,7 +151,7 @@ const server = http.createServer(async (req, res) => {
 
   // Route webtalk (voice STT/TTS) through isolated Express app (COEP/COOP scoped)
   const pathOnly = req.url.split('?')[0];
-  if (pathOnly.startsWith(BASE_URL + '/webtalk') || pathOnly.startsWith('/assets/') || pathOnly.startsWith('/tts/') || pathOnly.startsWith('/models/')) {
+  if (pathOnly.startsWith(BASE_URL + '/webtalk') || pathOnly.startsWith('/webtalk') || pathOnly.startsWith('/assets/') || pathOnly.startsWith('/tts/') || pathOnly.startsWith('/models/')) {
     return webtalkApp(req, res);
   }
 

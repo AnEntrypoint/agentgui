@@ -8,7 +8,6 @@
   let currentConversation = null;
   let currentView = 'chat';
   let dragCounter = 0;
-  let voiceLoaded = false;
 
   function init() {
     setupSidebarToggle();
@@ -217,13 +216,10 @@
       }
     }
 
-    if (view === 'voice' && voiceContainer && !voiceLoaded) {
-      voiceLoaded = true;
-      var iframe = document.createElement('iframe');
-      iframe.className = 'voice-iframe';
-      iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups';
-      iframe.src = BASE + '/webtalk/demo';
-      voiceContainer.appendChild(iframe);
+    if (view === 'voice' && window.voiceModule) {
+      window.voiceModule.activate();
+    } else if (view !== 'voice' && window.voiceModule) {
+      window.voiceModule.deactivate();
     }
   }
 
