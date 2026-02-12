@@ -1,4 +1,4 @@
-import { STT, TTS } from '/gm/webtalk/sdk.js';
+import { STT, TTS } from 'webtalk-sdk';
 
 (function() {
   const BASE = window.__BASE_URL || '';

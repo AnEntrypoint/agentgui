@@ -39,7 +39,7 @@ const expressApp = express();
 
 // Separate Express app for webtalk (STT/TTS) - isolated to contain COEP/COOP headers
 const webtalkApp = express();
-const webtalkInstance = webtalk(webtalkApp, { path: BASE_URL + '/webtalk' });
+const webtalkInstance = webtalk(webtalkApp, { path: '/webtalk' });
 webtalkInstance.init().catch(err => debugLog('Webtalk init: ' + err.message));
 
 // File upload endpoint - copies dropped files to conversation workingDirectory
@@ -150,8 +150,18 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
   const pathOnly = req.url.split('?')[0];
-  if (pathOnly.startsWith(BASE_URL + '/webtalk') || pathOnly.startsWith('/webtalk') || pathOnly.startsWith('/assets/') || pathOnly.startsWith('/tts/') || pathOnly.startsWith('/models/')) {
-    if (!req.url.startsWith(BASE_URL)) req.url = BASE_URL + req.url;
+  const webtalkPrefix = BASE_URL + '/webtalk';
+  const isWebtalkRoute = pathOnly.startsWith(webtalkPrefix) ||
+    pathOnly.startsWith(BASE_URL + '/api/tts-status') ||
+    pathOnly.startsWith(BASE_URL + '/assets/') ||
+    pathOnly.startsWith(BASE_URL + '/tts/') ||
+    pathOnly.startsWith(BASE_URL + '/models/') ||
+    pathOnly.startsWith('/webtalk') ||
+    pathOnly.startsWith('/assets/') ||
+    pathOnly.startsWith('/tts/') ||
+    pathOnly.startsWith('/models/');
+  if (isWebtalkRoute) {
+    if (req.url.startsWith(BASE_URL)) req.url = req.url.slice(BASE_URL.length) || '/';
     return webtalkApp(req, res);
   }
 
@@ -530,7 +540,7 @@ function serveFile(filePath, res) {
     if (err) { res.writeHead(500); res.end('Server error'); return; }
     let content = data.toString();
     if (ext === '.html') {
-      const baseTag = `<script>window.__BASE_URL='${BASE_URL}';</script>`;
+      const baseTag = `<script>window.__BASE_URL='${BASE_URL}';</script>\n  <script type="importmap">{"imports":{"webtalk-sdk":"${BASE_URL}/webtalk/sdk.js"}}</script>`;
       content = content.replace('<head>', '<head>\n  ' + baseTag);
       if (watch) {
         content += `\n<script>(function(){const ws=new WebSocket('ws://'+location.host+'${BASE_URL}/hot-reload');ws.onmessage=e=>{if(JSON.parse(e.data).type==='reload')location.reload()};})();</script>`;
