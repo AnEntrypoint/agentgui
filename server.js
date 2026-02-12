@@ -13,6 +13,7 @@ const require = createRequire(import.meta.url);
 const express = require('express');
 const Busboy = require('busboy');
 const fsbrowse = require('fsbrowse');
+const { webtalk } = require('webtalk');
 
 const SYSTEM_PROMPT = `Always write your responses in ripple-ui enhanced HTML. Avoid overriding light/dark mode CSS variables. Use all the benefits of HTML to express technical details with proper semantic markup, tables, code blocks, headings, and lists. Write clean, well-structured HTML that respects the existing design system.`;
 
@@ -35,6 +36,11 @@ if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
 
 // Express sub-app for fsbrowse file browser and file upload
 const expressApp = express();
+
+// Separate Express app for webtalk (STT/TTS) - isolated to contain COEP/COOP headers
+const webtalkApp = express();
+const webtalkInstance = webtalk(webtalkApp, { path: BASE_URL + '/webtalk' });
+webtalkInstance.init().catch(err => debugLog('Webtalk init: ' + err.message));
 
 // File upload endpoint - copies dropped files to conversation workingDirectory
 expressApp.post(BASE_URL + '/api/upload/:conversationId', (req, res) => {
@@ -143,8 +149,13 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
-  // Route file upload and fsbrowse requests through Express sub-app
+  // Route webtalk (voice STT/TTS) through isolated Express app (COEP/COOP scoped)
   const pathOnly = req.url.split('?')[0];
+  if (pathOnly.startsWith(BASE_URL + '/webtalk') || pathOnly.startsWith('/assets/') || pathOnly.startsWith('/tts/') || pathOnly.startsWith('/models/')) {
+    return webtalkApp(req, res);
+  }
+
+  // Route file upload and fsbrowse requests through Express sub-app
   if (pathOnly.startsWith(BASE_URL + '/api/upload/') || pathOnly.startsWith(BASE_URL + '/files/')) {
     return expressApp(req, res);
   }

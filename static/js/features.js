@@ -8,6 +8,7 @@
   let currentConversation = null;
   let currentView = 'chat';
   let dragCounter = 0;
+  let voiceLoaded = false;
 
   function init() {
     setupSidebarToggle();
@@ -195,31 +196,34 @@
     var chatArea = document.getElementById('output-scroll');
     var execPanel = document.querySelector('.input-section');
     var fileBrowser = document.getElementById('fileBrowserContainer');
-    var iframe = document.getElementById('fileBrowserIframe');
+    var fileIframe = document.getElementById('fileBrowserIframe');
+    var voiceContainer = document.getElementById('voiceContainer');
 
     if (!bar) return;
 
-    // Update active button
     bar.querySelectorAll('.view-toggle-btn').forEach(function(btn) {
       btn.classList.toggle('active', btn.dataset.view === view);
     });
 
-    if (view === 'files') {
-      if (chatArea) chatArea.style.display = 'none';
-      if (execPanel) execPanel.style.display = 'none';
-      if (fileBrowser) {
-        fileBrowser.style.display = 'flex';
-        if (iframe && currentConversation) {
-          var src = BASE + '/files/' + currentConversation + '/';
-          if (iframe.src !== location.origin + src) {
-            iframe.src = src;
-          }
-        }
+    if (chatArea) chatArea.style.display = view === 'chat' ? '' : 'none';
+    if (execPanel) execPanel.style.display = view === 'chat' ? '' : 'none';
+    if (fileBrowser) fileBrowser.style.display = view === 'files' ? 'flex' : 'none';
+    if (voiceContainer) voiceContainer.style.display = view === 'voice' ? 'flex' : 'none';
+
+    if (view === 'files' && fileIframe && currentConversation) {
+      var src = BASE + '/files/' + currentConversation + '/';
+      if (fileIframe.src !== location.origin + src) {
+        fileIframe.src = src;
       }
-    } else {
-      if (chatArea) chatArea.style.display = '';
-      if (execPanel) execPanel.style.display = '';
-      if (fileBrowser) fileBrowser.style.display = 'none';
+    }
+
+    if (view === 'voice' && voiceContainer && !voiceLoaded) {
+      voiceLoaded = true;
+      var iframe = document.createElement('iframe');
+      iframe.className = 'voice-iframe';
+      iframe.sandbox = 'allow-same-origin allow-scripts allow-forms allow-popups';
+      iframe.src = BASE + '/webtalk/demo';
+      voiceContainer.appendChild(iframe);
     }
   }
 

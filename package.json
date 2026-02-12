@@ -26,6 +26,7 @@
     "busboy": "^1.6.0",
     "express": "^5.2.1",
     "fsbrowse": "^0.2.13",
+    "webtalk": "github:anEntrypoint/realtime-whisper-webgpu",
     "ws": "^8.14.2"
   }
 }
