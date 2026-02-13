@@ -223,7 +223,6 @@ class AgentGUIClient {
       const position = scrollContainer.scrollTop;
       try {
         localStorage.setItem(`scroll_${conversationId}`, position.toString());
-        console.log(`Saved scroll position for ${conversationId}: ${position}`);
       } catch (e) {
         console.warn('Failed to save scroll position:', e);
       }
@@ -245,7 +244,6 @@ class AgentGUIClient {
         if (scrollContainer && !isNaN(scrollTop)) {
           requestAnimationFrame(() => {
             scrollContainer.scrollTop = scrollTop;
-            console.log(`Restored scroll position for ${conversationId}: ${scrollTop}`);
           });
         }
       }
@@ -985,7 +983,6 @@ class AgentGUIClient {
     }
 
     pollState.isPolling = false;
-    console.log('Stopped chunk polling');
   }
 
   /**
@@ -1073,7 +1070,6 @@ class AgentGUIClient {
    */
   disableControls() {
     if (this.ui.sendButton) this.ui.sendButton.disabled = true;
-    if (this.ui.messageInput) this.ui.messageInput.disabled = true;
     if (this.ui.agentSelector) this.ui.agentSelector.disabled = true;
   }
 
@@ -1082,7 +1078,6 @@ class AgentGUIClient {
    */
   enableControls() {
     if (this.ui.sendButton) this.ui.sendButton.disabled = false;
-    if (this.ui.messageInput) this.ui.messageInput.disabled = false;
     if (this.ui.agentSelector) this.ui.agentSelector.disabled = false;
   }
 
