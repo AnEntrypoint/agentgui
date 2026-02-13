@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,12 +22,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
+          registry-url: 'https://registry.npmjs.org'
 
-      - name: Setup npm for OIDC
-        run: |
-          npm config set registry https://registry.npmjs.org/
-          npm config delete //registry.npmjs.org/:_authToken || true
-          npm --version
+      - name: Setup npm auth
+        run: npm --version
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Bump version
         run: |
@@ -40,7 +39,9 @@ jobs:
           echo "VERSION_BUMPED=true" >> $GITHUB_ENV
 
       - name: Publish to npm
-        run: npm publish --provenance
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Configure git
         run: |
