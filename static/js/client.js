@@ -60,12 +60,12 @@ class AgentGUIClient {
       this.setupWebSocketListeners();
       this.setupRendererListeners();
 
+      // Setup UI elements (must happen before loading data so DOM refs exist)
+      this.setupUI();
+
       // Load initial data
       await this.loadAgents();
       await this.loadConversations();
-
-      // Setup UI elements
-      this.setupUI();
 
       // Enable controls for initial interaction
       this.enableControls();
