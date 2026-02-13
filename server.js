@@ -8,7 +8,11 @@ import { execSync } from 'child_process';
 import { createRequire } from 'module';
 import { queries } from './database.js';
 import { runClaudeWithStreaming } from './lib/claude-runner.js';
-import { transcribe, synthesize, getStatus as getSpeechStatus } from './lib/speech.js';
+let speechModule = null;
+async function getSpeech() {
+  if (!speechModule) speechModule = await import('./lib/speech.js');
+  return speechModule;
+}
 
 const require = createRequire(import.meta.url);
 const express = require('express');
@@ -327,6 +331,27 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    const fullLoadMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/full$/);
+    if (fullLoadMatch && req.method === 'GET') {
+      const conversationId = fullLoadMatch[1];
+      const conv = queries.getConversation(conversationId);
+      if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+      const latestSession = queries.getLatestSession(conversationId);
+      const isActivelyStreaming = activeExecutions.has(conversationId) ||
+        (latestSession && latestSession.status === 'active');
+      const chunks = queries.getConversationChunks(conversationId);
+      const msgResult = queries.getPaginatedMessages(conversationId, 100, 0);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        conversation: conv,
+        isActivelyStreaming,
+        latestSession,
+        chunks,
+        messages: msgResult.messages
+      }));
+      return;
+    }
+
     const conversationChunksMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/chunks$/);
     if (conversationChunksMatch && req.method === 'GET') {
       const conversationId = conversationChunksMatch[1];
@@ -450,13 +475,16 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ error: 'No audio data' }));
           return;
         }
+        const { transcribe } = await getSpeech();
         const text = await transcribe(audioBuffer);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ text: text.trim() }));
+        res.end(JSON.stringify({ text: (text || '').trim() }));
       } catch (err) {
         debugLog('[STT] Error: ' + err.message);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+        }
+        res.end(JSON.stringify({ error: err.message || 'STT failed' }));
       }
       return;
     }
@@ -470,20 +498,29 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ error: 'No text provided' }));
           return;
         }
+        const { synthesize } = await getSpeech();
         const wavBuffer = await synthesize(text);
         res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': wavBuffer.length });
         res.end(wavBuffer);
       } catch (err) {
         debugLog('[TTS] Error: ' + err.message);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+        }
+        res.end(JSON.stringify({ error: err.message || 'TTS failed' }));
       }
       return;
     }
 
     if (routePath === '/api/speech-status' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(getSpeechStatus()));
+      try {
+        const { getStatus } = await getSpeech();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(getStatus()));
+      } catch (err) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ sttReady: false, ttsReady: false, sttLoading: false, ttsLoading: false }));
+      }
       return;
     }
 
