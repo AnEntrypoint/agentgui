@@ -23,6 +23,8 @@ import { STT, TTS } from 'webtalk-sdk';
     initTTS();
   }
 
+  var sttLoadPhase = 'starting';
+
   async function initSTT() {
     try {
       stt = new STT({
@@ -51,14 +53,34 @@ import { STT, TTS } from 'webtalk-sdk';
           }
         }
       });
-      var initTimeout = new Promise(function(_, reject) {
-        setTimeout(function() { reject(new Error('STT init timed out after 30s')); }, 30000);
+      var origInit = stt.init.bind(stt);
+      var initPromise = new Promise(function(resolve, reject) {
+        origInit().then(resolve).catch(reject);
+        if (stt.worker) {
+          var origHandler = stt.worker.onmessage;
+          stt.worker.onmessage = function(e) {
+            var msg = e.data;
+            if (msg && msg.status) {
+              if (msg.status === 'progress' || msg.status === 'download') {
+                if (sttLoadPhase !== 'downloading') {
+                  sttLoadPhase = 'downloading';
+                  updateMicState();
+                }
+              } else if (msg.status === 'done' && msg.file && msg.file.endsWith('.onnx')) {
+                sttLoadPhase = 'compiling';
+                updateMicState();
+              }
+            }
+            if (origHandler) origHandler.call(stt.worker, e);
+          };
+        }
       });
-      await Promise.race([stt.init(), initTimeout]);
+      await initPromise;
       sttReady = true;
       updateMicState();
     } catch (e) {
       console.warn('STT init failed:', e.message);
+      sttLoadPhase = 'failed';
       updateMicState();
     }
   }
@@ -69,9 +91,21 @@ import { STT, TTS } from 'webtalk-sdk';
     if (sttReady) {
       micBtn.removeAttribute('disabled');
       micBtn.title = 'Click to record';
+      micBtn.classList.remove('loading');
+    } else if (sttLoadPhase === 'failed') {
+      micBtn.setAttribute('disabled', 'true');
+      micBtn.title = 'Speech recognition failed to load';
+      micBtn.classList.remove('loading');
     } else {
       micBtn.setAttribute('disabled', 'true');
-      micBtn.title = 'Speech recognition loading...';
+      micBtn.classList.add('loading');
+      if (sttLoadPhase === 'downloading') {
+        micBtn.title = 'Downloading speech models...';
+      } else if (sttLoadPhase === 'compiling') {
+        micBtn.title = 'Compiling speech models (may take a minute)...';
+      } else {
+        micBtn.title = 'Loading speech recognition...';
+      }
     }
   }
 

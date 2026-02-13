@@ -1014,6 +1014,18 @@
       color: var(--color-primary);
     }
 
+    .voice-mic-btn.loading {
+      opacity: 0.5;
+      cursor: wait;
+      animation: mic-loading-spin 2s linear infinite;
+    }
+
+    @keyframes mic-loading-spin {
+      0% { border-color: var(--color-border); }
+      50% { border-color: var(--color-primary); }
+      100% { border-color: var(--color-border); }
+    }
+
     .voice-mic-btn.recording {
       background: var(--color-error);
       border-color: var(--color-error);
