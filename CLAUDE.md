@@ -128,6 +128,51 @@ Production ready - no additional configuration needed beyond:
 2. Set PORT environment variable if needed
 3. Run: `npm start` or `npm run dev` for development
 
+## npm Publishing Setup
+
+Automated npm publishing is configured via GitHub Actions with OIDC authentication. To complete setup:
+
+### Step 1: Configure OIDC Trusted Publisher on npm.org
+
+Visit: https://www.npmjs.com/package/agentgui/access
+
+Click "Add Trusted Publisher" and fill in:
+- **Publishing provider**: GitHub
+- **Owner**: AnEntrypoint
+- **Repository**: agentgui
+- **Workflow file**: `.github/workflows/publish-npm.yml`
+
+This requires npm account access with 2FA completion.
+
+### Step 2: Trigger Publishing Workflow
+
+Once OIDC is configured, push to main branch to trigger automatic publishing:
+
+```bash
+git commit --allow-empty -m "test: verify npm publish with OIDC"
+git push
+```
+
+Monitor at: https://github.com/AnEntrypoint/agentgui/actions
+
+### Optional: Add Granular Token Backup
+
+Generate a 3-month granular access token for fallback authentication:
+
+Visit: https://www.npmjs.com/settings/lanmower/tokens
+
+Click "Generate New Token" → "Granular Access Token" and configure:
+- **Name**: github-actions-3month
+- **Permissions**: Read and write
+- **Package**: agentgui
+- **Expiration**: 90 days
+- **Bypass 2FA**: enabled
+
+Then add to GitHub Actions secrets:
+```bash
+gh secret set NPM_TOKEN --body "YOUR_TOKEN" --repo AnEntrypoint/agentgui
+```
+
 ## Support
 
 For issues, check:
@@ -135,3 +180,4 @@ For issues, check:
 - Server logs for backend issues
 - Database at `./data/agentgui.db` for data persistence
 - WebSocket connection in Network tab (should show `/sync` as connected)
+- GitHub Actions: https://github.com/AnEntrypoint/agentgui/actions for publishing errors
