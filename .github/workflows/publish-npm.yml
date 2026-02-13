@@ -20,11 +20,14 @@ jobs:
 
       - uses: oven-sh/setup-bun@v1
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
       - name: Setup npm for OIDC
         run: |
-          npm install -g npm@latest
           npm config set registry https://registry.npmjs.org/
-          npm config delete //registry.npmjs.org/:_authToken
+          npm config delete //registry.npmjs.org/:_authToken || true
           npm --version
 
       - name: Bump version
