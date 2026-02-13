@@ -2,6 +2,7 @@ import http from 'http';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
 import { execSync } from 'child_process';
@@ -146,6 +147,36 @@ function parseBody(req) {
   });
 }
 
+function acceptsEncoding(req, encoding) {
+  const accept = req.headers['accept-encoding'] || '';
+  return accept.includes(encoding);
+}
+
+function compressAndSend(req, res, statusCode, contentType, body) {
+  const raw = typeof body === 'string' ? Buffer.from(body) : body;
+  if (raw.length < 860) {
+    res.writeHead(statusCode, { 'Content-Type': contentType, 'Content-Length': raw.length });
+    res.end(raw);
+    return;
+  }
+  if (acceptsEncoding(req, 'br')) {
+    const compressed = zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });
+    res.writeHead(statusCode, { 'Content-Type': contentType, 'Content-Encoding': 'br', 'Content-Length': compressed.length });
+    res.end(compressed);
+  } else if (acceptsEncoding(req, 'gzip')) {
+    const compressed = zlib.gzipSync(raw, { level: 6 });
+    res.writeHead(statusCode, { 'Content-Type': contentType, 'Content-Encoding': 'gzip', 'Content-Length': compressed.length });
+    res.end(compressed);
+  } else {
+    res.writeHead(statusCode, { 'Content-Type': contentType, 'Content-Length': raw.length });
+    res.end(raw);
+  }
+}
+
+function sendJSON(req, res, statusCode, data) {
+  compressAndSend(req, res, statusCode, 'application/json', JSON.stringify(data));
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -179,8 +210,7 @@ const server = http.createServer(async (req, res) => {
     const pathOnly = routePath.split('?')[0];
 
     if (pathOnly === '/api/conversations' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ conversations: queries.getConversationsList() }));
+            sendJSON(req, res, 200, { conversations: queries.getConversationsList() });
       return;
     }
 
@@ -189,8 +219,7 @@ const server = http.createServer(async (req, res) => {
       const conversation = queries.createConversation(body.agentId, body.title, body.workingDirectory || null);
       queries.createEvent('conversation.created', { agentId: body.agentId, workingDirectory: conversation.workingDirectory }, conversation.id);
       broadcastSync({ type: 'conversation_created', conversation });
-      res.writeHead(201, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ conversation }));
+            sendJSON(req, res, 201, { conversation });
       return;
     }
 
@@ -198,39 +227,36 @@ const server = http.createServer(async (req, res) => {
     if (convMatch) {
       if (req.method === 'GET') {
         const conv = queries.getConversation(convMatch[1]);
-        if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+        if (!conv) { sendJSON(req, res, 404, { error: 'Not found' }); return; }
 
         // Check both in-memory and database for active streaming status
         const latestSession = queries.getLatestSession(convMatch[1]);
         const isActivelyStreaming = activeExecutions.has(convMatch[1]) ||
           (latestSession && latestSession.status === 'active');
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
+                sendJSON(req, res, 200, {
           conversation: conv,
           isActivelyStreaming,
           latestSession
-        }));
+        });
         return;
       }
 
       if (req.method === 'POST' || req.method === 'PUT') {
         const body = await parseBody(req);
         const conv = queries.updateConversation(convMatch[1], body);
-        if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Conversation not found' })); return; }
+        if (!conv) { sendJSON(req, res, 404, { error: 'Conversation not found' }); return; }
         queries.createEvent('conversation.updated', body, convMatch[1]);
         broadcastSync({ type: 'conversation_updated', conversation: conv });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ conversation: conv }));
+                sendJSON(req, res, 200, { conversation: conv });
         return;
       }
 
       if (req.method === 'DELETE') {
         const deleted = queries.deleteConversation(convMatch[1]);
-        if (!deleted) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+        if (!deleted) { sendJSON(req, res, 404, { error: 'Not found' }); return; }
         broadcastSync({ type: 'conversation_deleted', conversationId: convMatch[1] });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ deleted: true }));
+                sendJSON(req, res, 200, { deleted: true });
         return;
       }
     }
@@ -242,15 +268,14 @@ const server = http.createServer(async (req, res) => {
         const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 100);
         const offset = Math.max(parseInt(url.searchParams.get('offset') || '0'), 0);
         const result = queries.getPaginatedMessages(messagesMatch[1], limit, offset);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
+                sendJSON(req, res, 200, result);
         return;
       }
 
       if (req.method === 'POST') {
         const conversationId = messagesMatch[1];
         const conv = queries.getConversation(conversationId);
-        if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Conversation not found' })); return; }
+        if (!conv) { sendJSON(req, res, 404, { error: 'Conversation not found' }); return; }
         const body = await parseBody(req);
         const idempotencyKey = body.idempotencyKey || null;
         const message = queries.createMessage(conversationId, 'user', body.content, idempotencyKey);
@@ -258,8 +283,7 @@ const server = http.createServer(async (req, res) => {
         broadcastSync({ type: 'message_created', conversationId, message, timestamp: Date.now() });
         const session = queries.createSession(conversationId);
         queries.createEvent('session.created', { messageId: message.id, sessionId: session.id }, conversationId, session.id);
-         res.writeHead(201, { 'Content-Type': 'application/json' });
-         res.end(JSON.stringify({ message, session, idempotencyKey }));
+                  sendJSON(req, res, 201, { message, session, idempotencyKey });
          // Fire-and-forget with proper error handling
          processMessage(conversationId, message.id, body.content, body.agentId)
            .catch(err => debugLog(`[processMessage] Uncaught error: ${err.message}`));
@@ -272,7 +296,7 @@ const server = http.createServer(async (req, res) => {
       const conversationId = streamMatch[1];
       const body = await parseBody(req);
       const conv = queries.getConversation(conversationId);
-      if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Conversation not found' })); return; }
+      if (!conv) { sendJSON(req, res, 404, { error: 'Conversation not found' }); return; }
 
       const prompt = body.content || '';
       const agentId = body.agentId || 'claude-code';
@@ -290,16 +314,14 @@ const server = http.createServer(async (req, res) => {
         const queueLength = messageQueues.get(conversationId).length;
         broadcastSync({ type: 'queue_status', conversationId, queueLength, messageId: userMessage.id, timestamp: Date.now() });
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ message: userMessage, queued: true, queuePosition: queueLength }));
+                sendJSON(req, res, 200, { message: userMessage, queued: true, queuePosition: queueLength });
         return;
       }
 
       const session = queries.createSession(conversationId);
       queries.createEvent('session.created', { messageId: userMessage.id, sessionId: session.id }, conversationId, session.id);
 
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ message: userMessage, session, streamId: session.id }));
+            sendJSON(req, res, 200, { message: userMessage, session, streamId: session.id });
 
       broadcastSync({
         type: 'streaming_start',
@@ -318,19 +340,17 @@ const server = http.createServer(async (req, res) => {
     const messageMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/messages\/([^/]+)$/);
     if (messageMatch && req.method === 'GET') {
       const msg = queries.getMessage(messageMatch[2]);
-      if (!msg || msg.conversationId !== messageMatch[1]) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ message: msg }));
+      if (!msg || msg.conversationId !== messageMatch[1]) { sendJSON(req, res, 404, { error: 'Not found' }); return; }
+            sendJSON(req, res, 200, { message: msg });
       return;
     }
 
     const sessionMatch = pathOnly.match(/^\/api\/sessions\/([^/]+)$/);
     if (sessionMatch && req.method === 'GET') {
       const sess = queries.getSession(sessionMatch[1]);
-      if (!sess) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+      if (!sess) { sendJSON(req, res, 404, { error: 'Not found' }); return; }
       const events = queries.getSessionEvents(sessionMatch[1]);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ session: sess, events }));
+            sendJSON(req, res, 200, { session: sess, events });
       return;
     }
 
@@ -338,20 +358,19 @@ const server = http.createServer(async (req, res) => {
     if (fullLoadMatch && req.method === 'GET') {
       const conversationId = fullLoadMatch[1];
       const conv = queries.getConversation(conversationId);
-      if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Not found' })); return; }
+      if (!conv) { sendJSON(req, res, 404, { error: 'Not found' }); return; }
       const latestSession = queries.getLatestSession(conversationId);
       const isActivelyStreaming = activeExecutions.has(conversationId) ||
         (latestSession && latestSession.status === 'active');
       const chunks = queries.getConversationChunks(conversationId);
       const msgResult = queries.getPaginatedMessages(conversationId, 100, 0);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
+            sendJSON(req, res, 200, {
         conversation: conv,
         isActivelyStreaming,
         latestSession,
         chunks,
         messages: msgResult.messages
-      }));
+      });
       return;
     }
 
@@ -359,7 +378,7 @@ const server = http.createServer(async (req, res) => {
     if (conversationChunksMatch && req.method === 'GET') {
       const conversationId = conversationChunksMatch[1];
       const conv = queries.getConversation(conversationId);
-      if (!conv) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Conversation not found' })); return; }
+      if (!conv) { sendJSON(req, res, 404, { error: 'Conversation not found' }); return; }
 
       const url = new URL(req.url, 'http://localhost');
       const since = parseInt(url.searchParams.get('since') || '0');
@@ -367,8 +386,7 @@ const server = http.createServer(async (req, res) => {
       const allChunks = queries.getConversationChunks(conversationId);
       debugLog(`[chunks] Conv ${conversationId}: ${allChunks.length} total chunks`);
       const chunks = since > 0 ? allChunks.filter(c => c.created_at > since) : allChunks;
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, chunks }));
+            sendJSON(req, res, 200, { ok: true, chunks });
       return;
     }
 
@@ -376,14 +394,13 @@ const server = http.createServer(async (req, res) => {
     if (sessionChunksMatch && req.method === 'GET') {
       const sessionId = sessionChunksMatch[1];
       const sess = queries.getSession(sessionId);
-      if (!sess) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ error: 'Session not found' })); return; }
+      if (!sess) { sendJSON(req, res, 404, { error: 'Session not found' }); return; }
 
       const url = new URL(req.url, 'http://localhost');
       const since = parseInt(url.searchParams.get('since') || '0');
 
       const chunks = queries.getChunksSince(sessionId, since);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ok: true, chunks }));
+            sendJSON(req, res, 200, { ok: true, chunks });
       return;
     }
 
@@ -391,13 +408,11 @@ const server = http.createServer(async (req, res) => {
       const convId = pathOnly.match(/^\/api\/conversations\/([^/]+)\/sessions\/latest$/)[1];
       const latestSession = queries.getLatestSession(convId);
       if (!latestSession) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ session: null }));
+                sendJSON(req, res, 200, { session: null });
         return;
       }
       const events = queries.getSessionEvents(latestSession.id);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ session: latestSession, events }));
+            sendJSON(req, res, 200, { session: latestSession, events });
       return;
     }
 
@@ -432,39 +447,33 @@ const server = http.createServer(async (req, res) => {
           executionData.events = executionData.events.filter(e => e.type === filterType);
         }
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(executionData));
+                sendJSON(req, res, 200, executionData);
       } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+                sendJSON(req, res, 400, { error: err.message });
       }
       return;
     }
 
     if (routePath === '/api/agents' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ agents: discoveredAgents }));
+            sendJSON(req, res, 200, { agents: discoveredAgents });
       return;
     }
 
 
     if (routePath === '/api/import/claude-code' && req.method === 'GET') {
       const result = queries.importClaudeCodeConversations();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ imported: result }));
+            sendJSON(req, res, 200, { imported: result });
       return;
     }
 
     if (routePath === '/api/discover/claude-code' && req.method === 'GET') {
       const discovered = queries.discoverClaudeCodeConversations();
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ discovered }));
+            sendJSON(req, res, 200, { discovered });
       return;
     }
 
     if (routePath === '/api/home' && req.method === 'GET') {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ home: os.homedir(), cwd: STARTUP_CWD }));
+            sendJSON(req, res, 200, { home: os.homedir(), cwd: STARTUP_CWD });
       return;
     }
 
@@ -474,20 +483,15 @@ const server = http.createServer(async (req, res) => {
         for await (const chunk of req) chunks.push(chunk);
         const audioBuffer = Buffer.concat(chunks);
         if (audioBuffer.length === 0) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'No audio data' }));
+                    sendJSON(req, res, 400, { error: 'No audio data' });
           return;
         }
         const { transcribe } = await getSpeech();
         const text = await transcribe(audioBuffer);
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ text: (text || '').trim() }));
+                sendJSON(req, res, 200, { text: (text || '').trim() });
       } catch (err) {
         debugLog('[STT] Error: ' + err.message);
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-        }
-        res.end(JSON.stringify({ error: err.message || 'STT failed' }));
+        if (!res.headersSent) sendJSON(req, res, 500, { error: err.message || 'STT failed' });
       }
       return;
     }
@@ -497,8 +501,7 @@ const server = http.createServer(async (req, res) => {
         const body = await parseBody(req);
         const text = body.text || '';
         if (!text) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'No text provided' }));
+                    sendJSON(req, res, 400, { error: 'No text provided' });
           return;
         }
         const { synthesize } = await getSpeech();
@@ -507,10 +510,7 @@ const server = http.createServer(async (req, res) => {
         res.end(wavBuffer);
       } catch (err) {
         debugLog('[TTS] Error: ' + err.message);
-        if (!res.headersSent) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-        }
-        res.end(JSON.stringify({ error: err.message || 'TTS failed' }));
+        if (!res.headersSent) sendJSON(req, res, 500, { error: err.message || 'TTS failed' });
       }
       return;
     }
@@ -518,11 +518,9 @@ const server = http.createServer(async (req, res) => {
     if (routePath === '/api/speech-status' && req.method === 'GET') {
       try {
         const { getStatus } = await getSpeech();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(getStatus()));
+        sendJSON(req, res, 200, getStatus());
       } catch (err) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ sttReady: false, ttsReady: false, sttLoading: false, ttsLoading: false }));
+                sendJSON(req, res, 200, { sttReady: false, ttsReady: false, sttLoading: false, ttsLoading: false });
       }
       return;
     }
@@ -538,11 +536,9 @@ const server = http.createServer(async (req, res) => {
           .filter(e => e.isDirectory() && !e.name.startsWith('.'))
           .map(e => ({ name: e.name }))
           .sort((a, b) => a.name.localeCompare(b.name));
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ folders }));
+                sendJSON(req, res, 200, { folders });
       } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+                sendJSON(req, res, 400, { error: err.message });
       }
       return;
     }
@@ -565,8 +561,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' });
         res.end(fileContent);
       } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+                sendJSON(req, res, 400, { error: err.message });
       }
       return;
     }
@@ -574,7 +569,7 @@ const server = http.createServer(async (req, res) => {
     // Handle conversation detail routes - serve index.html for client-side routing
     if (pathOnly.match(/^\/conversations\/[^\/]+$/)) {
       const indexPath = path.join(staticDir, 'index.html');
-      serveFile(indexPath, res);
+      serveFile(indexPath, res, req);
       return;
     }
 
@@ -589,34 +584,59 @@ const server = http.createServer(async (req, res) => {
         filePath = path.join(filePath, 'index.html');
         fs.stat(filePath, (err2) => {
           if (err2) { res.writeHead(404); res.end('Not found'); return; }
-          serveFile(filePath, res);
+          serveFile(filePath, res, req);
         });
       } else {
-        serveFile(filePath, res);
+        serveFile(filePath, res, req);
       }
     });
   } catch (e) {
     console.error('Server error:', e.message);
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: e.message }));
+        sendJSON(req, res, 500, { error: e.message });
   }
 });
 
 const MIME_TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml' };
 
-function serveFile(filePath, res) {
+function generateETag(stats) {
+  return `"${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}"`;
+}
+
+function serveFile(filePath, res, req) {
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 
   if (ext !== '.html') {
     fs.stat(filePath, (err, stats) => {
       if (err) { res.writeHead(500); res.end('Server error'); return; }
-      res.writeHead(200, {
+      const etag = generateETag(stats);
+      if (req && req.headers['if-none-match'] === etag) {
+        res.writeHead(304);
+        res.end();
+        return;
+      }
+      const headers = {
         'Content-Type': contentType,
         'Content-Length': stats.size,
-        'Cache-Control': 'no-cache, must-revalidate'
-      });
-      fs.createReadStream(filePath).pipe(res);
+        'ETag': etag,
+        'Cache-Control': 'public, max-age=3600, must-revalidate'
+      };
+      if (acceptsEncoding(req, 'br') && stats.size > 860) {
+        const stream = fs.createReadStream(filePath);
+        headers['Content-Encoding'] = 'br';
+        delete headers['Content-Length'];
+        res.writeHead(200, headers);
+        stream.pipe(zlib.createBrotliCompress({ params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } })).pipe(res);
+      } else if (acceptsEncoding(req, 'gzip') && stats.size > 860) {
+        const stream = fs.createReadStream(filePath);
+        headers['Content-Encoding'] = 'gzip';
+        delete headers['Content-Length'];
+        res.writeHead(200, headers);
+        stream.pipe(zlib.createGzip({ level: 6 })).pipe(res);
+      } else {
+        res.writeHead(200, headers);
+        fs.createReadStream(filePath).pipe(res);
+      }
     });
     return;
   }
@@ -629,24 +649,52 @@ function serveFile(filePath, res) {
     if (watch) {
       content += `\n<script>(function(){const ws=new WebSocket('ws://'+location.host+'${BASE_URL}/hot-reload');ws.onmessage=e=>{if(JSON.parse(e.data).type==='reload')location.reload()};})();</script>`;
     }
-    res.writeHead(200, { 'Content-Type': contentType });
-    res.end(content);
+    compressAndSend(req, res, 200, contentType, content);
   });
 }
 
-function persistChunkWithRetry(sessionId, conversationId, sequence, blockType, blockData, maxRetries = 3) {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
+function createChunkBatcher() {
+  const pending = [];
+  let timer = null;
+  const BATCH_SIZE = 10;
+  const BATCH_INTERVAL = 50;
+
+  function flush() {
+    if (pending.length === 0) return;
+    const batch = pending.splice(0);
     try {
-      return queries.createChunk(sessionId, conversationId, sequence, blockType, blockData);
+      const tx = queries._db ? queries._db.transaction(() => {
+        for (const c of batch) queries.createChunk(c.sessionId, c.conversationId, c.sequence, c.type, c.data);
+      }) : null;
+      if (tx) { tx(); } else {
+        for (const c of batch) {
+          try { queries.createChunk(c.sessionId, c.conversationId, c.sequence, c.type, c.data); } catch (e) { debugLog(`[chunk] ${e.message}`); }
+        }
+      }
     } catch (err) {
-      debugLog(`[chunk] Persist attempt ${attempt + 1}/${maxRetries} failed: ${err.message}`);
-      if (attempt >= maxRetries - 1) {
-        debugLog(`[chunk] Failed to persist after ${maxRetries} retries: ${err.message}`);
-        return null;
+      debugLog(`[chunk-batch] Batch write failed: ${err.message}`);
+      for (const c of batch) {
+        try { queries.createChunk(c.sessionId, c.conversationId, c.sequence, c.type, c.data); } catch (_) {}
       }
     }
   }
-  return null;
+
+  function add(sessionId, conversationId, sequence, blockType, blockData) {
+    pending.push({ sessionId, conversationId, sequence, type: blockType, data: blockData });
+    if (pending.length >= BATCH_SIZE) {
+      if (timer) { clearTimeout(timer); timer = null; }
+      flush();
+    } else if (!timer) {
+      timer = setTimeout(() => { timer = null; flush(); }, BATCH_INTERVAL);
+    }
+  }
+
+  function drain() {
+    if (timer) { clearTimeout(timer); timer = null; }
+    flush();
+  }
+
+  return { add, drain };
 }
 
 async function processMessageWithStreaming(conversationId, messageId, sessionId, content, agentId) {
@@ -665,6 +713,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     let allBlocks = [];
     let eventCount = 0;
     let currentSequence = queries.getMaxSequence(sessionId) ?? -1;
+    const batcher = createChunkBatcher();
 
     const onEvent = (parsed) => {
       eventCount++;
@@ -683,7 +732,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
         };
 
         currentSequence++;
-        persistChunkWithRetry(sessionId, conversationId, currentSequence, 'system', systemBlock);
+        batcher.add(sessionId, conversationId, currentSequence, 'system', systemBlock);
 
         broadcastSync({
           type: 'streaming_progress',
@@ -698,7 +747,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
           allBlocks.push(block);
 
           currentSequence++;
-          persistChunkWithRetry(sessionId, conversationId, currentSequence, block.type || 'assistant', block);
+          batcher.add(sessionId, conversationId, currentSequence, block.type || 'assistant', block);
 
           broadcastSync({
             type: 'streaming_progress',
@@ -720,7 +769,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
             };
 
             currentSequence++;
-            persistChunkWithRetry(sessionId, conversationId, currentSequence, 'tool_result', toolResultBlock);
+            batcher.add(sessionId, conversationId, currentSequence, 'tool_result', toolResultBlock);
 
             broadcastSync({
               type: 'streaming_progress',
@@ -744,7 +793,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
         };
 
         currentSequence++;
-        persistChunkWithRetry(sessionId, conversationId, currentSequence, 'result', resultBlock);
+        batcher.add(sessionId, conversationId, currentSequence, 'result', resultBlock);
 
         broadcastSync({
           type: 'streaming_progress',
@@ -777,6 +826,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     };
 
     const { outputs, sessionId: claudeSessionId } = await runClaudeWithStreaming(content, cwd, agentId || 'claude-code', config);
+    batcher.drain();
     debugLog(`[stream] Claude returned ${outputs.length} outputs, sessionId=${claudeSessionId}`);
 
     if (claudeSessionId && !conv?.claudeSessionId) {
@@ -828,6 +878,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
       timestamp: Date.now()
     });
   } finally {
+    batcher.drain();
     activeExecutions.delete(conversationId);
     queries.setIsStreaming(conversationId, false);
     drainMessageQueue(conversationId);
@@ -915,9 +966,16 @@ async function processMessage(conversationId, messageId, content, agentId) {
   }
 }
 
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({
+  server,
+  perMessageDeflate: {
+    zlibDeflateOptions: { level: 6 },
+    threshold: 256
+  }
+});
 const hotReloadClients = [];
 const syncClients = new Set();
+const subscriptionIndex = new Map();
 
 wss.on('connection', (ws, req) => {
   // req.url in WebSocket is just the path (e.g., '/gm/sync'), not a full URL
@@ -941,8 +999,17 @@ wss.on('connection', (ws, req) => {
       try {
         const data = JSON.parse(msg);
         if (data.type === 'subscribe') {
-          if (data.sessionId) ws.subscriptions.add(data.sessionId);
-          if (data.conversationId) ws.subscriptions.add(`conv-${data.conversationId}`);
+          if (data.sessionId) {
+            ws.subscriptions.add(data.sessionId);
+            if (!subscriptionIndex.has(data.sessionId)) subscriptionIndex.set(data.sessionId, new Set());
+            subscriptionIndex.get(data.sessionId).add(ws);
+          }
+          if (data.conversationId) {
+            const key = `conv-${data.conversationId}`;
+            ws.subscriptions.add(key);
+            if (!subscriptionIndex.has(key)) subscriptionIndex.set(key, new Set());
+            subscriptionIndex.get(key).add(ws);
+          }
           const subTarget = data.sessionId || data.conversationId;
           debugLog(`[WebSocket] Client ${ws.clientId} subscribed to ${subTarget}`);
           ws.send(JSON.stringify({
@@ -953,6 +1020,8 @@ wss.on('connection', (ws, req) => {
           }));
         } else if (data.type === 'unsubscribe') {
           ws.subscriptions.delete(data.sessionId);
+          const idx = subscriptionIndex.get(data.sessionId);
+          if (idx) { idx.delete(ws); if (idx.size === 0) subscriptionIndex.delete(data.sessionId); }
           debugLog(`[WebSocket] Client ${ws.clientId} unsubscribed from ${data.sessionId}`);
         } else if (data.type === 'get_subscriptions') {
           ws.send(JSON.stringify({
@@ -979,6 +1048,10 @@ wss.on('connection', (ws, req) => {
     ws.on('pong', () => { ws.isAlive = true; });
     ws.on('close', () => {
       syncClients.delete(ws);
+      for (const sub of ws.subscriptions) {
+        const idx = subscriptionIndex.get(sub);
+        if (idx) { idx.delete(ws); if (idx.size === 0) subscriptionIndex.delete(sub); }
+      }
       console.log(`[WebSocket] Client ${ws.clientId} disconnected`);
     });
   }
@@ -990,19 +1063,52 @@ const BROADCAST_TYPES = new Set([
   'streaming_complete', 'streaming_error'
 ]);
 
+const wsBatchQueues = new Map();
+const WS_BATCH_INTERVAL = 16;
+
+function flushWsBatch(ws) {
+  const queue = wsBatchQueues.get(ws);
+  if (!queue || queue.msgs.length === 0) return;
+  if (ws.readyState !== 1) { wsBatchQueues.delete(ws); return; }
+  if (queue.msgs.length === 1) {
+    ws.send(queue.msgs[0]);
+  } else {
+    ws.send('[' + queue.msgs.join(',') + ']');
+  }
+  queue.msgs.length = 0;
+  queue.timer = null;
+}
+
+function sendToClient(ws, data) {
+  if (ws.readyState !== 1) return;
+  let queue = wsBatchQueues.get(ws);
+  if (!queue) { queue = { msgs: [], timer: null }; wsBatchQueues.set(ws, queue); }
+  queue.msgs.push(data);
+  if (!queue.timer) {
+    queue.timer = setTimeout(() => flushWsBatch(ws), WS_BATCH_INTERVAL);
+  }
+}
+
 function broadcastSync(event) {
   if (syncClients.size === 0) return;
   const data = JSON.stringify(event);
   const isBroadcast = BROADCAST_TYPES.has(event.type);
 
-  for (const ws of syncClients) {
-    if (ws.readyState !== 1) continue;
-    if (isBroadcast ||
-        (event.sessionId && ws.subscriptions?.has(event.sessionId)) ||
-        (event.conversationId && ws.subscriptions?.has(`conv-${event.conversationId}`))) {
-      ws.send(data);
-    }
+  if (isBroadcast) {
+    for (const ws of syncClients) sendToClient(ws, data);
+    return;
   }
+
+  const targets = new Set();
+  if (event.sessionId) {
+    const subs = subscriptionIndex.get(event.sessionId);
+    if (subs) for (const ws of subs) targets.add(ws);
+  }
+  if (event.conversationId) {
+    const subs = subscriptionIndex.get(`conv-${event.conversationId}`);
+    if (subs) for (const ws of subs) targets.add(ws);
+  }
+  for (const ws of targets) sendToClient(ws, data);
 }
 
 // Heartbeat interval to detect stale connections
@@ -1166,18 +1272,38 @@ function onServerReady() {
 
 }
 
+const importMtimeCache = new Map();
+
+function hasIndexFilesChanged() {
+  const projectsDir = path.join(os.homedir(), '.claude', 'projects');
+  if (!fs.existsSync(projectsDir)) return false;
+  let changed = false;
+  try {
+    const dirs = fs.readdirSync(projectsDir);
+    for (const d of dirs) {
+      const indexPath = path.join(projectsDir, d, 'sessions-index.json');
+      try {
+        const stat = fs.statSync(indexPath);
+        const cached = importMtimeCache.get(indexPath);
+        if (!cached || cached < stat.mtimeMs) {
+          importMtimeCache.set(indexPath, stat.mtimeMs);
+          changed = true;
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return changed;
+}
+
 function performAutoImport() {
   try {
+    if (!hasIndexFilesChanged()) return;
     const imported = queries.importClaudeCodeConversations();
     if (imported.length > 0) {
       const importedCount = imported.filter(i => i.status === 'imported').length;
-      const skippedCount = imported.filter(i => i.status === 'skipped').length;
       if (importedCount > 0) {
-        console.log(`[AUTO-IMPORT] Imported ${importedCount} new Claude Code conversations (${skippedCount} already exist)`);
-        // Broadcast to all connected clients that conversations were updated
+        console.log(`[AUTO-IMPORT] Imported ${importedCount} new Claude Code conversations`);
         broadcastSync({ type: 'conversations_updated', count: importedCount });
-      } else if (skippedCount > 0) {
-        // All conversations already imported, don't spam logs
       }
     }
   } catch (err) {

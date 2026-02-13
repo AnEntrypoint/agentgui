@@ -19,6 +19,10 @@ try {
   db.run('PRAGMA journal_mode = WAL');
   db.run('PRAGMA foreign_keys = ON');
   db.run('PRAGMA encoding = "UTF-8"');
+  db.run('PRAGMA synchronous = NORMAL');
+  db.run('PRAGMA cache_size = -64000');
+  db.run('PRAGMA mmap_size = 268435456');
+  db.run('PRAGMA temp_store = MEMORY');
 } catch (e) {
   try {
     const sqlite3 = require('better-sqlite3');
@@ -26,6 +30,10 @@ try {
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
     db.pragma('encoding = "UTF-8"');
+    db.pragma('synchronous = NORMAL');
+    db.pragma('cache_size = -64000');
+    db.pragma('mmap_size = 268435456');
+    db.pragma('temp_store = MEMORY');
   } catch (e2) {
     throw new Error('SQLite database is required. Please run with bun (recommended) or install better-sqlite3: npm install better-sqlite3');
   }
@@ -123,6 +131,8 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_chunks_session ON chunks(sessionId, sequence);
     CREATE INDEX IF NOT EXISTS idx_chunks_conversation ON chunks(conversationId, sequence);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_chunks_unique ON chunks(sessionId, sequence);
+    CREATE INDEX IF NOT EXISTS idx_chunks_conv_created ON chunks(conversationId, created_at);
+    CREATE INDEX IF NOT EXISTS idx_chunks_sess_created ON chunks(sessionId, created_at);
   `);
 }
 
@@ -244,15 +254,26 @@ try {
   console.error('[Migration] Error:', err.message);
 }
 
+const stmtCache = new Map();
+function prep(sql) {
+  let s = stmtCache.get(sql);
+  if (!s) {
+    s = db.prepare(sql);
+    stmtCache.set(sql, s);
+  }
+  return s;
+}
+
 function generateId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
 export const queries = {
+  _db: db,
   createConversation(agentType, title = null, workingDirectory = null) {
     const id = generateId('conv');
     const now = Date.now();
-    const stmt = db.prepare(
+    const stmt = prep(
       `INSERT INTO conversations (id, agentId, agentType, title, created_at, updated_at, status, workingDirectory) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     );
     stmt.run(id, agentType, agentType, title, now, now, 'active', workingDirectory);
@@ -269,17 +290,17 @@ export const queries = {
   },
 
   getConversation(id) {
-    const stmt = db.prepare('SELECT * FROM conversations WHERE id = ?');
+    const stmt = prep('SELECT * FROM conversations WHERE id = ?');
     return stmt.get(id);
   },
 
   getAllConversations() {
-    const stmt = db.prepare('SELECT * FROM conversations WHERE status != ? ORDER BY updated_at DESC');
+    const stmt = prep('SELECT * FROM conversations WHERE status != ? ORDER BY updated_at DESC');
     return stmt.all('deleted');
   },
 
   getConversationsList() {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT id, title, agentType, created_at, updated_at, messageCount, workingDirectory, isStreaming FROM conversations WHERE status != ? ORDER BY updated_at DESC'
     );
     return stmt.all('deleted');
@@ -293,7 +314,7 @@ export const queries = {
     const title = data.title !== undefined ? data.title : conv.title;
     const status = data.status !== undefined ? data.status : conv.status;
 
-    const stmt = db.prepare(
+    const stmt = prep(
       `UPDATE conversations SET title = ?, status = ?, updated_at = ? WHERE id = ?`
     );
     stmt.run(title, status, now, id);
@@ -307,41 +328,41 @@ export const queries = {
   },
 
   setClaudeSessionId(conversationId, claudeSessionId) {
-    const stmt = db.prepare('UPDATE conversations SET claudeSessionId = ?, updated_at = ? WHERE id = ?');
+    const stmt = prep('UPDATE conversations SET claudeSessionId = ?, updated_at = ? WHERE id = ?');
     stmt.run(claudeSessionId, Date.now(), conversationId);
   },
 
   getClaudeSessionId(conversationId) {
-    const stmt = db.prepare('SELECT claudeSessionId FROM conversations WHERE id = ?');
+    const stmt = prep('SELECT claudeSessionId FROM conversations WHERE id = ?');
     const row = stmt.get(conversationId);
     return row?.claudeSessionId || null;
   },
 
   setIsStreaming(conversationId, isStreaming) {
-    const stmt = db.prepare('UPDATE conversations SET isStreaming = ?, updated_at = ? WHERE id = ?');
+    const stmt = prep('UPDATE conversations SET isStreaming = ?, updated_at = ? WHERE id = ?');
     stmt.run(isStreaming ? 1 : 0, Date.now(), conversationId);
   },
 
   getIsStreaming(conversationId) {
-    const stmt = db.prepare('SELECT isStreaming FROM conversations WHERE id = ?');
+    const stmt = prep('SELECT isStreaming FROM conversations WHERE id = ?');
     const row = stmt.get(conversationId);
     return row?.isStreaming === 1;
   },
 
   markSessionIncomplete(sessionId, errorMsg) {
-    const stmt = db.prepare('UPDATE sessions SET status = ?, error = ?, completed_at = ? WHERE id = ?');
+    const stmt = prep('UPDATE sessions SET status = ?, error = ?, completed_at = ? WHERE id = ?');
     stmt.run('incomplete', errorMsg || 'unknown', Date.now(), sessionId);
   },
 
   getSessionsProcessingLongerThan(minutes) {
     const cutoff = Date.now() - (minutes * 60 * 1000);
-    const stmt = db.prepare("SELECT * FROM sessions WHERE status IN ('active', 'pending') AND started_at < ?");
+    const stmt = prep("SELECT * FROM sessions WHERE status IN ('active', 'pending') AND started_at < ?");
     return stmt.all(cutoff);
   },
 
   cleanupOrphanedSessions(days) {
     const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
-    const stmt = db.prepare("DELETE FROM sessions WHERE status IN ('active', 'pending') AND started_at < ?");
+    const stmt = prep("DELETE FROM sessions WHERE status IN ('active', 'pending') AND started_at < ?");
     const result = stmt.run(cutoff);
     return result.changes || 0;
   },
@@ -356,12 +377,12 @@ export const queries = {
     const now = Date.now();
     const storedContent = typeof content === 'string' ? content : JSON.stringify(content);
 
-    const stmt = db.prepare(
+    const stmt = prep(
       `INSERT INTO messages (id, conversationId, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
     );
     stmt.run(id, conversationId, role, storedContent, now);
 
-    const updateConvStmt = db.prepare('UPDATE conversations SET updated_at = ? WHERE id = ?');
+    const updateConvStmt = prep('UPDATE conversations SET updated_at = ? WHERE id = ?');
     updateConvStmt.run(now, conversationId);
 
     const message = {
@@ -380,7 +401,7 @@ export const queries = {
   },
 
   getMessage(id) {
-     const stmt = db.prepare('SELECT * FROM messages WHERE id = ?');
+     const stmt = prep('SELECT * FROM messages WHERE id = ?');
      const msg = stmt.get(id);
      if (msg && typeof msg.content === 'string') {
        try {
@@ -393,7 +414,7 @@ export const queries = {
    },
 
    getConversationMessages(conversationId) {
-     const stmt = db.prepare(
+     const stmt = prep(
        'SELECT * FROM messages WHERE conversationId = ? ORDER BY created_at ASC'
      );
      const messages = stmt.all(conversationId);
@@ -410,10 +431,10 @@ export const queries = {
    },
 
   getPaginatedMessages(conversationId, limit = 50, offset = 0) {
-    const countStmt = db.prepare('SELECT COUNT(*) as count FROM messages WHERE conversationId = ?');
+    const countStmt = prep('SELECT COUNT(*) as count FROM messages WHERE conversationId = ?');
     const total = countStmt.get(conversationId).count;
 
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM messages WHERE conversationId = ? ORDER BY created_at ASC LIMIT ? OFFSET ?'
     );
     const messages = stmt.all(conversationId, limit, offset);
@@ -440,7 +461,7 @@ export const queries = {
     const id = generateId('sess');
     const now = Date.now();
 
-    const stmt = db.prepare(
+    const stmt = prep(
       `INSERT INTO sessions (id, conversationId, status, started_at, completed_at, response, error) VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     stmt.run(id, conversationId, 'pending', now, null, null, null);
@@ -457,12 +478,12 @@ export const queries = {
   },
 
   getSession(id) {
-    const stmt = db.prepare('SELECT * FROM sessions WHERE id = ?');
+    const stmt = prep('SELECT * FROM sessions WHERE id = ?');
     return stmt.get(id);
   },
 
   getConversationSessions(conversationId) {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM sessions WHERE conversationId = ? ORDER BY started_at DESC'
     );
     return stmt.all(conversationId);
@@ -478,7 +499,7 @@ export const queries = {
     const error = data.error !== undefined ? data.error : session.error;
     const completed_at = data.completed_at !== undefined ? data.completed_at : session.completed_at;
 
-    const stmt = db.prepare(
+    const stmt = prep(
       `UPDATE sessions SET status = ?, response = ?, error = ?, completed_at = ? WHERE id = ?`
     );
 
@@ -497,21 +518,21 @@ export const queries = {
   },
 
   getLatestSession(conversationId) {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM sessions WHERE conversationId = ? ORDER BY started_at DESC LIMIT 1'
     );
     return stmt.get(conversationId) || null;
   },
 
   getSessionsByStatus(conversationId, status) {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM sessions WHERE conversationId = ? AND status = ? ORDER BY started_at DESC'
     );
     return stmt.all(conversationId, status);
   },
 
   getActiveSessions() {
-    const stmt = db.prepare(
+    const stmt = prep(
       "SELECT * FROM sessions WHERE status IN ('active', 'pending') ORDER BY started_at DESC"
     );
     return stmt.all();
@@ -521,7 +542,7 @@ export const queries = {
     const id = generateId('evt');
     const now = Date.now();
 
-    const stmt = db.prepare(
+    const stmt = prep(
       `INSERT INTO events (id, type, conversationId, sessionId, data, created_at) VALUES (?, ?, ?, ?, ?, ?)`
     );
     stmt.run(id, type, conversationId, sessionId, JSON.stringify(data), now);
@@ -537,7 +558,7 @@ export const queries = {
   },
 
   getEvent(id) {
-    const stmt = db.prepare('SELECT * FROM events WHERE id = ?');
+    const stmt = prep('SELECT * FROM events WHERE id = ?');
     const row = stmt.get(id);
     if (row) {
       return {
@@ -549,7 +570,7 @@ export const queries = {
   },
 
   getConversationEvents(conversationId) {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM events WHERE conversationId = ? ORDER BY created_at ASC'
     );
     const rows = stmt.all(conversationId);
@@ -560,7 +581,7 @@ export const queries = {
   },
 
   getSessionEvents(sessionId) {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM events WHERE sessionId = ? ORDER BY created_at ASC'
     );
     const rows = stmt.all(sessionId);
@@ -580,19 +601,19 @@ export const queries = {
     }
 
     const deleteStmt = db.transaction(() => {
-      const sessionIds = db.prepare('SELECT id FROM sessions WHERE conversationId = ?').all(id).map(r => r.id);
-      db.prepare('DELETE FROM stream_updates WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM chunks WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM events WHERE conversationId = ?').run(id);
+      const sessionIds = prep('SELECT id FROM sessions WHERE conversationId = ?').all(id).map(r => r.id);
+      prep('DELETE FROM stream_updates WHERE conversationId = ?').run(id);
+      prep('DELETE FROM chunks WHERE conversationId = ?').run(id);
+      prep('DELETE FROM events WHERE conversationId = ?').run(id);
       if (sessionIds.length > 0) {
         const placeholders = sessionIds.map(() => '?').join(',');
         db.prepare(`DELETE FROM stream_updates WHERE sessionId IN (${placeholders})`).run(...sessionIds);
         db.prepare(`DELETE FROM chunks WHERE sessionId IN (${placeholders})`).run(...sessionIds);
         db.prepare(`DELETE FROM events WHERE sessionId IN (${placeholders})`).run(...sessionIds);
       }
-      db.prepare('DELETE FROM sessions WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM messages WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+      prep('DELETE FROM sessions WHERE conversationId = ?').run(id);
+      prep('DELETE FROM messages WHERE conversationId = ?').run(id);
+      prep('DELETE FROM conversations WHERE id = ?').run(id);
     });
 
     deleteStmt();
@@ -633,9 +654,9 @@ export const queries = {
     const now = Date.now();
 
     const cleanupStmt = db.transaction(() => {
-      db.prepare('DELETE FROM events WHERE created_at < ?').run(thirtyDaysAgo);
-      db.prepare('DELETE FROM sessions WHERE completed_at IS NOT NULL AND completed_at < ?').run(thirtyDaysAgo);
-      db.prepare('DELETE FROM idempotencyKeys WHERE (created_at + ttl) < ?').run(now);
+      prep('DELETE FROM events WHERE created_at < ?').run(thirtyDaysAgo);
+      prep('DELETE FROM sessions WHERE completed_at IS NOT NULL AND completed_at < ?').run(thirtyDaysAgo);
+      prep('DELETE FROM idempotencyKeys WHERE (created_at + ttl) < ?').run(now);
     });
 
     cleanupStmt();
@@ -645,14 +666,14 @@ export const queries = {
     const now = Date.now();
     const ttl = 24 * 60 * 60 * 1000;
 
-    const stmt = db.prepare(
+    const stmt = prep(
       'INSERT OR REPLACE INTO idempotencyKeys (key, value, created_at, ttl) VALUES (?, ?, ?, ?)'
     );
     stmt.run(key, JSON.stringify(value), now, ttl);
   },
 
   getIdempotencyKey(key) {
-    const stmt = db.prepare('SELECT * FROM idempotencyKeys WHERE key = ?');
+    const stmt = prep('SELECT * FROM idempotencyKeys WHERE key = ?');
     const entry = stmt.get(key);
 
     if (!entry) return null;
@@ -763,7 +784,7 @@ export const queries = {
 
     for (const conv of discovered) {
       try {
-        const existingConv = db.prepare('SELECT id, status FROM conversations WHERE id = ?').get(conv.id);
+        const existingConv = prep('SELECT id, status FROM conversations WHERE id = ?').get(conv.id);
         if (existingConv) {
           imported.push({ id: conv.id, status: 'skipped', reason: existingConv.status === 'deleted' ? 'deleted' : 'exists' });
           continue;
@@ -776,13 +797,13 @@ export const queries = {
         const messages = this.parseJsonlMessages(conv.jsonlPath);
 
         const importStmt = db.transaction(() => {
-          db.prepare(
+          prep(
             `INSERT INTO conversations (id, agentId, title, created_at, updated_at, status) VALUES (?, ?, ?, ?, ?, ?)`
           ).run(conv.id, 'claude-code', displayTitle, conv.created, conv.modified, 'active');
 
           for (const msg of messages) {
             try {
-              db.prepare(
+              prep(
                 `INSERT INTO messages (id, conversationId, role, content, created_at) VALUES (?, ?, ?, ?, ?)`
               ).run(msg.id, conv.id, msg.role, msg.content, msg.created_at);
             } catch (_) {}
@@ -805,12 +826,12 @@ export const queries = {
 
     // Use transaction to ensure atomic sequence number assignment
     const transaction = db.transaction(() => {
-      const maxSequence = db.prepare(
+      const maxSequence = prep(
         'SELECT MAX(sequence) as max FROM stream_updates WHERE sessionId = ?'
       ).get(sessionId);
       const sequence = (maxSequence?.max || -1) + 1;
 
-      db.prepare(
+      prep(
         `INSERT INTO stream_updates (id, sessionId, conversationId, updateType, content, sequence, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       ).run(id, sessionId, conversationId, updateType, JSON.stringify(content), sequence, now);
@@ -832,7 +853,7 @@ export const queries = {
   },
 
   getSessionStreamUpdates(sessionId) {
-    const stmt = db.prepare(
+    const stmt = prep(
       `SELECT id, sessionId, conversationId, updateType, content, sequence, created_at
        FROM stream_updates WHERE sessionId = ? ORDER BY sequence ASC`
     );
@@ -844,14 +865,14 @@ export const queries = {
   },
 
   clearSessionStreamUpdates(sessionId) {
-    const stmt = db.prepare('DELETE FROM stream_updates WHERE sessionId = ?');
+    const stmt = prep('DELETE FROM stream_updates WHERE sessionId = ?');
     stmt.run(sessionId);
   },
 
   createImportedConversation(data) {
     const id = generateId('conv');
     const now = Date.now();
-    const stmt = db.prepare(
+    const stmt = prep(
       `INSERT INTO conversations (
         id, agentId, title, created_at, updated_at, status,
         agentType, source, externalId, firstPrompt, messageCount,
@@ -879,21 +900,21 @@ export const queries = {
   },
 
   getConversationByExternalId(agentType, externalId) {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM conversations WHERE agentType = ? AND externalId = ?'
     );
     return stmt.get(agentType, externalId);
   },
 
   getConversationsByAgentType(agentType) {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM conversations WHERE agentType = ? AND status != ? ORDER BY updated_at DESC'
     );
     return stmt.all(agentType, 'deleted');
   },
 
   getImportedConversations() {
-    const stmt = db.prepare(
+    const stmt = prep(
       'SELECT * FROM conversations WHERE source = ? AND status != ? ORDER BY updated_at DESC'
     );
     return stmt.all('imported', 'deleted');
@@ -958,7 +979,7 @@ export const queries = {
     const now = Date.now();
     const dataBlob = typeof data === 'string' ? data : JSON.stringify(data);
 
-    const stmt = db.prepare(
+    const stmt = prep(
       `INSERT INTO chunks (id, sessionId, conversationId, sequence, type, data, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
@@ -976,7 +997,7 @@ export const queries = {
   },
 
   getChunk(id) {
-    const stmt = db.prepare(
+    const stmt = prep(
       `SELECT id, sessionId, conversationId, sequence, type, data, created_at FROM chunks WHERE id = ?`
     );
     const row = stmt.get(id);
@@ -993,7 +1014,7 @@ export const queries = {
   },
 
   getSessionChunks(sessionId) {
-    const stmt = db.prepare(
+    const stmt = prep(
       `SELECT id, sessionId, conversationId, sequence, type, data, created_at
        FROM chunks WHERE sessionId = ? ORDER BY sequence ASC`
     );
@@ -1011,7 +1032,7 @@ export const queries = {
   },
 
   getConversationChunks(conversationId) {
-    const stmt = db.prepare(
+    const stmt = prep(
       `SELECT id, sessionId, conversationId, sequence, type, data, created_at
        FROM chunks WHERE conversationId = ? ORDER BY created_at ASC`
     );
@@ -1029,7 +1050,7 @@ export const queries = {
   },
 
   getChunksSince(sessionId, timestamp) {
-    const stmt = db.prepare(
+    const stmt = prep(
       `SELECT id, sessionId, conversationId, sequence, type, data, created_at
        FROM chunks WHERE sessionId = ? AND created_at > ? ORDER BY sequence ASC`
     );
@@ -1047,19 +1068,19 @@ export const queries = {
   },
 
   deleteSessionChunks(sessionId) {
-    const stmt = db.prepare('DELETE FROM chunks WHERE sessionId = ?');
+    const stmt = prep('DELETE FROM chunks WHERE sessionId = ?');
     const result = stmt.run(sessionId);
     return result.changes || 0;
   },
 
   getMaxSequence(sessionId) {
-    const stmt = db.prepare('SELECT MAX(sequence) as max FROM chunks WHERE sessionId = ?');
+    const stmt = prep('SELECT MAX(sequence) as max FROM chunks WHERE sessionId = ?');
     const result = stmt.get(sessionId);
     return result?.max ?? -1;
   },
 
   getEmptyConversations() {
-    const stmt = db.prepare(`
+    const stmt = prep(`
       SELECT c.* FROM conversations c
       LEFT JOIN messages m ON c.id = m.conversationId
       WHERE c.status != 'deleted'
@@ -1079,12 +1100,12 @@ export const queries = {
     }
 
     const deleteStmt = db.transaction(() => {
-      db.prepare('DELETE FROM stream_updates WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM chunks WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM events WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM sessions WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM messages WHERE conversationId = ?').run(id);
-      db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
+      prep('DELETE FROM stream_updates WHERE conversationId = ?').run(id);
+      prep('DELETE FROM chunks WHERE conversationId = ?').run(id);
+      prep('DELETE FROM events WHERE conversationId = ?').run(id);
+      prep('DELETE FROM sessions WHERE conversationId = ?').run(id);
+      prep('DELETE FROM messages WHERE conversationId = ?').run(id);
+      prep('DELETE FROM conversations WHERE id = ?').run(id);
     });
 
     deleteStmt();

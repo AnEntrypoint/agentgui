@@ -137,26 +137,23 @@ class WebSocketManager {
    */
   onMessage(event) {
     try {
-      const data = JSON.parse(event.data);
-      this.stats.totalMessagesReceived++;
+      const parsed = JSON.parse(event.data);
+      const messages = Array.isArray(parsed) ? parsed : [parsed];
+      this.stats.totalMessagesReceived += messages.length;
 
-      // Handle pong response
-      if (data.type === 'pong') {
-        const requestId = data.requestId;
-        if (requestId && this.requestMap.has(requestId)) {
-          const request = this.requestMap.get(requestId);
-          request.resolve({ latency: Date.now() - request.sentTime });
-          this.requestMap.delete(requestId);
+      for (const data of messages) {
+        if (data.type === 'pong') {
+          const requestId = data.requestId;
+          if (requestId && this.requestMap.has(requestId)) {
+            const request = this.requestMap.get(requestId);
+            request.resolve({ latency: Date.now() - request.sentTime });
+            this.requestMap.delete(requestId);
+          }
+          continue;
         }
-        return;
-      }
 
-      // Route message to listeners
-      this.emit('message', data);
-
-      // Route by type
-      if (data.type) {
-        this.emit(`message:${data.type}`, data);
+        this.emit('message', data);
+        if (data.type) this.emit(`message:${data.type}`, data);
       }
     } catch (error) {
       console.error('WebSocket message parse error:', error);
@@ -234,15 +231,7 @@ class WebSocketManager {
    * Start heartbeat/keepalive
    */
   startHeartbeat() {
-    if (this.heartbeatTimer) {
-      clearTimeout(this.heartbeatTimer);
-    }
-
-    this.heartbeatTimer = setInterval(() => {
-      if (this.isConnected) {
-        this.ping();
-      }
-    }, this.config.heartbeatInterval);
+    if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
   }
 
   /**

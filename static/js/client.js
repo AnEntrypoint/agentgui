@@ -544,12 +544,13 @@ class AgentGUIClient {
   }
 
   scrollToBottom() {
-    const scrollContainer = document.getElementById('output-scroll');
-    if (scrollContainer) {
-      requestAnimationFrame(() => {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-      });
-    }
+    if (this._scrollRafPending) return;
+    this._scrollRafPending = true;
+    requestAnimationFrame(() => {
+      this._scrollRafPending = false;
+      const scrollContainer = document.getElementById('output-scroll');
+      if (scrollContainer) scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    });
   }
 
   handleStreamingError(data) {
