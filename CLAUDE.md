@@ -1,183 +1,91 @@
-# Claude Code Reliable Integration
+# AgentGUI
 
-**Status**: Production Ready
-**Date**: 2026-02-05
+Multi-agent GUI client for AI coding agents (Claude Code, Gemini CLI, OpenCode, Goose, etc.) with real-time streaming, WebSocket sync, and SQLite persistence.
 
-## Overview
+## Running
 
-agentgui is a multi-agent ACP client with real-time communication, WebSocket streaming, and beautiful semantic HTML UI using RippleUI components.
+```bash
+npm install
+npm run dev        # node server.js --watch
+```
 
-## Features
-
-✅ `--dangerously-skip-permissions` flag support
-✅ JSON streaming mode for real-time execution capture
-✅ Database persistence with zero data loss guarantees
-✅ Real-time WebSocket broadcasting to clients
-✅ Automatic crash recovery and conflict resolution
-✅ Production-ready monitoring and observability
+Server starts on `http://localhost:3000`, redirects to `/gm/`.
 
 ## Architecture
 
-### Server Components
-- **server.js**: REST API + WebSocket endpoints, event broadcasting
-- **lib/claude-runner.js**: Claude Code CLI execution with streaming support
-- **lib/database-service.ts**: SQLite persistence with WAL mode
-- **lib/sync-service.ts**: Real-time event synchronization and recovery
-
-### Streaming Features
-- JSON streaming via `--output-format=stream-json`
-- Real-time WebSocket event broadcasting
-- Session-based client subscriptions
-- Event persistence and recovery
-- Exponential backoff for offline queues
-
-### Database
-- SQLite with WAL mode for reliability
-- Tables: conversations, messages, sessions, events, stream_updates
-- Foreign key constraints for data integrity
-- Transactions for atomic operations
-
-## API Endpoints
-
-### REST API
-- `GET /` - HTTP 302 redirect to /gm/
-- `GET /gm/` - RippleUI agent interface
-- `POST /api/conversations` - Create conversation
-- `POST /api/conversations/:id/messages` - Send message
-- `POST /api/conversations/:id/stream` - Stream Claude Code execution
-- `GET /api/sessions/:id/execution` - Get execution history
-
-### WebSocket
-- **Endpoint**: `/sync`
-- **Commands**:
-  - `subscribe` - Subscribe to session events
-  - `unsubscribe` - Unsubscribe from session
-  - `ping` - Keepalive
-- **Events**:
-  - `streaming_start` - Execution started
-  - `streaming_progress` - Event received
-  - `streaming_complete` - Execution finished
-  - `streaming_error` - Execution failed
-
-## Usage
-
-### Start Server
-```bash
-npm install
-npm run dev
-# Server runs on http://localhost:3000
+```
+server.js              HTTP server + WebSocket + all API routes (raw http.createServer)
+database.js            SQLite setup (WAL mode), schema, query functions
+lib/claude-runner.js   Agent framework - spawns CLI processes, parses stream-json output
+lib/speech.js          Speech-to-text and text-to-speech via @huggingface/transformers
+bin/gmgui.cjs          CLI entry point (npx agentgui / bunx agentgui)
+static/index.html      Main HTML shell
+static/app.js          App initialization
+static/theme.js        Theme switching
+static/js/client.js    Main client logic
+static/js/conversations.js       Conversation management
+static/js/streaming-renderer.js  Renders Claude streaming events as HTML
+static/js/event-processor.js     Processes incoming events
+static/js/event-filter.js        Filters events by type
+static/js/websocket-manager.js   WebSocket connection handling
+static/js/ui-components.js       UI component helpers
+static/js/syntax-highlighter.js  Code syntax highlighting
+static/js/voice.js               Voice input/output
+static/js/features.js            Feature flags
+static/templates/                 31 HTML template fragments for event rendering
 ```
 
-### Claude Code Execution with Streaming
-```bash
-# In terminal where Claude Code is installed
-cd /tmp/test-repo
-claude . --dangerously-skip-permissions --output-format=stream-json < /dev/null
-```
+## Key Details
 
-### Access UI
-Navigate to `http://localhost:3000` in browser to see RippleUI interface with real-time streaming visualization.
+- Express is used only for file upload (`/api/upload/:conversationId`) and fsbrowse file browser (`/files/:conversationId`). All other routes use raw `http.createServer` with manual routing.
+- Agent discovery scans PATH for known CLI binaries (claude, opencode, gemini, goose, etc.) at startup.
+- Database lives at `~/.gmgui/data.db`. Tables: conversations, messages, events, sessions, stream chunks.
+- WebSocket endpoint is at `BASE_URL + /sync`. Supports subscribe/unsubscribe by sessionId or conversationId, and ping.
 
-## Configuration
+## Environment Variables
 
-**Database**: SQLite at `./data/agentgui.db` (auto-created)
-**Port**: 3000 (configurable via PORT environment variable)
-**WebSocket**: Enabled at `/sync` endpoint
-**Timeout**: 30 minutes for Claude Code execution (configurable)
+- `PORT` - Server port (default: 3000)
+- `BASE_URL` - URL prefix (default: /gm)
+- `STARTUP_CWD` - Working directory passed to agents
+- `HOT_RELOAD` - Set to "false" to disable watch mode
 
-## Performance Characteristics
+## REST API
 
-- **Event Latency**: <100ms (99th percentile)
-- **Throughput**: 100+ events/second
-- **Concurrent Streams**: 50+ without degradation
-- **Memory Usage**: Bounded with automatic cleanup
+All routes are prefixed with `BASE_URL` (default `/gm`).
 
-## Recovery & Reliability
+- `GET /api/conversations` - List conversations
+- `POST /api/conversations` - Create conversation (body: agentId, title, workingDirectory)
+- `GET /api/conversations/:id` - Get conversation with streaming status
+- `POST /api/conversations/:id` - Update conversation
+- `DELETE /api/conversations/:id` - Delete conversation
+- `GET /api/conversations/:id/messages` - Get messages (query: limit, offset)
+- `POST /api/conversations/:id/messages` - Send message (body: content, agentId)
+- `POST /api/conversations/:id/stream` - Start streaming execution
+- `GET /api/conversations/:id/full` - Full conversation load with chunks
+- `GET /api/conversations/:id/chunks` - Get stream chunks (query: since)
+- `GET /api/conversations/:id/sessions/latest` - Get latest session
+- `GET /api/sessions/:id` - Get session
+- `GET /api/sessions/:id/chunks` - Get session chunks (query: since)
+- `GET /api/sessions/:id/execution` - Get execution events (query: limit, offset, filterType)
+- `GET /api/agents` - List discovered agents
+- `GET /api/home` - Get home directory
+- `POST /api/stt` - Speech-to-text (raw audio body)
+- `POST /api/tts` - Text-to-speech (body: text)
+- `GET /api/speech-status` - Speech model loading status
+- `POST /api/folders` - Create folder
 
-- **Crash Recovery**: Session checkpoint on startup
-- **Offline Queue**: Automatic retry with exponential backoff
-- **Conflict Resolution**: Last-write-wins strategy
-- **Background Cleanup**: Orphan session cleanup (7-day retention)
+## WebSocket Protocol
 
-## Dependencies
+Endpoint: `BASE_URL + /sync`
 
-- `@anthropic-ai/claude-code` - Claude Code CLI integration
-- `better-sqlite3` - Database persistence
-- `ws` - WebSocket server
+Client sends:
+- `{ type: "subscribe", sessionId }` or `{ type: "subscribe", conversationId }`
+- `{ type: "unsubscribe", sessionId }`
+- `{ type: "ping" }`
 
-## Manual Testing
-
-To verify the system:
-
-1. Start server: `npm run dev`
-2. Navigate to http://localhost:3000
-3. Clone test repositories:
-   ```bash
-   mkdir -p /tmp/test-repos
-   git clone https://github.com/lodash/lodash /tmp/test-repos/lodash
-   git clone https://github.com/chalk/chalk /tmp/test-repos/chalk
-   ```
-4. Execute Claude Code commands in the UI
-5. Verify real-time streaming and WebSocket events
-6. Check browser console for errors (should be zero)
-
-## Deployment
-
-Production ready - no additional configuration needed beyond:
-1. Install dependencies: `npm install`
-2. Set PORT environment variable if needed
-3. Run: `npm start` or `npm run dev` for development
-
-## npm Publishing Setup
-
-Automated npm publishing is configured via GitHub Actions with OIDC authentication. To complete setup:
-
-### Step 1: Configure OIDC Trusted Publisher on npm.org
-
-Visit: https://www.npmjs.com/package/agentgui/access
-
-Click "Add Trusted Publisher" and fill in:
-- **Publishing provider**: GitHub
-- **Owner**: AnEntrypoint
-- **Repository**: agentgui
-- **Workflow file**: `.github/workflows/publish-npm.yml`
-
-This requires npm account access with 2FA completion.
-
-### Step 2: Trigger Publishing Workflow
-
-Once OIDC is configured, push to main branch to trigger automatic publishing:
-
-```bash
-git commit --allow-empty -m "test: verify npm publish with OIDC"
-git push
-```
-
-Monitor at: https://github.com/AnEntrypoint/agentgui/actions
-
-### Optional: Add Granular Token Backup
-
-Generate a 3-month granular access token for fallback authentication:
-
-Visit: https://www.npmjs.com/settings/lanmower/tokens
-
-Click "Generate New Token" → "Granular Access Token" and configure:
-- **Name**: github-actions-3month
-- **Permissions**: Read and write
-- **Package**: agentgui
-- **Expiration**: 90 days
-- **Bypass 2FA**: enabled
-
-Then add to GitHub Actions secrets:
-```bash
-gh secret set NPM_TOKEN --body "YOUR_TOKEN" --repo AnEntrypoint/agentgui
-```
-
-## Support
-
-For issues, check:
-- Browser DevTools Console (F12) for JavaScript errors
-- Server logs for backend issues
-- Database at `./data/agentgui.db` for data persistence
-- WebSocket connection in Network tab (should show `/sync` as connected)
-- GitHub Actions: https://github.com/AnEntrypoint/agentgui/actions for publishing errors
+Server broadcasts:
+- `streaming_start` - Agent execution started
+- `streaming_progress` - New event/chunk from agent
+- `streaming_complete` - Execution finished
+- `streaming_error` - Execution failed
+- `conversation_created`, `conversation_updated`, `conversation_deleted`
