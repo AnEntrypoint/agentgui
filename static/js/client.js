@@ -609,8 +609,8 @@ class AgentGUIClient {
     console.log('Streaming completed:', data);
 
     const conversationId = data.conversationId || this.state.currentSession?.conversationId;
+    if (conversationId) this.invalidateCache(conversationId);
 
-    // If this event is for a conversation we are NOT currently viewing, just track state
     if (conversationId && this.state.currentConversation?.id !== conversationId) {
       console.log('Streaming completed for non-active conversation:', conversationId);
       this.emit('streaming:complete', data);
@@ -1243,11 +1243,34 @@ class AgentGUIClient {
     }
   }
 
+  cacheCurrentConversation() {
+    const convId = this.state.currentConversation?.id;
+    if (!convId) return;
+    const outputEl = document.getElementById('output');
+    if (!outputEl || !outputEl.firstChild) return;
+    if (this.state.isStreaming) return;
+
+    this.saveScrollPosition(convId);
+    const clone = outputEl.cloneNode(true);
+    this.conversationCache.set(convId, {
+      dom: clone,
+      conversation: this.state.currentConversation,
+      timestamp: Date.now()
+    });
+
+    if (this.conversationCache.size > this.MAX_CACHE_SIZE) {
+      const oldest = this.conversationCache.keys().next().value;
+      this.conversationCache.delete(oldest);
+    }
+  }
+
+  invalidateCache(conversationId) {
+    this.conversationCache.delete(conversationId);
+  }
+
   async loadConversationMessages(conversationId) {
     try {
-      if (this.state.currentConversation?.id) {
-        this.saveScrollPosition(this.state.currentConversation.id);
-      }
+      this.cacheCurrentConversation();
       this.stopChunkPolling();
       if (this.state.isStreaming && this.state.currentConversation?.id !== conversationId) {
         this.state.isStreaming = false;
@@ -1259,9 +1282,27 @@ class AgentGUIClient {
         this.wsManager.sendMessage({ type: 'subscribe', conversationId });
       }
 
+      const cached = this.conversationCache.get(conversationId);
+      if (cached && (Date.now() - cached.timestamp) < 120000) {
+        const outputEl = document.getElementById('output');
+        if (outputEl) {
+          outputEl.innerHTML = '';
+          while (cached.dom.firstChild) {
+            outputEl.appendChild(cached.dom.firstChild);
+          }
+          this.state.currentConversation = cached.conversation;
+          this.conversationCache.delete(conversationId);
+          this.restoreScrollPosition(conversationId);
+          this.enableControls();
+          return;
+        }
+      }
+
+      this.conversationCache.delete(conversationId);
+
       const resp = await fetch(window.__BASE_URL + `/api/conversations/${conversationId}/full`);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const { conversation, isActivelyStreaming, latestSession, chunks: rawChunks, messages: allMessages } = await resp.json();
+      const { conversation, isActivelyStreaming, latestSession, chunks: rawChunks, totalChunks, messages: allMessages } = await resp.json();
 
       this.state.currentConversation = conversation;
 
@@ -1270,6 +1311,7 @@ class AgentGUIClient {
         block: typeof chunk.data === 'string' ? JSON.parse(chunk.data) : chunk.data
       }));
       const userMessages = (allMessages || []).filter(m => m.role === 'user');
+      const hasMoreChunks = totalChunks && chunks.length < totalChunks;
 
       const shouldResumeStreaming = isActivelyStreaming && latestSession &&
         (latestSession.status === 'active' || latestSession.status === 'pending');
@@ -1286,6 +1328,29 @@ class AgentGUIClient {
         `;
 
         const messagesEl = outputEl.querySelector('.conversation-messages');
+
+        if (hasMoreChunks) {
+          const loadMoreBtn = document.createElement('button');
+          loadMoreBtn.className = 'btn btn-secondary';
+          loadMoreBtn.style.cssText = 'width:100%;margin-bottom:1rem;padding:0.5rem;font-size:0.8rem;';
+          loadMoreBtn.textContent = `Load earlier messages (${totalChunks - chunks.length} more chunks)`;
+          loadMoreBtn.addEventListener('click', async () => {
+            loadMoreBtn.disabled = true;
+            loadMoreBtn.textContent = 'Loading...';
+            try {
+              const fullResp = await fetch(window.__BASE_URL + `/api/conversations/${conversationId}/full?allChunks=1`);
+              if (fullResp.ok) {
+                this.invalidateCache(conversationId);
+                await this.loadConversationMessages(conversationId);
+              }
+            } catch (e) {
+              loadMoreBtn.textContent = 'Failed to load. Try again.';
+              loadMoreBtn.disabled = false;
+            }
+          });
+          messagesEl.appendChild(loadMoreBtn);
+        }
+
         if (chunks.length > 0) {
           const sessionOrder = [];
           const sessionChunks = {};
@@ -1299,6 +1364,14 @@ class AgentGUIClient {
 
           const frag = document.createDocumentFragment();
           let userMsgIdx = 0;
+
+          if (hasMoreChunks && sessionOrder.length > 0) {
+            const firstChunkTime = chunks[0].created_at;
+            while (userMsgIdx < userMessages.length && userMessages[userMsgIdx].created_at < firstChunkTime) {
+              userMsgIdx++;
+            }
+          }
+
           sessionOrder.forEach((sessionId) => {
             const sessionChunkList = sessionChunks[sessionId];
             const sessionStart = sessionChunkList[0].created_at;
