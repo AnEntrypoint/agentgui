@@ -30,6 +30,10 @@ class AgentGUIClient {
       agents: []
     };
 
+    // Conversation DOM cache: store rendered DOM + scroll position per conversationId
+    this.conversationCache = new Map();
+    this.MAX_CACHE_SIZE = 10;
+
     // Event handlers
     this.eventHandlers = {};
 
@@ -368,6 +372,12 @@ class AgentGUIClient {
         case 'queue_status':
           this.handleQueueStatus(data);
           break;
+        case 'rate_limit_hit':
+          this.handleRateLimitHit(data);
+          break;
+        case 'rate_limit_clear':
+          this.handleRateLimitClear(data);
+          break;
         default:
           break;
       }
@@ -695,6 +705,37 @@ class AgentGUIClient {
     }
   }
 
+  handleRateLimitHit(data) {
+    if (data.conversationId !== this.state.currentConversation?.id) return;
+    this.state.isStreaming = false;
+    this.stopChunkPolling();
+
+    const sessionId = data.sessionId || this.state.currentSession?.id;
+    const streamingEl = document.getElementById(`streaming-${sessionId}`);
+    if (streamingEl) {
+      const indicator = streamingEl.querySelector('.streaming-indicator');
+      if (indicator) {
+        const retrySeconds = Math.ceil((data.retryAfterMs || 60000) / 1000);
+        indicator.innerHTML = `<span style="color:var(--color-warning);">Rate limited. Retrying in ${retrySeconds}s...</span>`;
+        let remaining = retrySeconds;
+        const countdownTimer = setInterval(() => {
+          remaining--;
+          if (remaining <= 0) {
+            clearInterval(countdownTimer);
+            indicator.innerHTML = '<span style="color:var(--color-info);">Restarting...</span>';
+          } else {
+            indicator.innerHTML = `<span style="color:var(--color-warning);">Rate limited. Retrying in ${remaining}s...</span>`;
+          }
+        }, 1000);
+      }
+    }
+  }
+
+  handleRateLimitClear(data) {
+    if (data.conversationId !== this.state.currentConversation?.id) return;
+    this.enableControls();
+  }
+
   isHtmlContent(text) {
     const htmlPattern = /<(?:div|table|section|article|ul|ol|dl|nav|header|footer|main|aside|figure|details|summary|h[1-6]|p|blockquote|pre|code|span|strong|em|a|img|br|hr|li|td|tr|th|thead|tbody|tfoot)\b[^>]*>/i;
     return htmlPattern.test(text);
@@ -815,14 +856,11 @@ class AgentGUIClient {
               inputHtml = `<div class="folded-tool-body"><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></div>`;
             }
             const tn = block.name || 'unknown';
-            const foldable = tn.startsWith('mcp__') || tn === 'Edit';
-            if (foldable) {
-              const dName = typeof StreamingRenderer !== 'undefined' ? StreamingRenderer.getToolDisplayName(tn) : tn;
-              const tTitle = typeof StreamingRenderer !== 'undefined' && block.input ? StreamingRenderer.getToolTitle(tn, block.input) : '';
-              html += `<details class="streaming-block-tool-use folded-tool"><summary class="folded-tool-bar"><span class="folded-tool-name">${this.escapeHtml(dName)}</span>${tTitle ? `<span class="folded-tool-desc">${this.escapeHtml(tTitle)}</span>` : ''}</summary>${inputHtml}</details>`;
-            } else {
-              html += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn)}</span></div>${inputHtml}</div>`;
-            }
+            const hasRenderer = typeof StreamingRenderer !== 'undefined';
+            const dName = hasRenderer ? StreamingRenderer.getToolDisplayName(tn) : tn;
+            const tTitle = hasRenderer && block.input ? StreamingRenderer.getToolTitle(tn, block.input) : '';
+            const iconHtml = hasRenderer && this.renderer ? `<span class="folded-tool-icon">${this.renderer.getToolIcon(tn)}</span>` : '';
+            html += `<details class="folded-tool"><summary class="folded-tool-bar">${iconHtml}<span class="folded-tool-name">${this.escapeHtml(dName)}</span>${tTitle ? `<span class="folded-tool-desc">${this.escapeHtml(tTitle)}</span>` : ''}</summary>${inputHtml}</details>`;
           } else if (block.type === 'tool_result') {
             const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
             const smartHtml = typeof StreamingRenderer !== 'undefined' ? StreamingRenderer.renderSmartContentHTML(content, this.escapeHtml.bind(this)) : `<pre class="tool-result-pre">${this.escapeHtml(content.length > 2000 ? content.substring(0, 2000) + '\n... (truncated)' : content)}</pre>`;

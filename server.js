@@ -24,9 +24,11 @@ const SYSTEM_PROMPT = `Write all responses as clean semantic HTML. Use tags like
 
 const activeExecutions = new Map();
 const messageQueues = new Map();
+const rateLimitState = new Map();
 const STUCK_AGENT_THRESHOLD_MS = 600000;
 const NO_PID_GRACE_PERIOD_MS = 60000;
 const STALE_SESSION_MIN_AGE_MS = 30000;
+const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 60000;
 
 const debugLog = (msg) => {
   const timestamp = new Date().toISOString();
@@ -362,14 +364,28 @@ const server = http.createServer(async (req, res) => {
       const latestSession = queries.getLatestSession(conversationId);
       const isActivelyStreaming = activeExecutions.has(conversationId) ||
         (latestSession && latestSession.status === 'active');
-      const chunks = queries.getConversationChunks(conversationId);
+
+      const url = new URL(req.url, 'http://localhost');
+      const chunkLimit = Math.min(parseInt(url.searchParams.get('chunkLimit') || '500'), 5000);
+      const allChunks = url.searchParams.get('allChunks') === '1';
+
+      const totalChunks = queries.getConversationChunkCount(conversationId);
+      let chunks;
+      if (allChunks || totalChunks <= chunkLimit) {
+        chunks = queries.getConversationChunks(conversationId);
+      } else {
+        chunks = queries.getRecentConversationChunks(conversationId, chunkLimit);
+      }
       const msgResult = queries.getPaginatedMessages(conversationId, 100, 0);
+      const rateLimitInfo = rateLimitState.get(conversationId) || null;
             sendJSON(req, res, 200, {
         conversation: conv,
         isActivelyStreaming,
         latestSession,
         chunks,
-        messages: msgResult.messages
+        totalChunks,
+        messages: msgResult.messages,
+        rateLimitInfo
       });
       return;
     }
@@ -830,9 +846,9 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     batcher.drain();
     debugLog(`[stream] Claude returned ${outputs.length} outputs, sessionId=${claudeSessionId}`);
 
-    if (claudeSessionId && !conv?.claudeSessionId) {
+    if (claudeSessionId) {
       queries.setClaudeSessionId(conversationId, claudeSessionId);
-      debugLog(`[stream] Stored claudeSessionId=${claudeSessionId}`);
+      debugLog(`[stream] Updated claudeSessionId=${claudeSessionId}`);
     }
 
     // Mark session as complete
@@ -855,12 +871,46 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     const elapsed = Date.now() - startTime;
     debugLog(`[stream] Error after ${elapsed}ms: ${error.message}`);
 
-    // Mark session as error
+    const isRateLimit = error.rateLimited ||
+      /rate.?limit|429|too many requests|overloaded|throttl/i.test(error.message);
+
     queries.updateSession(sessionId, {
       status: 'error',
       error: error.message,
       completed_at: Date.now()
     });
+
+    if (isRateLimit) {
+      const cooldownMs = (error.retryAfterSec || 60) * 1000;
+      const retryAt = Date.now() + cooldownMs;
+      rateLimitState.set(conversationId, { retryAt, cooldownMs });
+      debugLog(`[rate-limit] Conv ${conversationId} hit rate limit, retry in ${cooldownMs}ms`);
+
+      broadcastSync({
+        type: 'rate_limit_hit',
+        sessionId,
+        conversationId,
+        retryAfterMs: cooldownMs,
+        retryAt,
+        timestamp: Date.now()
+      });
+
+      batcher.drain();
+      activeExecutions.delete(conversationId);
+      queries.setIsStreaming(conversationId, false);
+
+      setTimeout(() => {
+        rateLimitState.delete(conversationId);
+        debugLog(`[rate-limit] Conv ${conversationId} cooldown expired, restarting`);
+        broadcastSync({
+          type: 'rate_limit_clear',
+          conversationId,
+          timestamp: Date.now()
+        });
+        scheduleRetry(conversationId, messageId, content, agentId);
+      }, cooldownMs);
+      return;
+    }
 
     broadcastSync({
       type: 'streaming_error',
@@ -882,8 +932,27 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     batcher.drain();
     activeExecutions.delete(conversationId);
     queries.setIsStreaming(conversationId, false);
-    drainMessageQueue(conversationId);
+    if (!rateLimitState.has(conversationId)) {
+      drainMessageQueue(conversationId);
+    }
   }
+}
+
+function scheduleRetry(conversationId, messageId, content, agentId) {
+  const newSession = queries.createSession(conversationId);
+  queries.createEvent('session.created', { messageId, sessionId: newSession.id, retryReason: 'rate_limit' }, conversationId, newSession.id);
+
+  broadcastSync({
+    type: 'streaming_start',
+    sessionId: newSession.id,
+    conversationId,
+    messageId,
+    agentId,
+    timestamp: Date.now()
+  });
+
+  processMessageWithStreaming(conversationId, messageId, newSession.id, content, agentId)
+    .catch(err => debugLog(`[retry] Error: ${err.message}`));
 }
 
 function drainMessageQueue(conversationId) {
@@ -933,7 +1002,7 @@ async function processMessage(conversationId, messageId, content, agentId) {
       systemPrompt: SYSTEM_PROMPT
     });
 
-    if (claudeSessionId && !conv?.claudeSessionId) {
+    if (claudeSessionId) {
       queries.setClaudeSessionId(conversationId, claudeSessionId);
     }
 
@@ -1061,7 +1130,8 @@ wss.on('connection', (ws, req) => {
 const BROADCAST_TYPES = new Set([
   'message_created', 'conversation_created', 'conversations_updated',
   'conversation_deleted', 'queue_status', 'streaming_start',
-  'streaming_complete', 'streaming_error'
+  'streaming_complete', 'streaming_error', 'rate_limit_hit',
+  'rate_limit_clear'
 ]);
 
 const wsBatchQueues = new Map();

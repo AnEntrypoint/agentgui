@@ -1031,12 +1031,37 @@ export const queries = {
     });
   },
 
+  getConversationChunkCount(conversationId) {
+    const stmt = prep('SELECT COUNT(*) as count FROM chunks WHERE conversationId = ?');
+    return stmt.get(conversationId).count;
+  },
+
   getConversationChunks(conversationId) {
     const stmt = prep(
       `SELECT id, sessionId, conversationId, sequence, type, data, created_at
        FROM chunks WHERE conversationId = ? ORDER BY created_at ASC`
     );
     const rows = stmt.all(conversationId);
+    return rows.map(row => {
+      try {
+        return {
+          ...row,
+          data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+        };
+      } catch (e) {
+        return row;
+      }
+    });
+  },
+
+  getRecentConversationChunks(conversationId, limit) {
+    const stmt = prep(
+      `SELECT id, sessionId, conversationId, sequence, type, data, created_at
+       FROM chunks WHERE conversationId = ?
+       ORDER BY created_at DESC LIMIT ?`
+    );
+    const rows = stmt.all(conversationId, limit);
+    rows.reverse();
     return rows.map(row => {
       try {
         return {

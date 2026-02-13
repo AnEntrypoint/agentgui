@@ -461,10 +461,7 @@ class StreamingRenderer {
 
     const preStyle = "background:#1e293b;padding:1rem;border-radius:0 0 0.375rem 0.375rem;overflow-x:auto;font-family:'Monaco','Menlo','Ubuntu Mono',monospace;font-size:0.875rem;line-height:1.6;color:#e2e8f0;border:1px solid #334155;border-top:none;margin:0";
     const codeContainer = document.createElement('div');
-    codeContainer.innerHTML = `<pre style="${preStyle}"><code>${this.escapeHtml(code)}</code></pre>`;
-    if (typeof hljs !== 'undefined') {
-      this.lazyHighlight(codeContainer, code);
-    }
+    codeContainer.innerHTML = `<pre style="${preStyle}"><code class="lazy-hl">${this.escapeHtml(code)}</code></pre>`;
 
     details.appendChild(summary);
     details.appendChild(codeContainer);
@@ -1064,23 +1061,16 @@ class StreamingRenderer {
   }
 
   static _setupGlobalLazyHL() {
-    if (StreamingRenderer._lazyHLObserver) return;
-    StreamingRenderer._lazyHLObserver = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        for (const node of m.addedNodes) {
-          if (node.nodeType !== 1) continue;
-          const els = node.querySelectorAll ? node.querySelectorAll('code.lazy-hl') : [];
-          if (node.classList && node.classList.contains('lazy-hl')) StreamingRenderer._observeHL(node);
-          for (const el of els) StreamingRenderer._observeHL(el);
-        }
-      }
-    });
-    StreamingRenderer._hlIO = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        const el = entry.target;
-        StreamingRenderer._hlIO.unobserve(el);
-        if (typeof hljs === 'undefined') continue;
+    if (StreamingRenderer._lazyHLSetup) return;
+    StreamingRenderer._lazyHLSetup = true;
+    const root = document.getElementById('output-scroll') || document.body;
+    root.addEventListener('toggle', (e) => {
+      const details = e.target;
+      if (!details.open || details.tagName !== 'DETAILS') return;
+      const codeEls = details.querySelectorAll('code.lazy-hl');
+      if (codeEls.length === 0) return;
+      if (typeof hljs === 'undefined') return;
+      for (const el of codeEls) {
         try {
           const raw = el.textContent;
           const result = hljs.highlightAuto(raw);
@@ -1089,13 +1079,7 @@ class StreamingRenderer {
           el.innerHTML = result.value;
         } catch (_) {}
       }
-    }, { rootMargin: '300px' });
-    const root = document.getElementById('output-scroll') || document.body;
-    StreamingRenderer._lazyHLObserver.observe(root, { childList: true, subtree: true });
-  }
-
-  static _observeHL(el) {
-    if (StreamingRenderer._hlIO) StreamingRenderer._hlIO.observe(el);
+    }, true);
   }
 
   static getToolDisplayName(toolName) {
@@ -1819,31 +1803,6 @@ class StreamingRenderer {
         try { this.scrollContainer.scrollTop = this.scrollContainer.scrollHeight; } catch (_) {}
       }
     });
-  }
-
-  lazyHighlight(container, code) {
-    if (!this._hlObserver) {
-      this._hlObserver = new IntersectionObserver((entries) => {
-        for (const entry of entries) {
-          if (!entry.isIntersecting) continue;
-          const el = entry.target;
-          const raw = el._rawCode;
-          if (!raw) continue;
-          this._hlObserver.unobserve(el);
-          try {
-            const codeEl = el.querySelector('code');
-            if (codeEl && typeof hljs !== 'undefined') {
-              const result = hljs.highlightAuto(raw);
-              codeEl.classList.add('hljs');
-              codeEl.innerHTML = result.value;
-            }
-          } catch (_) {}
-          delete el._rawCode;
-        }
-      }, { rootMargin: '200px' });
-    }
-    container._rawCode = code;
-    this._hlObserver.observe(container);
   }
 
   updateVirtualScroll() {
