@@ -624,12 +624,31 @@ class StreamingRenderer {
    * Render tool use block with smart parameter display
    */
   renderBlockToolUse(block, context) {
-    const div = document.createElement('div');
-    div.className = 'block-tool-use';
-
     const toolName = block.name || 'unknown';
     const input = block.input || {};
+    const shouldFold = toolName.startsWith('mcp__') || toolName === 'Edit';
 
+    if (shouldFold) {
+      const details = document.createElement('details');
+      details.className = 'block-tool-use';
+      const summary = document.createElement('summary');
+      summary.className = 'tool-header';
+      summary.style.cssText = 'cursor:pointer;user-select:none;list-style:none;';
+      summary.innerHTML = `
+        <span class="tool-icon">${this.getToolIcon(toolName)}</span>
+        <span class="tool-name"><code>${this.escapeHtml(toolName)}</code></span>
+      `;
+      details.appendChild(summary);
+      if (Object.keys(input).length > 0) {
+        const paramsDiv = document.createElement('div');
+        paramsDiv.innerHTML = this.renderSmartParams(toolName, input);
+        details.appendChild(paramsDiv);
+      }
+      return details;
+    }
+
+    const div = document.createElement('div');
+    div.className = 'block-tool-use';
     div.innerHTML = `
       <div class="tool-header">
         <span class="tool-icon">${this.getToolIcon(toolName)}</span>
@@ -637,7 +656,6 @@ class StreamingRenderer {
       </div>
       ${Object.keys(input).length > 0 ? this.renderSmartParams(toolName, input) : ''}
     `;
-
     return div;
   }
 

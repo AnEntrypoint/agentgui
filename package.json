@@ -22,10 +22,12 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^2.1.37",
+    "@huggingface/transformers": "^3.8.1",
     "better-sqlite3": "^12.6.2",
     "busboy": "^1.6.0",
     "express": "^5.2.1",
     "fsbrowse": "^0.2.13",
+    "onnxruntime-node": "^1.24.1",
     "webtalk": "github:anEntrypoint/realtime-whisper-webgpu",
     "ws": "^8.14.2"
   }

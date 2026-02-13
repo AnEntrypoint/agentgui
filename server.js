@@ -8,12 +8,12 @@ import { execSync } from 'child_process';
 import { createRequire } from 'module';
 import { queries } from './database.js';
 import { runClaudeWithStreaming } from './lib/claude-runner.js';
+import { transcribe, synthesize, getStatus as getSpeechStatus } from './lib/speech.js';
 
 const require = createRequire(import.meta.url);
 const express = require('express');
 const Busboy = require('busboy');
 const fsbrowse = require('fsbrowse');
-const { webtalk } = require('webtalk');
 
 const SYSTEM_PROMPT = `Always write your responses in ripple-ui enhanced HTML. Avoid overriding light/dark mode CSS variables. Use all the benefits of HTML to express technical details with proper semantic markup, tables, code blocks, headings, and lists. Write clean, well-structured HTML that respects the existing design system.`;
 
@@ -37,28 +37,6 @@ if (!fs.existsSync(staticDir)) fs.mkdirSync(staticDir, { recursive: true });
 // Express sub-app for fsbrowse file browser and file upload
 const expressApp = express();
 
-// Separate Express app for webtalk (STT/TTS) - isolated to contain COEP/COOP headers
-const webtalkApp = express();
-const webtalkInstance = webtalk(webtalkApp, { path: '/webtalk' });
-
-const webtalkSdkDir = path.dirname(require.resolve('webtalk'));
-const WASM_MIN_BYTES = 1000000;
-const webtalkCriticalFiles = [
-  { path: path.join(webtalkSdkDir, 'assets', 'ort-wasm-simd-threaded.jsep.wasm'), minBytes: WASM_MIN_BYTES }
-];
-for (const file of webtalkCriticalFiles) {
-  try {
-    if (fs.existsSync(file.path)) {
-      const stat = fs.statSync(file.path);
-      if (stat.size < file.minBytes) {
-        debugLog(`Removing corrupt file ${path.basename(file.path)} (${stat.size} bytes, need ${file.minBytes}+)`);
-        fs.unlinkSync(file.path);
-      }
-    }
-  } catch (e) { debugLog(`File check error: ${e.message}`); }
-}
-
-webtalkInstance.init().catch(err => debugLog('Webtalk init: ' + err.message));
 
 // File upload endpoint - copies dropped files to conversation workingDirectory
 expressApp.post(BASE_URL + '/api/upload/:conversationId', (req, res) => {
@@ -165,63 +143,9 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Cross-Origin-Embedder-Policy', 'credentialless');
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
   const pathOnly = req.url.split('?')[0];
-  const webtalkPrefix = BASE_URL + '/webtalk';
-  const isWebtalkRoute = pathOnly.startsWith(webtalkPrefix) ||
-    pathOnly.startsWith(BASE_URL + '/api/tts-status') ||
-    pathOnly.startsWith(BASE_URL + '/assets/') ||
-    pathOnly.startsWith(BASE_URL + '/tts/') ||
-    pathOnly.startsWith(BASE_URL + '/models/') ||
-    pathOnly.startsWith('/webtalk') ||
-    pathOnly.startsWith('/assets/') ||
-    pathOnly.startsWith('/tts/') ||
-    pathOnly.startsWith('/models/');
-  if (isWebtalkRoute) {
-    const webtalkSdkDir = path.dirname(require.resolve('webtalk'));
-    const sdkFiles = { '/demo': 'app.html', '/sdk.js': 'sdk.js', '/stt.js': 'stt.js', '/tts.js': 'tts.js', '/tts-utils.js': 'tts-utils.js' };
-    let stripped = pathOnly.startsWith(webtalkPrefix) ? pathOnly.slice(webtalkPrefix.length) : (pathOnly.startsWith('/webtalk') ? pathOnly.slice('/webtalk'.length) : null);
-    if (stripped !== null && !sdkFiles[stripped] && !stripped.endsWith('.js') && sdkFiles[stripped + '.js']) stripped += '.js';
-    if (stripped !== null && sdkFiles[stripped]) {
-      const filePath = path.join(webtalkSdkDir, sdkFiles[stripped]);
-      return fs.readFile(filePath, 'utf-8', (err, content) => {
-        if (err) { res.writeHead(404); res.end('Not found'); return; }
-        if (stripped === '/demo') {
-          let patched = content
-            .replace(/from\s+['"](\/webtalk\/[^'"]+)['"]/g, (_, p) => `from '${BASE_URL}${p}'`)
-            .replace(/from\s+['"]\.\/([^'"]+)['"]/g, (_, p) => `from '${BASE_URL}/webtalk/${p}'`)
-            .replace('<head>', `<head>\n    <script>window.__WEBTALK_BASE='${BASE_URL}';</script>`);
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cross-Origin-Embedder-Policy': 'credentialless', 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Resource-Policy': 'cross-origin' });
-          return res.end(patched);
-        }
-        let js = content;
-        const ensureExt = (mod) => mod.endsWith('.js') ? mod : mod + '.js';
-        if (js.includes('require(') || js.includes('module.exports')) {
-          js = js.replace(/const\s*\{([^}]+)\}\s*=\s*require\(['"]\.\/([^'"]+)['"]\);?/g, (_, names, mod) => `import {${names}} from '${BASE_URL}/webtalk/${ensureExt(mod)}';`);
-          js = js.replace(/const\s+(\w+)\s*=\s*require\(['"]\.\/([^'"]+)['"]\);?/g, (_, name, mod) => `import ${name} from '${BASE_URL}/webtalk/${ensureExt(mod)}';`);
-          js = js.replace(/module\.exports\s*=\s*\{([^}]+)\};?/, (_, names) => `export {${names.trim().replace(/\s+/g, ' ')} };`);
-        }
-        js = js.replace(/from\s+['"]\.\/([^'"]+)['"]/g, (_, p) => `from '${BASE_URL}/webtalk/${ensureExt(p)}'`);
-        res.writeHead(200, { 'Content-Type': 'application/javascript; charset=utf-8', 'Cross-Origin-Resource-Policy': 'cross-origin' });
-        res.end(js);
-      });
-    }
-    if (req.url.startsWith(BASE_URL)) req.url = req.url.slice(BASE_URL.length) || '/';
-    const isModelOrAsset = pathOnly.includes('/models/') || pathOnly.includes('/assets/') || pathOnly.endsWith('.wasm') || pathOnly.endsWith('.onnx');
-    if (isModelOrAsset) {
-      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
-    }
-    const origSetHeader = res.setHeader.bind(res);
-    res.setHeader = (name, value) => {
-      if (name.toLowerCase() === 'cross-origin-embedder-policy') return;
-      origSetHeader(name, value);
-    };
-    return webtalkApp(req, res);
-  }
 
   // Route file upload and fsbrowse requests through Express sub-app
   if (pathOnly.startsWith(BASE_URL + '/api/upload/') || pathOnly.startsWith(BASE_URL + '/files/')) {
@@ -516,6 +440,53 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (routePath === '/api/stt' && req.method === 'POST') {
+      try {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const audioBuffer = Buffer.concat(chunks);
+        if (audioBuffer.length === 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No audio data' }));
+          return;
+        }
+        const text = await transcribe(audioBuffer);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ text: text.trim() }));
+      } catch (err) {
+        debugLog('[STT] Error: ' + err.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    if (routePath === '/api/tts' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        const text = body.text || '';
+        if (!text) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'No text provided' }));
+          return;
+        }
+        const wavBuffer = await synthesize(text);
+        res.writeHead(200, { 'Content-Type': 'audio/wav', 'Content-Length': wavBuffer.length });
+        res.end(wavBuffer);
+      } catch (err) {
+        debugLog('[TTS] Error: ' + err.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+      return;
+    }
+
+    if (routePath === '/api/speech-status' && req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getSpeechStatus()));
+      return;
+    }
+
     if (routePath === '/api/folders' && req.method === 'POST') {
       const body = await parseBody(req);
       const folderPath = body.path || STARTUP_CWD;
@@ -591,7 +562,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-const MIME_TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.wasm': 'application/wasm', '.onnx': 'application/octet-stream' };
+const MIME_TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml' };
 
 function serveFile(filePath, res) {
   const ext = path.extname(filePath).toLowerCase();
@@ -613,7 +584,7 @@ function serveFile(filePath, res) {
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(500); res.end('Server error'); return; }
     let content = data.toString();
-    const baseTag = `<script>window.__BASE_URL='${BASE_URL}';</script>\n  <script type="importmap">{"imports":{"webtalk-sdk":"${BASE_URL}/webtalk/sdk.js"}}</script>`;
+    const baseTag = `<script>window.__BASE_URL='${BASE_URL}';</script>`;
     content = content.replace('<head>', '<head>\n  ' + baseTag);
     if (watch) {
       content += `\n<script>(function(){const ws=new WebSocket('ws://'+location.host+'${BASE_URL}/hot-reload');ws.onmessage=e=>{if(JSON.parse(e.data).type==='reload')location.reload()};})();</script>`;
@@ -640,7 +611,7 @@ function persistChunkWithRetry(sessionId, conversationId, sequence, blockType, b
 
 async function processMessageWithStreaming(conversationId, messageId, sessionId, content, agentId) {
   const startTime = Date.now();
-  activeExecutions.set(conversationId, true);
+  activeExecutions.set(conversationId, { pid: null, startTime, sessionId });
   queries.setIsStreaming(conversationId, true);
   queries.updateSession(sessionId, { status: 'active' });
 
@@ -756,7 +727,11 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
       print: true,
       resumeSessionId,
       systemPrompt: SYSTEM_PROMPT,
-      onEvent
+      onEvent,
+      onPid: (pid) => {
+        const entry = activeExecutions.get(conversationId);
+        if (entry) entry.pid = pid;
+      }
     };
 
     const { outputs, sessionId: claudeSessionId } = await runClaudeWithStreaming(content, cwd, agentId || 'claude-code', config);
@@ -1030,6 +1005,66 @@ server.on('error', (err) => {
   }
 });
 
+function recoverStaleSessions() {
+  try {
+    const staleSessions = queries.getActiveSessions ? queries.getActiveSessions() : [];
+    let recoveredCount = 0;
+    for (const session of staleSessions) {
+      if (!activeExecutions.has(session.conversationId)) {
+        queries.updateSession(session.id, {
+          status: 'error',
+          error: 'Agent died unexpectedly (server restart)',
+          completed_at: Date.now()
+        });
+        queries.setIsStreaming(session.conversationId, false);
+        broadcastSync({
+          type: 'streaming_error',
+          sessionId: session.id,
+          conversationId: session.conversationId,
+          error: 'Agent died unexpectedly (server restart)',
+          recoverable: false,
+          timestamp: Date.now()
+        });
+        recoveredCount++;
+      }
+    }
+    if (recoveredCount > 0) {
+      console.log(`[RECOVERY] Recovered ${recoveredCount} stale active session(s)`);
+    }
+  } catch (err) {
+    console.error('[RECOVERY] Stale session recovery error:', err.message);
+  }
+}
+
+function performAgentHealthCheck() {
+  for (const [conversationId, entry] of activeExecutions) {
+    if (!entry || !entry.pid) continue;
+    try {
+      process.kill(entry.pid, 0);
+    } catch (err) {
+      debugLog(`[HEALTH] Agent PID ${entry.pid} for conv ${conversationId} is dead`);
+      activeExecutions.delete(conversationId);
+      queries.setIsStreaming(conversationId, false);
+      if (entry.sessionId) {
+        queries.updateSession(entry.sessionId, {
+          status: 'error',
+          error: 'Agent process died unexpectedly',
+          completed_at: Date.now()
+        });
+      }
+      broadcastSync({
+        type: 'streaming_error',
+        sessionId: entry.sessionId,
+        conversationId,
+        error: 'Agent process died unexpectedly',
+        recoverable: false,
+        timestamp: Date.now()
+      });
+      drainMessageQueue(conversationId);
+    }
+  }
+}
+
 function onServerReady() {
   console.log(`GMGUI running on http://localhost:${PORT}${BASE_URL}/`);
   console.log(`Agents: ${discoveredAgents.map(a => a.name).join(', ') || 'none'}`);
@@ -1041,11 +1076,17 @@ function onServerReady() {
     console.log(`Cleaned up ${deletedCount} empty conversation(s) on startup`);
   }
 
+  // Recover stale active sessions from previous run
+  recoverStaleSessions();
+
   // Run auto-import immediately
   performAutoImport();
 
   // Then run it every 30 seconds (constant automatic importing)
   setInterval(performAutoImport, 30000);
+
+  // Agent health check every 30 seconds
+  setInterval(performAgentHealthCheck, 30000);
 
 }
 

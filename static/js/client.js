@@ -792,7 +792,13 @@ class AgentGUIClient {
               const inputStr = JSON.stringify(block.input, null, 2);
               inputHtml = `<details class="tool-input-details"><summary class="tool-input-summary">Input</summary><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></details>`;
             }
-            html += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(block.name || 'unknown')}</span></div>${inputHtml}</div>`;
+            const tn = block.name || 'unknown';
+            const foldable = tn.startsWith('mcp__') || tn === 'Edit';
+            if (foldable) {
+              html += `<details class="streaming-block-tool-use"><summary class="tool-use-header" style="cursor:pointer;user-select:none;list-style:none;"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn)}</span></summary>${inputHtml}</details>`;
+            } else {
+              html += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn)}</span></div>${inputHtml}</div>`;
+            }
           } else if (block.type === 'tool_result') {
             const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
             const smartHtml = typeof StreamingRenderer !== 'undefined' ? StreamingRenderer.renderSmartContentHTML(content, this.escapeHtml.bind(this)) : `<pre class="tool-result-pre">${this.escapeHtml(content.length > 2000 ? content.substring(0, 2000) + '\n... (truncated)' : content)}</pre>`;
@@ -1433,7 +1439,13 @@ class AgentGUIClient {
                 const inputStr = JSON.stringify(block.input, null, 2);
                 inputHtml = `<details class="tool-input-details"><summary class="tool-input-summary">Input</summary><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></details>`;
               }
-              contentHtml += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(block.name || 'unknown')}</span></div>${inputHtml}</div>`;
+              const tn2 = block.name || 'unknown';
+              const foldable2 = tn2.startsWith('mcp__') || tn2 === 'Edit';
+              if (foldable2) {
+                contentHtml += `<details class="streaming-block-tool-use"><summary class="tool-use-header" style="cursor:pointer;user-select:none;list-style:none;"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn2)}</span></summary>${inputHtml}</details>`;
+              } else {
+                contentHtml += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn2)}</span></div>${inputHtml}</div>`;
+              }
             } else if (block.type === 'tool_result') {
               const content = typeof block.content === 'string' ? block.content : JSON.stringify(block.content);
               const smartHtml = typeof StreamingRenderer !== 'undefined' ? StreamingRenderer.renderSmartContentHTML(content, this.escapeHtml.bind(this)) : `<pre class="tool-result-pre">${this.escapeHtml(content.length > 2000 ? content.substring(0, 2000) + '\n... (truncated)' : content)}</pre>`;

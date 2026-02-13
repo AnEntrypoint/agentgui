@@ -1,167 +1,24 @@
 (function() {
-  const BASE = window.__BASE_URL || '';
-  let STT = null;
-  let TTS = null;
+  var BASE = window.__BASE_URL || '';
+  var isRecording = false;
+  var ttsEnabled = true;
+  var voiceActive = false;
+  var lastSpokenBlockIndex = -1;
+  var currentConversationId = null;
+  var speechQueue = [];
+  var isSpeaking = false;
+  var currentAudio = null;
+  var mediaStream = null;
+  var audioContext = null;
+  var scriptNode = null;
+  var recordedChunks = [];
+  var TARGET_SAMPLE_RATE = 16000;
 
-  async function loadSDK() {
-    try {
-      const mod = await import(BASE + '/webtalk/sdk.js');
-      STT = mod.STT;
-      TTS = mod.TTS;
-      return true;
-    } catch (e) {
-      console.warn('Webtalk SDK load failed:', e.message);
-      return false;
-    }
-  }
-  let stt = null;
-  let tts = null;
-  let isRecording = false;
-  let ttsEnabled = true;
-  let voiceActive = false;
-  let lastSpokenBlockIndex = -1;
-  let currentConversationId = null;
-  let sttReady = false;
-  let ttsReady = false;
-  let speechQueue = [];
-  let isSpeaking = false;
-
-  async function init() {
+  function init() {
     setupTTSToggle();
     setupUI();
     setupStreamingListener();
     setupAgentSelector();
-    var sdkLoaded = await loadSDK();
-    if (sdkLoaded) {
-      initSTT();
-      initTTS();
-    } else {
-      sttLoadPhase = 'failed';
-      updateMicState();
-    }
-  }
-
-  var sttLoadPhase = 'starting';
-
-  async function initSTT() {
-    try {
-      stt = new STT({
-        basePath: BASE + '/webtalk',
-        onTranscript: function(text) {
-          var el = document.getElementById('voiceTranscript');
-          if (el) {
-            el.textContent = text;
-            el.setAttribute('data-final', text);
-          }
-        },
-        onPartial: function(text) {
-          var el = document.getElementById('voiceTranscript');
-          if (el) {
-            var existing = el.getAttribute('data-final') || '';
-            el.textContent = existing + text;
-          }
-        },
-        onStatus: function(status) {
-          var micBtn = document.getElementById('voiceMicBtn');
-          if (!micBtn) return;
-          if (status === 'recording') {
-            micBtn.classList.add('recording');
-          } else {
-            micBtn.classList.remove('recording');
-          }
-        }
-      });
-      var origInit = stt.init.bind(stt);
-      var initPromise = new Promise(function(resolve, reject) {
-        origInit().then(resolve).catch(reject);
-        if (stt.worker) {
-          var origHandler = stt.worker.onmessage;
-          stt.worker.onmessage = function(e) {
-            var msg = e.data;
-            if (msg && msg.status) {
-              if (msg.status === 'progress' || msg.status === 'download') {
-                if (sttLoadPhase !== 'downloading') {
-                  sttLoadPhase = 'downloading';
-                  updateMicState();
-                }
-              } else if (msg.status === 'done' && msg.file && msg.file.endsWith('.onnx')) {
-                sttLoadPhase = 'compiling';
-                updateMicState();
-              }
-            }
-            if (origHandler) origHandler.call(stt.worker, e);
-          };
-        }
-      });
-      await initPromise;
-      sttReady = true;
-      updateMicState();
-    } catch (e) {
-      console.warn('STT init failed:', e.message);
-      sttLoadPhase = 'failed';
-      updateMicState();
-    }
-  }
-
-  function updateMicState() {
-    var micBtn = document.getElementById('voiceMicBtn');
-    if (!micBtn) return;
-    if (sttReady) {
-      micBtn.removeAttribute('disabled');
-      micBtn.title = 'Click to record';
-      micBtn.classList.remove('loading');
-    } else if (sttLoadPhase === 'failed') {
-      micBtn.setAttribute('disabled', 'true');
-      micBtn.title = 'Speech recognition failed to load';
-      micBtn.classList.remove('loading');
-    } else {
-      micBtn.setAttribute('disabled', 'true');
-      micBtn.classList.add('loading');
-      if (sttLoadPhase === 'downloading') {
-        micBtn.title = 'Downloading speech models...';
-      } else if (sttLoadPhase === 'compiling') {
-        micBtn.title = 'Compiling speech models (may take a minute)...';
-      } else {
-        micBtn.title = 'Loading speech recognition...';
-      }
-    }
-  }
-
-  async function initTTS(retries) {
-    var maxRetries = retries || 3;
-    for (var attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        tts = new TTS({
-          basePath: BASE + '/webtalk',
-          apiBasePath: BASE,
-          onStatus: function() {},
-          onAudioReady: function(url) {
-            var audio = new Audio(url);
-            audio.onended = function() {
-              isSpeaking = false;
-              processQueue();
-            };
-            audio.onerror = function() {
-              isSpeaking = false;
-              processQueue();
-            };
-            audio.play().catch(function() {
-              isSpeaking = false;
-              processQueue();
-            });
-          }
-        });
-        await tts.init();
-        ttsReady = true;
-        return;
-      } catch (e) {
-        console.warn('TTS init attempt ' + (attempt + 1) + '/' + maxRetries + ' failed:', e.message);
-        tts = null;
-        if (attempt < maxRetries - 1) {
-          await new Promise(function(r) { setTimeout(r, 3000 * (attempt + 1)); });
-        }
-      }
-    }
   }
 
   function setupAgentSelector() {
@@ -203,6 +60,8 @@
   function setupUI() {
     var micBtn = document.getElementById('voiceMicBtn');
     if (micBtn) {
+      micBtn.removeAttribute('disabled');
+      micBtn.title = 'Click to record';
       micBtn.addEventListener('click', function(e) {
         e.preventDefault();
         if (!isRecording) {
@@ -216,43 +75,104 @@
     if (sendBtn) {
       sendBtn.addEventListener('click', sendVoiceMessage);
     }
-    updateMicState();
+  }
+
+  function resampleBuffer(inputBuffer, fromRate, toRate) {
+    if (fromRate === toRate) return inputBuffer;
+    var ratio = fromRate / toRate;
+    var newLen = Math.round(inputBuffer.length / ratio);
+    var result = new Float32Array(newLen);
+    for (var i = 0; i < newLen; i++) {
+      var srcIdx = i * ratio;
+      var lo = Math.floor(srcIdx);
+      var hi = Math.min(lo + 1, inputBuffer.length - 1);
+      var frac = srcIdx - lo;
+      result[i] = inputBuffer[lo] * (1 - frac) + inputBuffer[hi] * frac;
+    }
+    return result;
   }
 
   async function startRecording() {
     if (isRecording) return;
     var el = document.getElementById('voiceTranscript');
-    if (!stt || !sttReady) {
-      if (el) el.textContent = 'Speech recognition still loading, please wait...';
-      return;
-    }
     if (el) {
       el.textContent = '';
       el.setAttribute('data-final', '');
     }
-    isRecording = true;
     try {
-      await stt.startRecording();
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      var source = audioContext.createMediaStreamSource(mediaStream);
+      scriptNode = audioContext.createScriptProcessor(4096, 1, 1);
+      recordedChunks = [];
+      scriptNode.onaudioprocess = function(e) {
+        var data = e.inputBuffer.getChannelData(0);
+        recordedChunks.push(new Float32Array(data));
+      };
+      source.connect(scriptNode);
+      scriptNode.connect(audioContext.destination);
+      isRecording = true;
+      var micBtn = document.getElementById('voiceMicBtn');
+      if (micBtn) micBtn.classList.add('recording');
     } catch (e) {
       isRecording = false;
       if (el) el.textContent = 'Mic access denied or unavailable: ' + e.message;
-      console.warn('Recording start failed:', e.message);
     }
   }
 
   async function stopRecording() {
-    if (!stt || !isRecording) return;
+    if (!isRecording) return;
     isRecording = false;
+    var micBtn = document.getElementById('voiceMicBtn');
+    if (micBtn) micBtn.classList.remove('recording');
+    var el = document.getElementById('voiceTranscript');
+    if (scriptNode) { scriptNode.disconnect(); scriptNode = null; }
+    if (mediaStream) {
+      mediaStream.getTracks().forEach(function(t) { t.stop(); });
+      mediaStream = null;
+    }
+    var sourceSampleRate = audioContext ? audioContext.sampleRate : 48000;
+    if (audioContext) { audioContext.close().catch(function() {}); audioContext = null; }
+    if (recordedChunks.length === 0) return;
+    var totalLen = 0;
+    for (var i = 0; i < recordedChunks.length; i++) totalLen += recordedChunks[i].length;
+    var merged = new Float32Array(totalLen);
+    var offset = 0;
+    for (var j = 0; j < recordedChunks.length; j++) {
+      merged.set(recordedChunks[j], offset);
+      offset += recordedChunks[j].length;
+    }
+    recordedChunks = [];
+    var resampled = resampleBuffer(merged, sourceSampleRate, TARGET_SAMPLE_RATE);
+    if (el) el.textContent = 'Transcribing...';
     try {
-      await stt.stopRecording();
-    } catch (e) {}
+      var pcmBuffer = resampled.buffer;
+      var resp = await fetch(BASE + '/api/stt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: pcmBuffer
+      });
+      var data = await resp.json();
+      if (data.text) {
+        if (el) {
+          el.textContent = data.text;
+          el.setAttribute('data-final', data.text);
+        }
+      } else if (data.error) {
+        if (el) el.textContent = 'Error: ' + data.error;
+      } else {
+        if (el) el.textContent = '';
+      }
+    } catch (e) {
+      if (el) el.textContent = 'Transcription failed: ' + e.message;
+    }
   }
 
   function sendVoiceMessage() {
     var el = document.getElementById('voiceTranscript');
     if (!el) return;
     var text = el.textContent.trim();
-    if (!text) return;
+    if (!text || text.startsWith('Transcribing') || text.startsWith('Error')) return;
     addVoiceBlock(text, true);
     el.textContent = '';
     el.setAttribute('data-final', '');
@@ -266,7 +186,7 @@
   }
 
   function speak(text) {
-    if (!ttsEnabled || !tts || !ttsReady) return;
+    if (!ttsEnabled) return;
     var clean = text.replace(/<[^>]*>/g, '').trim();
     if (!clean) return;
     speechQueue.push(clean);
@@ -277,7 +197,35 @@
     if (isSpeaking || speechQueue.length === 0) return;
     isSpeaking = true;
     var text = speechQueue.shift();
-    tts.generate(text).catch(function() {
+    fetch(BASE + '/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text })
+    }).then(function(resp) {
+      if (!resp.ok) throw new Error('TTS failed');
+      return resp.blob();
+    }).then(function(blob) {
+      var url = URL.createObjectURL(blob);
+      currentAudio = new Audio(url);
+      currentAudio.onended = function() {
+        URL.revokeObjectURL(url);
+        currentAudio = null;
+        isSpeaking = false;
+        processQueue();
+      };
+      currentAudio.onerror = function() {
+        URL.revokeObjectURL(url);
+        currentAudio = null;
+        isSpeaking = false;
+        processQueue();
+      };
+      currentAudio.play().catch(function() {
+        URL.revokeObjectURL(url);
+        currentAudio = null;
+        isSpeaking = false;
+        processQueue();
+      });
+    }).catch(function() {
       isSpeaking = false;
       processQueue();
     });
@@ -286,7 +234,10 @@
   function stopSpeaking() {
     speechQueue = [];
     isSpeaking = false;
-    if (tts) tts.stop();
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
   }
 
   function addVoiceBlock(text, isUser) {

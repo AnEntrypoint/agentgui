@@ -510,6 +510,13 @@ export const queries = {
     return stmt.all(conversationId, status);
   },
 
+  getActiveSessions() {
+    const stmt = db.prepare(
+      "SELECT * FROM sessions WHERE status IN ('active', 'pending') ORDER BY started_at DESC"
+    );
+    return stmt.all();
+  },
+
   createEvent(type, data, conversationId = null, sessionId = null) {
     const id = generateId('evt');
     const now = Date.now();
