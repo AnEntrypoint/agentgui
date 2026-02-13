@@ -790,12 +790,14 @@ class AgentGUIClient {
             let inputHtml = '';
             if (block.input && Object.keys(block.input).length > 0) {
               const inputStr = JSON.stringify(block.input, null, 2);
-              inputHtml = `<details class="tool-input-details"><summary class="tool-input-summary">Input</summary><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></details>`;
+              inputHtml = `<div class="folded-tool-body"><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></div>`;
             }
             const tn = block.name || 'unknown';
             const foldable = tn.startsWith('mcp__') || tn === 'Edit';
             if (foldable) {
-              html += `<details class="streaming-block-tool-use"><summary class="tool-use-header" style="cursor:pointer;user-select:none;list-style:none;"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn)}</span></summary>${inputHtml}</details>`;
+              const dName = typeof StreamingRenderer !== 'undefined' ? StreamingRenderer.getToolDisplayName(tn) : tn;
+              const tTitle = typeof StreamingRenderer !== 'undefined' && block.input ? StreamingRenderer.getToolTitle(tn, block.input) : '';
+              html += `<details class="streaming-block-tool-use folded-tool"><summary class="folded-tool-bar"><span class="folded-tool-name">${this.escapeHtml(dName)}</span>${tTitle ? `<span class="folded-tool-desc">${this.escapeHtml(tTitle)}</span>` : ''}</summary>${inputHtml}</details>`;
             } else {
               html += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn)}</span></div>${inputHtml}</div>`;
             }
@@ -1437,12 +1439,14 @@ class AgentGUIClient {
               let inputHtml = '';
               if (block.input && Object.keys(block.input).length > 0) {
                 const inputStr = JSON.stringify(block.input, null, 2);
-                inputHtml = `<details class="tool-input-details"><summary class="tool-input-summary">Input</summary><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></details>`;
+                inputHtml = `<div class="folded-tool-body"><pre class="tool-input-pre">${this.escapeHtml(inputStr)}</pre></div>`;
               }
               const tn2 = block.name || 'unknown';
               const foldable2 = tn2.startsWith('mcp__') || tn2 === 'Edit';
               if (foldable2) {
-                contentHtml += `<details class="streaming-block-tool-use"><summary class="tool-use-header" style="cursor:pointer;user-select:none;list-style:none;"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn2)}</span></summary>${inputHtml}</details>`;
+                const dName2 = typeof StreamingRenderer !== 'undefined' ? StreamingRenderer.getToolDisplayName(tn2) : tn2;
+                const tTitle2 = typeof StreamingRenderer !== 'undefined' && block.input ? StreamingRenderer.getToolTitle(tn2, block.input) : '';
+                contentHtml += `<details class="streaming-block-tool-use folded-tool"><summary class="folded-tool-bar"><span class="folded-tool-name">${this.escapeHtml(dName2)}</span>${tTitle2 ? `<span class="folded-tool-desc">${this.escapeHtml(tTitle2)}</span>` : ''}</summary>${inputHtml}</details>`;
               } else {
                 contentHtml += `<div class="streaming-block-tool-use"><div class="tool-use-header"><span class="tool-use-icon">&#9881;</span> <span class="tool-use-name">${this.escapeHtml(tn2)}</span></div>${inputHtml}</div>`;
               }

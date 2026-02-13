@@ -623,6 +623,53 @@ class StreamingRenderer {
   /**
    * Render tool use block with smart parameter display
    */
+  getToolUseTitle(toolName, input) {
+    const normalizedName = toolName.replace(/^mcp__[^_]+__/, '');
+    if (normalizedName === 'Edit' && input.file_path) {
+      const parts = input.file_path.split('/');
+      const fileName = parts.pop();
+      const dir = parts.slice(-2).join('/');
+      return dir ? `${dir}/${fileName}` : fileName;
+    }
+    if (normalizedName === 'Read' && input.file_path) {
+      const parts = input.file_path.split('/');
+      return parts.pop();
+    }
+    if (normalizedName === 'Write' && input.file_path) {
+      const parts = input.file_path.split('/');
+      return parts.pop();
+    }
+    if (normalizedName === 'Bash' || normalizedName === 'bash') {
+      const cmd = input.command || input.commands || '';
+      const cmdText = typeof cmd === 'string' ? cmd : JSON.stringify(cmd);
+      return cmdText.length > 60 ? cmdText.substring(0, 57) + '...' : cmdText;
+    }
+    if (normalizedName === 'Glob' && input.pattern) return input.pattern;
+    if (normalizedName === 'Grep' && input.pattern) return input.pattern;
+    if (normalizedName === 'WebFetch' && input.url) {
+      try { return new URL(input.url).hostname; } catch (e) { return input.url.substring(0, 40); }
+    }
+    if (normalizedName === 'WebSearch' && input.query) return input.query.substring(0, 50);
+    if (input.file_path) return input.file_path.split('/').pop();
+    if (input.command) {
+      const c = typeof input.command === 'string' ? input.command : JSON.stringify(input.command);
+      return c.length > 50 ? c.substring(0, 47) + '...' : c;
+    }
+    if (input.query) return input.query.substring(0, 50);
+    return '';
+  }
+
+  getToolUseDisplayName(toolName) {
+    const normalized = toolName.replace(/^mcp__[^_]+__/, '');
+    const knownTools = ['Read','Write','Edit','Bash','Glob','Grep','WebFetch','WebSearch','TodoWrite','Task','NotebookEdit'];
+    if (knownTools.includes(normalized)) return normalized;
+    if (toolName.startsWith('mcp__')) {
+      const parts = toolName.split('__');
+      return parts.length >= 3 ? parts[2] : parts[parts.length - 1];
+    }
+    return normalized || toolName;
+  }
+
   renderBlockToolUse(block, context) {
     const toolName = block.name || 'unknown';
     const input = block.input || {};
@@ -630,17 +677,20 @@ class StreamingRenderer {
 
     if (shouldFold) {
       const details = document.createElement('details');
-      details.className = 'block-tool-use';
+      details.className = 'block-tool-use folded-tool';
       const summary = document.createElement('summary');
-      summary.className = 'tool-header';
-      summary.style.cssText = 'cursor:pointer;user-select:none;list-style:none;';
+      summary.className = 'folded-tool-bar';
+      const displayName = this.getToolUseDisplayName(toolName);
+      const titleInfo = this.getToolUseTitle(toolName, input);
       summary.innerHTML = `
-        <span class="tool-icon">${this.getToolIcon(toolName)}</span>
-        <span class="tool-name"><code>${this.escapeHtml(toolName)}</code></span>
+        <span class="folded-tool-icon">${this.getToolIcon(toolName)}</span>
+        <span class="folded-tool-name">${this.escapeHtml(displayName)}</span>
+        ${titleInfo ? `<span class="folded-tool-desc">${this.escapeHtml(titleInfo)}</span>` : ''}
       `;
       details.appendChild(summary);
       if (Object.keys(input).length > 0) {
         const paramsDiv = document.createElement('div');
+        paramsDiv.className = 'folded-tool-body';
         paramsDiv.innerHTML = this.renderSmartParams(toolName, input);
         details.appendChild(paramsDiv);
       }
@@ -1002,6 +1052,33 @@ class StreamingRenderer {
       codeHtml = `<pre style="${preStyle}">${esc(code)}</pre>`;
     }
     return `<details class="collapsible-code"><summary class="collapsible-code-summary">${summaryLabel}</summary>${codeHtml}</details>`;
+  }
+
+  static getToolDisplayName(toolName) {
+    const normalized = toolName.replace(/^mcp__[^_]+__/, '');
+    const knownTools = ['Read','Write','Edit','Bash','Glob','Grep','WebFetch','WebSearch','TodoWrite','Task','NotebookEdit'];
+    if (knownTools.includes(normalized)) return normalized;
+    if (toolName.startsWith('mcp__')) {
+      const parts = toolName.split('__');
+      return parts.length >= 3 ? parts[2] : parts[parts.length - 1];
+    }
+    return normalized || toolName;
+  }
+
+  static getToolTitle(toolName, input) {
+    const n = toolName.replace(/^mcp__[^_]+__/, '');
+    if (n === 'Edit' && input.file_path) { const p = input.file_path.split('/'); const f = p.pop(); const d = p.slice(-2).join('/'); return d ? d+'/'+f : f; }
+    if (n === 'Read' && input.file_path) return input.file_path.split('/').pop();
+    if (n === 'Write' && input.file_path) return input.file_path.split('/').pop();
+    if ((n === 'Bash' || n === 'bash') && (input.command || input.commands)) { const c = typeof (input.command||input.commands) === 'string' ? (input.command||input.commands) : JSON.stringify(input.command||input.commands); return c.length > 60 ? c.substring(0,57)+'...' : c; }
+    if (n === 'Glob' && input.pattern) return input.pattern;
+    if (n === 'Grep' && input.pattern) return input.pattern;
+    if (n === 'WebFetch' && input.url) { try { return new URL(input.url).hostname; } catch(e) { return input.url.substring(0,40); } }
+    if (n === 'WebSearch' && input.query) return input.query.substring(0,50);
+    if (input.file_path) return input.file_path.split('/').pop();
+    if (input.command) { const c = typeof input.command === 'string' ? input.command : JSON.stringify(input.command); return c.length > 50 ? c.substring(0,47)+'...' : c; }
+    if (input.query) return input.query.substring(0,50);
+    return '';
   }
 
   /**
