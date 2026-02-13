@@ -22,13 +22,20 @@
     setupAgentSelector();
   }
 
+  function syncVoiceSelector() {
+    var voiceSelector = document.querySelector('[data-voice-agent-selector]');
+    var mainSelector = document.querySelector('[data-agent-selector]');
+    if (!voiceSelector || !mainSelector) return;
+    voiceSelector.innerHTML = mainSelector.innerHTML;
+    if (mainSelector.value) voiceSelector.value = mainSelector.value;
+  }
+
   function setupAgentSelector() {
     var voiceSelector = document.querySelector('[data-voice-agent-selector]');
     if (!voiceSelector) return;
     var mainSelector = document.querySelector('[data-agent-selector]');
     if (mainSelector) {
-      voiceSelector.innerHTML = mainSelector.innerHTML;
-      voiceSelector.value = mainSelector.value;
+      syncVoiceSelector();
       mainSelector.addEventListener('change', function() {
         voiceSelector.value = mainSelector.value;
       });
@@ -36,6 +43,7 @@
         mainSelector.value = voiceSelector.value;
       });
     }
+    window.addEventListener('agents-loaded', syncVoiceSelector);
   }
 
   function setupTTSToggle() {

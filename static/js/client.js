@@ -1154,12 +1154,14 @@ class AgentGUIClient {
       const { agents } = await response.json();
       this.state.agents = agents;
 
-      // Populate agent selector
+      // Populate agent selector with discovered (available) agents only
       if (this.ui.agentSelector) {
         this.ui.agentSelector.innerHTML = agents
           .map(agent => `<option value="${agent.id}">${agent.name}</option>`)
           .join('');
       }
+
+      window.dispatchEvent(new CustomEvent('agents-loaded', { detail: { agents } }));
 
       return agents;
     } catch (error) {
