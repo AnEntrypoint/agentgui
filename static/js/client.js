@@ -1288,12 +1288,11 @@ class AgentGUIClient {
       }
 
       const { conversation } = await response.json();
-      this.state.currentConversation = conversation;
 
       await this.loadConversations();
 
       if (window.conversationManager) {
-        window.conversationManager.loadConversations();
+        await window.conversationManager.loadConversations();
         window.conversationManager.select(conversation.id);
       }
 
