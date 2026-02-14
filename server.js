@@ -1414,7 +1414,7 @@ function onServerReady() {
   // Recover stale active sessions from previous run
   recoverStaleSessions();
 
-  getSpeech().then(s => s.getTTS()).then(() => debugLog('[TTS] Model preloaded')).catch(e => debugLog('[TTS] Preload failed: ' + e.message));
+  getSpeech().then(s => s.preloadTTS()).catch(e => debugLog('[TTS] Preload failed: ' + e.message));
 
   performAutoImport();
 
