@@ -245,39 +245,91 @@
     processQueue();
   }
 
+  var audioChunkQueue = [];
+  var isPlayingChunk = false;
+  var streamDone = false;
+
+  function playNextChunk() {
+    if (audioChunkQueue.length === 0) {
+      isPlayingChunk = false;
+      if (streamDone) {
+        isSpeaking = false;
+        processQueue();
+      }
+      return;
+    }
+    isPlayingChunk = true;
+    var blob = audioChunkQueue.shift();
+    var url = URL.createObjectURL(blob);
+    currentAudio = new Audio(url);
+    currentAudio.onended = function() {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+      playNextChunk();
+    };
+    currentAudio.onerror = function() {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+      playNextChunk();
+    };
+    currentAudio.play().catch(function() {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+      playNextChunk();
+    });
+  }
+
   function processQueue() {
     if (isSpeaking || speechQueue.length === 0) return;
     isSpeaking = true;
+    streamDone = false;
     var text = speechQueue.shift();
-    fetch(BASE + '/api/tts', {
+    audioChunkQueue = [];
+    isPlayingChunk = false;
+    fetch(BASE + '/api/tts-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text: text })
     }).then(function(resp) {
       if (!resp.ok) throw new Error('TTS failed');
-      return resp.blob();
-    }).then(function(blob) {
-      var url = URL.createObjectURL(blob);
-      currentAudio = new Audio(url);
-      currentAudio.onended = function() {
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-        isSpeaking = false;
-        processQueue();
-      };
-      currentAudio.onerror = function() {
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-        isSpeaking = false;
-        processQueue();
-      };
-      currentAudio.play().catch(function() {
-        URL.revokeObjectURL(url);
-        currentAudio = null;
-        isSpeaking = false;
-        processQueue();
-      });
+      var reader = resp.body.getReader();
+      var buffer = new Uint8Array(0);
+
+      function concat(a, b) {
+        var c = new Uint8Array(a.length + b.length);
+        c.set(a, 0);
+        c.set(b, a.length);
+        return c;
+      }
+
+      function pump() {
+        return reader.read().then(function(result) {
+          if (result.done) {
+            streamDone = true;
+            if (!isPlayingChunk && audioChunkQueue.length === 0) {
+              isSpeaking = false;
+              processQueue();
+            }
+            return;
+          }
+          buffer = concat(buffer, result.value);
+          while (buffer.length >= 4) {
+            var view = new DataView(buffer.buffer, buffer.byteOffset, 4);
+            var chunkLen = view.getUint32(0, false);
+            if (buffer.length < 4 + chunkLen) break;
+            var wavData = buffer.slice(4, 4 + chunkLen);
+            buffer = buffer.slice(4 + chunkLen);
+            var blob = new Blob([wavData], { type: 'audio/wav' });
+            audioChunkQueue.push(blob);
+            if (!isPlayingChunk) playNextChunk();
+          }
+          return pump();
+        });
+      }
+
+      return pump();
     }).catch(function() {
+      streamDone = true;
       isSpeaking = false;
       processQueue();
     });
@@ -285,6 +337,8 @@
 
   function stopSpeaking() {
     speechQueue = [];
+    audioChunkQueue = [];
+    isPlayingChunk = false;
     isSpeaking = false;
     if (currentAudio) {
       currentAudio.pause();

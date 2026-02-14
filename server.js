@@ -554,6 +554,36 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (routePath === '/api/tts-stream' && req.method === 'POST') {
+      try {
+        const body = await parseBody(req);
+        const text = body.text || '';
+        if (!text) {
+          sendJSON(req, res, 400, { error: 'No text provided' });
+          return;
+        }
+        const { synthesizeStream } = await getSpeech();
+        res.writeHead(200, {
+          'Content-Type': 'application/octet-stream',
+          'Transfer-Encoding': 'chunked',
+          'X-Content-Type': 'audio/wav-stream',
+          'Cache-Control': 'no-cache'
+        });
+        for await (const wavChunk of synthesizeStream(text)) {
+          const lenBuf = Buffer.alloc(4);
+          lenBuf.writeUInt32BE(wavChunk.length, 0);
+          res.write(lenBuf);
+          res.write(wavChunk);
+        }
+        res.end();
+      } catch (err) {
+        debugLog('[TTS-STREAM] Error: ' + err.message);
+        if (!res.headersSent) sendJSON(req, res, 500, { error: err.message || 'TTS stream failed' });
+        else res.end();
+      }
+      return;
+    }
+
     if (routePath === '/api/speech-status' && req.method === 'GET') {
       try {
         const { getStatus } = await getSpeech();
@@ -1304,7 +1334,8 @@ function onServerReady() {
   // Recover stale active sessions from previous run
   recoverStaleSessions();
 
-  // Run auto-import immediately
+  getSpeech().then(s => s.getTTS()).then(() => debugLog('[TTS] Model preloaded')).catch(e => debugLog('[TTS] Preload failed: ' + e.message));
+
   performAutoImport();
 
   // Then run it every 30 seconds (constant automatic importing)
