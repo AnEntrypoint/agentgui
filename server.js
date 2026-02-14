@@ -20,7 +20,7 @@ const express = require('express');
 const Busboy = require('busboy');
 const fsbrowse = require('fsbrowse');
 
-const SYSTEM_PROMPT = `Write all responses as clean semantic HTML. Use tags like <h3>, <p>, <ul>, <li>, <ol>, <table>, <code>, <pre>, <strong>, <em>, <a>, <blockquote>, <details>, <summary>. Your HTML will be rendered directly in a styled container that already provides fonts, colors, spacing, and dark mode support. Do not include <html>, <head>, <body>, <style>, or <script> tags. Do not use inline styles unless necessary for layout like tables. Do not use CSS class names. Just write semantic HTML content.`;
+const SYSTEM_PROMPT = `Write all responses as short, easy to speak sentences. Be concise and conversational. Avoid formatting, markup, or structured output. Just plain text in brief sentences.`;
 
 const activeExecutions = new Map();
 const messageQueues = new Map();
