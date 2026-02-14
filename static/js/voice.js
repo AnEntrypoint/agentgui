@@ -320,6 +320,7 @@
   var ttsConsecutiveFailures = 0;
   var TTS_MAX_FAILURES = 3;
   var ttsDisabledUntilReset = false;
+  var streamingSupported = true;
 
   function playNextChunk() {
     if (audioChunkQueue.length === 0) {
@@ -391,12 +392,16 @@
     }
 
     function tryStreaming() {
+      if (!streamingSupported) { tryNonStreaming(text); return; }
       fetch(BASE + '/api/tts-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text, voiceId: selectedVoiceId })
       }).then(function(resp) {
-        if (!resp.ok) throw new Error('TTS stream failed: ' + resp.status);
+        if (!resp.ok) {
+          streamingSupported = false;
+          throw new Error('TTS stream failed: ' + resp.status);
+        }
         var reader = resp.body.getReader();
         var buffer = new Uint8Array(0);
 
