@@ -15,6 +15,49 @@ async function getSpeech() {
   return speechModule;
 }
 
+function eagerTTS(text, conversationId, sessionId) {
+  getSpeech().then(speech => {
+    const status = speech.getStatus();
+    if (!status.ttsReady || status.ttsError) return;
+    const voices = new Set();
+    for (const ws of syncClients) {
+      const vid = ws.ttsVoiceId || 'default';
+      const convKey = `conv-${conversationId}`;
+      if (ws.subscriptions && (ws.subscriptions.has(sessionId) || ws.subscriptions.has(convKey))) {
+        voices.add(vid);
+      }
+    }
+    if (voices.size === 0) return;
+    const sentences = speech.splitSentences(text);
+    for (const vid of voices) {
+      for (const sentence of sentences) {
+        const cacheKey = speech.ttsCacheKey(sentence, vid);
+        const cached = speech.ttsCacheGet(cacheKey);
+        if (cached) {
+          pushTTSAudio(cacheKey, cached, conversationId, sessionId, vid);
+          continue;
+        }
+        speech.synthesize(sentence, vid).then(wav => {
+          pushTTSAudio(cacheKey, wav, conversationId, sessionId, vid);
+        }).catch(() => {});
+      }
+    }
+  }).catch(() => {});
+}
+
+function pushTTSAudio(cacheKey, wav, conversationId, sessionId, voiceId) {
+  const b64 = wav.toString('base64');
+  broadcastSync({
+    type: 'tts_audio',
+    cacheKey,
+    audio: b64,
+    voiceId,
+    conversationId,
+    sessionId,
+    timestamp: Date.now()
+  });
+}
+
 const require = createRequire(import.meta.url);
 const express = require('express');
 const Busboy = require('busboy');
@@ -852,6 +895,10 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
             blockIndex: allBlocks.length - 1,
             timestamp: Date.now()
           });
+
+          if (block.type === 'text' && block.text) {
+            eagerTTS(block.text, conversationId, sessionId);
+          }
         }
       } else if (parsed.type === 'user' && parsed.message?.content) {
         for (const block of parsed.message.content) {
@@ -899,6 +946,11 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
           isResult: true,
           timestamp: Date.now()
         });
+
+        if (parsed.result) {
+          const resultText = typeof parsed.result === 'string' ? parsed.result : JSON.stringify(parsed.result);
+          if (resultText) eagerTTS(resultText, conversationId, sessionId);
+        }
 
         if (parsed.result && allBlocks.length === 0) {
           allBlocks.push({ type: 'text', text: String(parsed.result) });
@@ -1128,6 +1180,8 @@ wss.on('connection', (ws, req) => {
             subscriptions: Array.from(ws.subscriptions),
             timestamp: Date.now()
           }));
+        } else if (data.type === 'set_voice') {
+          ws.ttsVoiceId = data.voiceId || 'default';
         } else if (data.type === 'ping') {
           ws.send(JSON.stringify({
             type: 'pong',

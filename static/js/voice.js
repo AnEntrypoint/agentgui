@@ -15,6 +15,8 @@
   var spokenChunks = new Set();
   var isLoadingHistory = false;
   var selectedVoiceId = localStorage.getItem('voice-selected-id') || 'default';
+  var ttsAudioCache = new Map();
+  var TTS_CLIENT_CACHE_MAX = 50;
 
   function init() {
     setupTTSToggle();
@@ -69,6 +71,7 @@
     selector.addEventListener('change', function() {
       selectedVoiceId = selector.value;
       localStorage.setItem('voice-selected-id', selectedVoiceId);
+      sendVoiceToServer();
     });
   }
 
@@ -295,6 +298,22 @@
     processQueue();
   }
 
+  function cacheTTSAudio(cacheKey, b64) {
+    if (ttsAudioCache.size >= TTS_CLIENT_CACHE_MAX) {
+      var oldest = ttsAudioCache.keys().next().value;
+      ttsAudioCache.delete(oldest);
+    }
+    var binary = atob(b64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    ttsAudioCache.set(cacheKey, new Blob([bytes], { type: 'audio/wav' }));
+  }
+
+  function getCachedTTSBlob(text) {
+    var key = selectedVoiceId + ':' + text;
+    return ttsAudioCache.get(key) || null;
+  }
+
   var audioChunkQueue = [];
   var isPlayingChunk = false;
   var streamDone = false;
@@ -343,6 +362,15 @@
     var text = speechQueue.shift();
     audioChunkQueue = [];
     isPlayingChunk = false;
+
+    var cachedBlob = getCachedTTSBlob(text);
+    if (cachedBlob) {
+      ttsConsecutiveFailures = 0;
+      audioChunkQueue.push(cachedBlob);
+      streamDone = true;
+      if (!isPlayingChunk) playNextChunk();
+      return;
+    }
 
     function onTtsSuccess() {
       ttsConsecutiveFailures = 0;
@@ -532,11 +560,23 @@
     }
   }
 
+  function sendVoiceToServer() {
+    if (typeof agentGUIClient !== 'undefined' && agentGUIClient && agentGUIClient.wsManager && agentGUIClient.wsManager.isConnected) {
+      agentGUIClient.wsManager.sendMessage({ type: 'set_voice', voiceId: selectedVoiceId });
+    }
+  }
+
   function setupStreamingListener() {
     window.addEventListener('ws-message', function(e) {
-      if (!voiceActive) return;
       var data = e.detail;
       if (!data) return;
+      if (data.type === 'tts_audio' && data.audio && data.voiceId === selectedVoiceId) {
+        cacheTTSAudio(data.cacheKey, data.audio);
+      }
+      if (data.type === 'sync_connected') {
+        sendVoiceToServer();
+      }
+      if (!voiceActive) return;
       if (data.type === 'streaming_progress' && data.block) {
         handleVoiceBlock(data.block, true);
       }
