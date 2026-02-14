@@ -1014,10 +1014,34 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
     });
 
     if (isRateLimit) {
+      const existingState = rateLimitState.get(conversationId) || {};
+      const retryCount = (existingState.retryCount || 0) + 1;
+      const maxRateLimitRetries = 3;
+
+      if (retryCount > maxRateLimitRetries) {
+        debugLog(`[rate-limit] Conv ${conversationId} hit rate limit ${retryCount} times, giving up`);
+        broadcastSync({
+          type: 'streaming_error',
+          sessionId,
+          conversationId,
+          error: `Rate limit exceeded after ${retryCount} attempts. Please try again later.`,
+          recoverable: false,
+          timestamp: Date.now()
+        });
+        const errorMessage = queries.createMessage(conversationId, 'assistant', `Error: Rate limit exceeded after ${retryCount} attempts. Please try again later.`);
+        broadcastSync({
+          type: 'message_created',
+          conversationId,
+          message: errorMessage,
+          timestamp: Date.now()
+        });
+        return;
+      }
+
       const cooldownMs = (error.retryAfterSec || 60) * 1000;
       const retryAt = Date.now() + cooldownMs;
-      rateLimitState.set(conversationId, { retryAt, cooldownMs });
-      debugLog(`[rate-limit] Conv ${conversationId} hit rate limit, retry in ${cooldownMs}ms`);
+      rateLimitState.set(conversationId, { retryAt, cooldownMs, retryCount });
+      debugLog(`[rate-limit] Conv ${conversationId} hit rate limit (attempt ${retryCount}/${maxRateLimitRetries}), retry in ${cooldownMs}ms`);
 
       broadcastSync({
         type: 'rate_limit_hit',
@@ -1025,6 +1049,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
         conversationId,
         retryAfterMs: cooldownMs,
         retryAt,
+        retryCount,
         timestamp: Date.now()
       });
 
@@ -1032,7 +1057,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
 
       setTimeout(() => {
         rateLimitState.delete(conversationId);
-        debugLog(`[rate-limit] Conv ${conversationId} cooldown expired, restarting`);
+        debugLog(`[rate-limit] Conv ${conversationId} cooldown expired, restarting (attempt ${retryCount + 1})`);
         broadcastSync({
           type: 'rate_limit_clear',
           conversationId,
