@@ -1366,6 +1366,11 @@ async function resumeInterruptedStreams() {
     for (let i = 0; i < toResume.length; i++) {
       const conv = toResume[i];
       try {
+        const staleSessions = [...queries.getSessionsByStatus(conv.id, 'active'), ...queries.getSessionsByStatus(conv.id, 'pending')];
+        for (const s of staleSessions) {
+          queries.updateSession(s.id, { status: 'interrupted', error: 'Server restarted, resuming', completed_at: Date.now() });
+        }
+
         const lastMsg = queries.getLastUserMessage(conv.id);
         const prompt = lastMsg?.content || 'continue';
         const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
