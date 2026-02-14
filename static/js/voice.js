@@ -34,19 +34,33 @@
       .then(function(data) {
         if (!data.ok || !Array.isArray(data.voices)) return;
         selector.innerHTML = '';
-        data.voices.forEach(function(voice) {
-          var opt = document.createElement('option');
-          opt.value = voice.id;
-          var label = voice.name;
-          if (voice.gender || voice.accent) {
+        var builtIn = data.voices.filter(function(v) { return !v.isCustom; });
+        var custom = data.voices.filter(function(v) { return v.isCustom; });
+        if (builtIn.length) {
+          var grp1 = document.createElement('optgroup');
+          grp1.label = 'Built-in Voices';
+          builtIn.forEach(function(voice) {
+            var opt = document.createElement('option');
+            opt.value = voice.id;
             var parts = [];
             if (voice.gender) parts.push(voice.gender);
             if (voice.accent) parts.push(voice.accent);
-            label += ' (' + parts.join(', ') + ')';
-          }
-          opt.textContent = label;
-          selector.appendChild(opt);
-        });
+            opt.textContent = voice.name + (parts.length ? ' (' + parts.join(', ') + ')' : '');
+            grp1.appendChild(opt);
+          });
+          selector.appendChild(grp1);
+        }
+        if (custom.length) {
+          var grp2 = document.createElement('optgroup');
+          grp2.label = 'Custom Voices';
+          custom.forEach(function(voice) {
+            var opt = document.createElement('option');
+            opt.value = voice.id;
+            opt.textContent = voice.name;
+            grp2.appendChild(opt);
+          });
+          selector.appendChild(grp2);
+        }
         if (saved && selector.querySelector('option[value="' + saved + '"]')) {
           selector.value = saved;
         }
@@ -322,53 +336,78 @@
     var text = speechQueue.shift();
     audioChunkQueue = [];
     isPlayingChunk = false;
-    fetch(BASE + '/api/tts-stream', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text, voiceId: selectedVoiceId })
-    }).then(function(resp) {
-      if (!resp.ok) throw new Error('TTS failed');
-      var reader = resp.body.getReader();
-      var buffer = new Uint8Array(0);
+    
+    function tryStreaming() {
+      fetch(BASE + '/api/tts-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text, voiceId: selectedVoiceId })
+      }).then(function(resp) {
+        if (!resp.ok) throw new Error('TTS stream failed');
+        var reader = resp.body.getReader();
+        var buffer = new Uint8Array(0);
 
-      function concat(a, b) {
-        var c = new Uint8Array(a.length + b.length);
-        c.set(a, 0);
-        c.set(b, a.length);
-        return c;
-      }
+        function concat(a, b) {
+          var c = new Uint8Array(a.length + b.length);
+          c.set(a, 0);
+          c.set(b, a.length);
+          return c;
+        }
 
-      function pump() {
-        return reader.read().then(function(result) {
-          if (result.done) {
-            streamDone = true;
-            if (!isPlayingChunk && audioChunkQueue.length === 0) {
-              isSpeaking = false;
-              processQueue();
+        function pump() {
+          return reader.read().then(function(result) {
+            if (result.done) {
+              streamDone = true;
+              if (!isPlayingChunk && audioChunkQueue.length === 0) {
+                isSpeaking = false;
+                processQueue();
+              }
+              return;
             }
-            return;
-          }
-          buffer = concat(buffer, result.value);
-          while (buffer.length >= 4) {
-            var view = new DataView(buffer.buffer, buffer.byteOffset, 4);
-            var chunkLen = view.getUint32(0, false);
-            if (buffer.length < 4 + chunkLen) break;
-            var wavData = buffer.slice(4, 4 + chunkLen);
-            buffer = buffer.slice(4 + chunkLen);
-            var blob = new Blob([wavData], { type: 'audio/wav' });
-            audioChunkQueue.push(blob);
-            if (!isPlayingChunk) playNextChunk();
-          }
-          return pump();
-        });
-      }
+            buffer = concat(buffer, result.value);
+            while (buffer.length >= 4) {
+              var view = new DataView(buffer.buffer, buffer.byteOffset, 4);
+              var chunkLen = view.getUint32(0, false);
+              if (buffer.length < 4 + chunkLen) break;
+              var wavData = buffer.slice(4, 4 + chunkLen);
+              buffer = buffer.slice(4 + chunkLen);
+              var blob = new Blob([wavData], { type: 'audio/wav' });
+              audioChunkQueue.push(blob);
+              if (!isPlayingChunk) playNextChunk();
+            }
+            return pump();
+          });
+        }
 
-      return pump();
-    }).catch(function() {
-      streamDone = true;
-      isSpeaking = false;
-      processQueue();
-    });
+        return pump();
+      }).catch(function() {
+        tryNonStreaming(text);
+      });
+    }
+    
+    function tryNonStreaming(txt) {
+      fetch(BASE + '/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: txt, voiceId: selectedVoiceId })
+      }).then(function(resp) {
+        if (!resp.ok) throw new Error('TTS failed');
+        return resp.arrayBuffer();
+      }).then(function(buf) {
+        var blob = new Blob([buf], { type: 'audio/wav' });
+        audioChunkQueue.push(blob);
+        if (!isPlayingChunk) playNextChunk();
+        streamDone = true;
+        isSpeaking = false;
+        processQueue();
+      }).catch(function() {
+        streamDone = true;
+        isSpeaking = false;
+        processQueue();
+      });
+    }
+    
+    tryStreaming();
   }
 
   function stopSpeaking() {
