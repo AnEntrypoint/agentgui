@@ -118,6 +118,97 @@
 
     .sidebar-new-btn:hover { background-color: var(--color-primary-dark); }
 
+    .sidebar-header-actions {
+      display: flex;
+      gap: 0.375rem;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .sidebar-clone-btn {
+      padding: 0.375rem 0.625rem;
+      font-size: 0.75rem;
+      background-color: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      border: 1px solid var(--color-border);
+      border-radius: 0.375rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .sidebar-clone-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+
+    .clone-input-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.375rem;
+      padding: 0.375rem 0.75rem;
+      background: var(--color-bg-primary);
+      border-bottom: 1px solid var(--color-border);
+      flex-shrink: 0;
+    }
+
+    .clone-input {
+      flex: 1;
+      min-width: 0;
+      padding: 0.375rem 0.5rem;
+      font-size: 0.8rem;
+      font-family: 'Monaco','Menlo','Ubuntu Mono', monospace;
+      border: 1px solid var(--color-border);
+      border-radius: 0.25rem;
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+      outline: none;
+    }
+
+    .clone-input:focus { border-color: var(--color-primary); }
+
+    .clone-go-btn {
+      padding: 0.375rem 0.625rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: var(--color-primary);
+      color: white;
+      border: none;
+      border-radius: 0.25rem;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 0.15s;
+    }
+
+    .clone-go-btn:hover { background-color: var(--color-primary-dark); }
+    .clone-go-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .clone-cancel-btn {
+      padding: 0.25rem 0.5rem;
+      font-size: 1rem;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--color-text-secondary);
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .clone-cancel-btn:hover { color: var(--color-text-primary); }
+
+    .clone-status {
+      padding: 0.375rem 0.75rem;
+      font-size: 0.75rem;
+      background: var(--color-bg-primary);
+      border-bottom: 1px solid var(--color-border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .clone-status.cloning { color: var(--color-primary); }
+    .clone-status.clone-error { color: var(--color-error); }
+    .clone-status.clone-success { color: var(--color-success); }
+
     .sidebar-list {
       flex: 1;
       overflow-y: auto;
@@ -2079,7 +2170,15 @@
     <aside class="sidebar" data-sidebar>
       <div class="sidebar-header">
         <h2>History</h2>
-        <button id="newConversationBtn" class="sidebar-new-btn" data-new-conversation title="Start new conversation">+ New</button>
+        <div class="sidebar-header-actions">
+          <button id="cloneRepoBtn" class="sidebar-clone-btn" data-clone-repo title="Clone a GitHub repo">Clone</button>
+          <button id="newConversationBtn" class="sidebar-new-btn" data-new-conversation title="Start new conversation">+ New</button>
+        </div>
+      </div>
+      <div class="clone-input-bar" id="cloneInputBar" style="display:none;">
+        <input type="text" class="clone-input" id="cloneRepoInput" placeholder="org/repo" autocomplete="off" spellcheck="false">
+        <button class="clone-go-btn" id="cloneGoBtn" title="Clone">Go</button>
+        <button class="clone-cancel-btn" id="cloneCancelBtn" title="Cancel">&times;</button>
       </div>
       <ul class="sidebar-list" data-conversation-list>
         <li class="sidebar-empty" data-conversation-empty>No conversations yet</li>

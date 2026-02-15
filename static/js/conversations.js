@@ -35,6 +35,7 @@ class ConversationManager {
     this.loadConversations();
     this.setupWebSocketListener();
     this.setupFolderBrowser();
+    this.setupCloneUI();
 
     setInterval(() => this.loadConversations(), 30000);
   }
@@ -208,6 +209,103 @@ class ConversationManager {
     window.dispatchEvent(new CustomEvent('create-new-conversation', {
       detail: { workingDirectory: expanded, title: dirName }
     }));
+  }
+
+  setupCloneUI() {
+    this.cloneBtn = document.getElementById('cloneRepoBtn');
+    this.cloneBar = document.getElementById('cloneInputBar');
+    this.cloneInput = document.getElementById('cloneRepoInput');
+    this.cloneGoBtn = document.getElementById('cloneGoBtn');
+    this.cloneCancelBtn = document.getElementById('cloneCancelBtn');
+
+    if (!this.cloneBtn || !this.cloneBar) return;
+
+    this.cloneBtn.addEventListener('click', () => this.toggleCloneBar());
+
+    this.cloneCancelBtn?.addEventListener('click', () => this.hideCloneBar());
+
+    this.cloneGoBtn?.addEventListener('click', () => this.performClone());
+
+    this.cloneInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.performClone();
+      if (e.key === 'Escape') this.hideCloneBar();
+    });
+  }
+
+  toggleCloneBar() {
+    if (!this.cloneBar) return;
+    const visible = this.cloneBar.style.display !== 'none';
+    if (visible) {
+      this.hideCloneBar();
+    } else {
+      this.cloneBar.style.display = 'flex';
+      this.cloneInput.value = '';
+      this.cloneInput.focus();
+      this.removeCloneStatus();
+    }
+  }
+
+  hideCloneBar() {
+    if (this.cloneBar) this.cloneBar.style.display = 'none';
+    this.removeCloneStatus();
+  }
+
+  removeCloneStatus() {
+    const existing = this.sidebarEl?.querySelector('.clone-status');
+    if (existing) existing.remove();
+  }
+
+  showCloneStatus(message, type) {
+    this.removeCloneStatus();
+    const statusEl = document.createElement('div');
+    statusEl.className = `clone-status ${type}`;
+    statusEl.textContent = message;
+    if (this.cloneBar && this.cloneBar.parentNode) {
+      this.cloneBar.parentNode.insertBefore(statusEl, this.cloneBar.nextSibling);
+    }
+    if (type === 'clone-success' || type === 'clone-error') {
+      setTimeout(() => statusEl.remove(), 5000);
+    }
+  }
+
+  async performClone() {
+    const repo = (this.cloneInput?.value || '').trim();
+    if (!repo) return;
+    if (!/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo)) {
+      this.showCloneStatus('Invalid format. Use org/repo', 'clone-error');
+      return;
+    }
+
+    this.cloneGoBtn.disabled = true;
+    this.cloneInput.disabled = true;
+    this.showCloneStatus(`Cloning ${repo}...`, 'cloning');
+
+    try {
+      const res = await fetch((window.__BASE_URL || '') + '/api/clone', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        this.showCloneStatus(data.error || 'Clone failed', 'clone-error');
+        return;
+      }
+
+      this.showCloneStatus(`Cloned ${data.name}`, 'clone-success');
+      this.hideCloneBar();
+
+      window.dispatchEvent(new CustomEvent('create-new-conversation', {
+        detail: { workingDirectory: data.path, title: data.name }
+      }));
+    } catch (err) {
+      this.showCloneStatus('Network error: ' + err.message, 'clone-error');
+    } finally {
+      if (this.cloneGoBtn) this.cloneGoBtn.disabled = false;
+      if (this.cloneInput) this.cloneInput.disabled = false;
+    }
   }
 
   async loadConversations() {

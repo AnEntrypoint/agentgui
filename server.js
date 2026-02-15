@@ -666,6 +666,36 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (pathOnly === '/api/clone' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const repo = (body.repo || '').trim();
+      if (!repo || !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repo)) {
+        sendJSON(req, res, 400, { error: 'Invalid repo format. Use org/repo or user/repo' });
+        return;
+      }
+      const cloneDir = STARTUP_CWD || os.homedir();
+      const repoName = repo.split('/')[1];
+      const targetPath = path.join(cloneDir, repoName);
+      if (fs.existsSync(targetPath)) {
+        sendJSON(req, res, 409, { error: `Directory already exists: ${repoName}`, path: targetPath });
+        return;
+      }
+      try {
+        execSync(`git clone https://github.com/${repo}.git`, {
+          cwd: cloneDir,
+          encoding: 'utf-8',
+          timeout: 120000,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
+        });
+        sendJSON(req, res, 200, { ok: true, repo, path: targetPath, name: repoName });
+      } catch (err) {
+        const stderr = err.stderr || err.message || 'Clone failed';
+        sendJSON(req, res, 500, { error: stderr.trim() });
+      }
+      return;
+    }
+
     if (pathOnly === '/api/folders' && req.method === 'POST') {
       const body = await parseBody(req);
       const folderPath = body.path || STARTUP_CWD;
