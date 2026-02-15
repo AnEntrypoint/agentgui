@@ -573,7 +573,11 @@ const server = http.createServer(async (req, res) => {
         if (!pkg.scripts || !pkg.scripts[script]) { sendJSON(req, res, 400, { error: `Script "${script}" not found` }); return; }
       } catch { sendJSON(req, res, 400, { error: 'No package.json' }); return; }
 
-      const child = spawn('npm', ['run', script], { cwd: wd, stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: { ...process.env, FORCE_COLOR: '1' } });
+      const childEnv = { ...process.env, FORCE_COLOR: '1' };
+      delete childEnv.PORT;
+      delete childEnv.BASE_URL;
+      delete childEnv.HOT_RELOAD;
+      const child = spawn('npm', ['run', script], { cwd: wd, stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: childEnv });
       activeScripts.set(conversationId, { process: child, script, startTime: Date.now() });
       broadcastSync({ type: 'script_started', conversationId, script, timestamp: Date.now() });
 
