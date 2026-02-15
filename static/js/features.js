@@ -23,9 +23,13 @@
 
     if (!sidebar) return;
 
-    var savedState = localStorage.getItem('sidebar-collapsed');
-    if (savedState === 'true' && window.innerWidth > 768) {
+    if (window.innerWidth <= 768) {
       sidebar.classList.add('collapsed');
+    } else {
+      var savedState = localStorage.getItem('sidebar-collapsed');
+      if (savedState === 'true') {
+        sidebar.classList.add('collapsed');
+      }
     }
 
     function isMobile() { return window.innerWidth <= 768; }
