@@ -63,7 +63,7 @@ const express = require('express');
 const Busboy = require('busboy');
 const fsbrowse = require('fsbrowse');
 
-const SYSTEM_PROMPT = `Write all responses as short, easy to speak sentences. Be concise and conversational. Avoid formatting, markup, or structured output. Just plain text in brief sentences.`;
+const SYSTEM_PROMPT = `Your output will be spoken aloud by a text-to-speech system. Write ONLY plain conversational sentences that sound natural when read aloud. Never use markdown, bold, italics, headers, bullet points, numbered lists, tables, or any formatting. Never use colons to introduce lists or options. Never use labels like "Option A" or "1." followed by a title. Instead of listing options, describe them conversationally in flowing sentences. For example, instead of "**Option 1**: Do X" say "One approach would be to do X." Keep sentences short and simple. Use transition words like "also", "another option", "or alternatively" to connect ideas. Write as if you are speaking to someone in a casual conversation.`;
 
 const activeExecutions = new Map();
 const messageQueues = new Map();

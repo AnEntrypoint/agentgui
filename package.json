@@ -29,7 +29,7 @@
     "express": "^5.2.1",
     "fsbrowse": "^0.2.13",
     "onnxruntime-node": "^1.24.1",
-    "webtalk": "github:anEntrypoint/realtime-whisper-webgpu",
+    "webtalk": "github:AnEntrypoint/webtalk",
     "ws": "^8.14.2"
   }
 }

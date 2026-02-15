@@ -435,6 +435,19 @@
       border-bottom-left-radius: 0.25rem;
     }
 
+    /* Consecutive assistant messages: join them visually */
+    .message-assistant + .message-assistant {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+      margin-top: -0.125rem;
+      padding-top: 0.25rem;
+    }
+    .message-assistant:has(+ .message-assistant) {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      padding-bottom: 0.25rem;
+    }
+
     .message-role {
       font-weight: 600;
       font-size: 0.7rem;
