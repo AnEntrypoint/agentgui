@@ -15,6 +15,9 @@
   <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
   <noscript><link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css" rel="stylesheet"></noscript>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+  <script defer src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -440,6 +443,27 @@
       background-color: var(--color-bg-primary);
       color: var(--color-text-primary);
     }
+
+    .script-buttons { display: flex; gap: 0.25rem; align-items: center; }
+    .header-icon-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 32px; height: 32px; background: none; border: none;
+      border-radius: 0.375rem; cursor: pointer; color: var(--color-text-secondary);
+      transition: background-color 0.15s, color 0.15s;
+    }
+    .header-icon-btn:hover { background-color: var(--color-bg-primary); color: var(--color-text-primary); }
+    .header-icon-btn svg { width: 16px; height: 16px; }
+    #scriptStartBtn { color: var(--color-success); }
+    #scriptStartBtn:hover { background-color: rgba(16,185,129,0.1); color: var(--color-success); }
+    .script-dev-btn { color: var(--color-info); }
+    .script-dev-btn:hover { background-color: rgba(8,145,178,0.1); color: var(--color-info); }
+    .script-stop-btn { color: var(--color-error); }
+    .script-stop-btn:hover { background-color: rgba(239,68,68,0.1); color: var(--color-error); }
+
+    .terminal-container {
+      flex: 1; display: flex; flex-direction: column; overflow: hidden; background: #1e1e1e;
+    }
+    .terminal-output { flex: 1; overflow: hidden; }
 
     /* --- View toggle bar --- */
     .view-toggle-bar {
@@ -2199,6 +2223,17 @@
         <h1 class="header-title">AgentGUI</h1>
 
         <div class="header-controls">
+          <div class="script-buttons" id="scriptButtons" style="display:none;">
+            <button class="header-icon-btn" id="scriptStartBtn" title="Run start script" aria-label="Run start script" style="display:none;">
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6,3 20,12 6,21"></polygon></svg>
+            </button>
+            <button class="header-icon-btn script-dev-btn" id="scriptDevBtn" title="Run dev script" aria-label="Run dev script" style="display:none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            </button>
+            <button class="header-icon-btn script-stop-btn" id="scriptStopBtn" title="Stop running script" aria-label="Stop running script" style="display:none;">
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="5" y="5" width="14" height="14" rx="1"></rect></svg>
+            </button>
+          </div>
           <div class="status-badge">
             <div class="status-indicator" data-status="disconnected"></div>
             <span id="connectionStatus" data-status-indicator>Disconnected</span>
@@ -2224,6 +2259,7 @@
         <button class="view-toggle-btn active" data-view="chat">Chat</button>
         <button class="view-toggle-btn" data-view="files">Files</button>
         <button class="view-toggle-btn" data-view="voice">Voice</button>
+        <button class="view-toggle-btn" data-view="terminal" id="terminalTabBtn" style="display:none;">Terminal</button>
       </div>
 
       <!-- Messages scroll area -->
@@ -2242,6 +2278,11 @@
       <!-- File browser (hidden by default) -->
       <div id="fileBrowserContainer" class="file-browser-container" style="display:none;">
         <iframe id="fileBrowserIframe" class="file-browser-iframe"></iframe>
+      </div>
+
+      <!-- Terminal output view -->
+      <div id="terminalContainer" class="terminal-container" style="display:none;">
+        <div id="terminalOutput" class="terminal-output"></div>
       </div>
 
       <!-- Voice STT/TTS view -->
@@ -2336,6 +2377,7 @@
   <script defer src="/gm/js/client.js"></script>
   <script type="module" src="/gm/js/voice.js"></script>
   <script defer src="/gm/js/features.js"></script>
+  <script defer src="/gm/js/script-runner.js"></script>
 
   <script>
     const savedTheme = localStorage.getItem('theme') || 'light';

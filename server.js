@@ -5,7 +5,7 @@ import os from 'os';
 import zlib from 'zlib';
 import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { createRequire } from 'module';
 import { queries } from './database.js';
 import { runClaudeWithStreaming } from './lib/claude-runner.js';
@@ -66,6 +66,7 @@ const fsbrowse = require('fsbrowse');
 const SYSTEM_PROMPT = `Your output will be spoken aloud by a text-to-speech system. Write ONLY plain conversational sentences that sound natural when read aloud. Never use markdown, bold, italics, headers, bullet points, numbered lists, tables, or any formatting. Never use colons to introduce lists or options. Never use labels like "Option A" or "1." followed by a title. Instead of listing options, describe them conversationally in flowing sentences. For example, instead of "**Option 1**: Do X" say "One approach would be to do X." Keep sentences short and simple. Use transition words like "also", "another option", "or alternatively" to connect ideas. Write as if you are speaking to someone in a casual conversation.`;
 
 const activeExecutions = new Map();
+const activeScripts = new Map();
 const messageQueues = new Map();
 const rateLimitState = new Map();
 const STUCK_AGENT_THRESHOLD_MS = 600000;
@@ -536,6 +537,77 @@ const server = http.createServer(async (req, res) => {
       } catch (err) {
                 sendJSON(req, res, 400, { error: err.message });
       }
+      return;
+    }
+
+    const scriptsMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/scripts$/);
+    if (scriptsMatch && req.method === 'GET') {
+      const conv = queries.getConversation(scriptsMatch[1]);
+      if (!conv) { sendJSON(req, res, 404, { error: 'Not found' }); return; }
+      const wd = conv.workingDirectory || STARTUP_CWD;
+      let hasStart = false, hasDev = false;
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(wd, 'package.json'), 'utf-8'));
+        const scripts = pkg.scripts || {};
+        hasStart = !!scripts.start;
+        hasDev = !!scripts.dev;
+      } catch {}
+      const running = activeScripts.has(scriptsMatch[1]);
+      const runningScript = running ? activeScripts.get(scriptsMatch[1]).script : null;
+      sendJSON(req, res, 200, { hasStart, hasDev, running, runningScript });
+      return;
+    }
+
+    const runScriptMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/run-script$/);
+    if (runScriptMatch && req.method === 'POST') {
+      const conversationId = runScriptMatch[1];
+      const conv = queries.getConversation(conversationId);
+      if (!conv) { sendJSON(req, res, 404, { error: 'Not found' }); return; }
+      if (activeScripts.has(conversationId)) { sendJSON(req, res, 409, { error: 'Script already running' }); return; }
+      const body = await parseBody(req);
+      const script = body.script;
+      if (script !== 'start' && script !== 'dev') { sendJSON(req, res, 400, { error: 'Invalid script' }); return; }
+      const wd = conv.workingDirectory || STARTUP_CWD;
+      try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(wd, 'package.json'), 'utf-8'));
+        if (!pkg.scripts || !pkg.scripts[script]) { sendJSON(req, res, 400, { error: `Script "${script}" not found` }); return; }
+      } catch { sendJSON(req, res, 400, { error: 'No package.json' }); return; }
+
+      const child = spawn('npm', ['run', script], { cwd: wd, stdio: ['ignore', 'pipe', 'pipe'], detached: true, env: { ...process.env, FORCE_COLOR: '1' } });
+      activeScripts.set(conversationId, { process: child, script, startTime: Date.now() });
+      broadcastSync({ type: 'script_started', conversationId, script, timestamp: Date.now() });
+
+      const onData = (stream) => (chunk) => {
+        broadcastSync({ type: 'script_output', conversationId, data: chunk.toString(), stream, timestamp: Date.now() });
+      };
+      child.stdout.on('data', onData('stdout'));
+      child.stderr.on('data', onData('stderr'));
+      child.on('error', (err) => {
+        activeScripts.delete(conversationId);
+        broadcastSync({ type: 'script_stopped', conversationId, code: 1, error: err.message, timestamp: Date.now() });
+      });
+      child.on('close', (code) => {
+        activeScripts.delete(conversationId);
+        broadcastSync({ type: 'script_stopped', conversationId, code: code || 0, timestamp: Date.now() });
+      });
+      sendJSON(req, res, 200, { ok: true, script, pid: child.pid });
+      return;
+    }
+
+    const stopScriptMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/stop-script$/);
+    if (stopScriptMatch && req.method === 'POST') {
+      const conversationId = stopScriptMatch[1];
+      const entry = activeScripts.get(conversationId);
+      if (!entry) { sendJSON(req, res, 404, { error: 'No running script' }); return; }
+      try { process.kill(-entry.process.pid, 'SIGTERM'); } catch { try { entry.process.kill('SIGTERM'); } catch {} }
+      sendJSON(req, res, 200, { ok: true });
+      return;
+    }
+
+    const scriptStatusMatch = pathOnly.match(/^\/api\/conversations\/([^/]+)\/script-status$/);
+    if (scriptStatusMatch && req.method === 'GET') {
+      const entry = activeScripts.get(scriptStatusMatch[1]);
+      sendJSON(req, res, 200, { running: !!entry, script: entry?.script || null });
       return;
     }
 
@@ -1308,7 +1380,8 @@ const BROADCAST_TYPES = new Set([
   'message_created', 'conversation_created', 'conversation_updated',
   'conversations_updated', 'conversation_deleted', 'queue_status',
   'streaming_start', 'streaming_complete', 'streaming_error',
-  'rate_limit_hit', 'rate_limit_clear'
+  'rate_limit_hit', 'rate_limit_clear',
+  'script_started', 'script_stopped', 'script_output'
 ]);
 
 const wsBatchQueues = new Map();

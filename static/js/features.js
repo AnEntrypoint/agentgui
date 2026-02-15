@@ -201,6 +201,7 @@
     var fileBrowser = document.getElementById('fileBrowserContainer');
     var fileIframe = document.getElementById('fileBrowserIframe');
     var voiceContainer = document.getElementById('voiceContainer');
+    var terminalContainer = document.getElementById('terminalContainer');
 
     if (!bar) return;
 
@@ -212,6 +213,7 @@
     if (execPanel) execPanel.style.display = view === 'chat' ? '' : 'none';
     if (fileBrowser) fileBrowser.style.display = view === 'files' ? 'flex' : 'none';
     if (voiceContainer) voiceContainer.style.display = view === 'voice' ? 'flex' : 'none';
+    if (terminalContainer) terminalContainer.style.display = view === 'terminal' ? 'flex' : 'none';
 
     if (view === 'files' && fileIframe && currentConversation) {
       var src = BASE + '/files/' + currentConversation + '/';
@@ -225,6 +227,8 @@
     } else if (view !== 'voice' && window.voiceModule) {
       window.voiceModule.deactivate();
     }
+
+    window.dispatchEvent(new CustomEvent('view-switched', { detail: { view: view } }));
   }
 
   function updateViewToggleVisibility() {
