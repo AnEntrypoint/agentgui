@@ -41,7 +41,7 @@
 
   function getStatusColor(tool) {
     if (tool.status === 'installing' || tool.status === 'updating') return '#3b82f6';
-    if (tool.status === 'installed' && tool.hasUpdate) return '#f59e0b';
+    if (tool.status === 'needs_update' || (tool.status === 'installed' && tool.hasUpdate)) return '#f59e0b';
     if (tool.status === 'installed') return '#10b981';
     if (tool.status === 'failed') return '#ef4444';
     return '#6b7280';
@@ -50,8 +50,9 @@
   function getStatusText(tool) {
     if (tool.status === 'installing') return 'Installing...';
     if (tool.status === 'updating') return 'Updating...';
+    if (tool.status === 'needs_update') return 'Update available';
     if (tool.status === 'installed') {
-      return tool.hasUpdate ? `v${tool.version || '?'} (update available)` : `v${tool.version || '?'}`;
+      return tool.hasUpdate ? 'Update available' : 'Up-to-date';
     }
     if (tool.status === 'failed') return 'Installation failed';
     return 'Not installed';
@@ -59,7 +60,7 @@
 
   function getStatusClass(tool) {
     if (tool.status === 'installing' || tool.status === 'updating') return 'installing';
-    if (tool.status === 'installed' && tool.hasUpdate) return 'updating';
+    if (tool.status === 'needs_update' || (tool.status === 'installed' && tool.hasUpdate)) return 'updating';
     if (tool.status === 'installed') return 'installed';
     if (tool.status === 'failed') return 'failed';
     return 'not-installed';
@@ -180,11 +181,11 @@
         '<div class="tool-actions">' +
         (tool.status === 'not_installed' ?
           '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.install(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Install</button>' :
-          tool.hasUpdate ?
-          '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.update(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Update to v' + esc(tool.latestVersion || '?') + '</button>' :
+          (tool.hasUpdate || tool.status === 'needs_update') ?
+          '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.update(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Update</button>' :
           tool.status === 'failed' ?
           '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.install(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Retry</button>' :
-          '<button class="tool-btn tool-btn-secondary" onclick="window.toolsManager.refresh()" ' + (isRefreshing ? 'disabled' : '') + '>Check for updates</button>'
+          '<button class="tool-btn tool-btn-secondary" onclick="window.toolsManager.refresh()" ' + (isRefreshing ? 'disabled' : '') + '>Refresh</button>'
         ) +
         '</div>' +
         '</div>';

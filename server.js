@@ -1783,31 +1783,18 @@ const server = http.createServer(async (req, res) => {
 
     if (pathOnly === '/api/tools' && req.method === 'GET') {
       console.log('[TOOLS-API] Handling GET /api/tools');
-      const tools = toolManager.getAllTools();
-      const toolsWithStatus = tools.map((t) => {
-        const dbStatus = queries.getToolStatus(t.id);
-        const status = dbStatus?.status || (t.installed ? 'installed' : 'not_installed');
-        return {
-          id: t.id,
-          name: t.name,
-          pkg: t.pkg,
-          binary: t.binary,
-          installed: t.installed,
-          version: dbStatus?.version || t.version,
-          status: status,
-          error_message: dbStatus?.error_message,
-          hasUpdate: false,
-          latestVersion: null
-        };
-      });
-      const toolsWithUpdates = await Promise.all(toolsWithStatus.map(async (t) => {
-        if (t.installed && t.version) {
-          const updates = await toolManager.checkForUpdates(t.id, t.version);
-          return { ...t, hasUpdate: updates.hasUpdate, latestVersion: updates.latestVersion };
-        }
-        return t;
+      const tools = await toolManager.getAllToolsAsync();
+      const result = tools.map((t) => ({
+        id: t.id,
+        name: t.name,
+        pkg: t.pkg,
+        installed: t.installed,
+        status: t.installed ? (t.isUpToDate ? 'installed' : 'needs_update') : 'not_installed',
+        isUpToDate: t.isUpToDate,
+        upgradeNeeded: t.upgradeNeeded,
+        hasUpdate: t.upgradeNeeded && t.installed
       }));
-      sendJSON(req, res, 200, { tools: toolsWithUpdates });
+      sendJSON(req, res, 200, { tools: result });
       return;
     }
 
