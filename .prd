@@ -10,25 +10,7 @@
     "Race condition: binary checked before npm finishes fully writing files",
     "No fallback detection method if which/where command fails"
   ],
-  "items": [
-    {
-      "id": "9",
-      "subject": "Verify git commit and all work is pushed",
-      "status": "pending",
-      "description": "Ensure all changes are committed and pushed to remote repository.",
-      "blocking": [],
-      "blockedBy": [
-        "8"
-      ],
-      "effort": "small",
-      "category": "infra",
-      "acceptance": [
-        "git status shows no uncommitted changes",
-        "All commits are pushed to remote",
-        "CI/build passes if configured"
-      ]
-    }
-  ],
+  "items": [],
   "completed": [
     {
       "id": "1",
@@ -68,6 +50,11 @@
     {
       "id": "8",
       "subject": "Test upgrade path for each tool",
+      "status": "completed"
+    },
+    {
+      "id": "9",
+      "subject": "Verify git commit and all work is pushed",
       "status": "completed"
     }
   ]
