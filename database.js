@@ -1607,6 +1607,28 @@ export const queries = {
     return stmt.all();
   },
 
+  insertToolInstallation(toolId, data) {
+    const now = Date.now();
+    const stmt = prep(`
+      INSERT OR IGNORE INTO tool_installations
+      (id, tool_id, version, installed_at, status, last_check_at, error_message, update_available, latest_version, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      generateId('ti'),
+      toolId,
+      data.version || null,
+      data.installed_at || null,
+      data.status || 'not_installed',
+      now,
+      data.error_message || null,
+      0,
+      null,
+      now,
+      now
+    );
+  },
+
   updateToolStatus(toolId, data) {
     const now = Date.now();
     const stmt = prep(`
