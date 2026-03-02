@@ -4258,8 +4258,21 @@ async function resumeInterruptedStreams() {
         const messageId = lastMsg?.id || null;
         console.log(`[RESUME] Resuming conv ${conv.id} (claude session: ${conv.claudeSessionId})`);
 
-        processMessageWithStreaming(conv.id, messageId, session.id, promptText, conv.agentType, conv.model, conv.subAgent)
-          .catch(err => debugLog(`[RESUME] Error resuming conv ${conv.id}: ${err.message}`));
+        try {
+          await processMessageWithStreaming(conv.id, messageId, session.id, promptText, conv.agentType, conv.model, conv.subAgent);
+        } catch (err) {
+          console.error(`[RESUME] Error resuming conv ${conv.id}: ${err.message}`);
+          queries.setIsStreaming(conv.id, false);
+          const activeSessions = queries.getSessionsByStatus(conv.id, 'active');
+          const pendingSessions = queries.getSessionsByStatus(conv.id, 'pending');
+          for (const s of [...activeSessions, ...pendingSessions]) {
+            queries.updateSession(s.id, {
+              status: 'error',
+              error: 'Resume failed: ' + err.message,
+              completed_at: Date.now()
+            });
+          }
+        }
 
         if (i < toResume.length - 1) {
           await new Promise(r => setTimeout(r, 200));
