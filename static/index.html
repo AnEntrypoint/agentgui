@@ -1199,11 +1199,19 @@
       overflow-y: auto;
       white-space: pre-wrap;
       word-break: break-word;
+      font-family: inherit;
+      border: 1px solid var(--color-border);
+      resize: none;
     }
 
-    .voice-transcript:empty::before {
-      content: attr(data-placeholder);
+    .voice-transcript::placeholder {
       color: var(--color-text-secondary);
+    }
+
+    .voice-transcript:focus {
+      outline: none;
+      border-color: var(--color-primary);
+      background: var(--color-bg-primary);
     }
 
     .voice-mic-btn {
@@ -3172,7 +3180,7 @@
             <select class="agent-selector voice-agent-selector" data-voice-agent-selector title="Select agent"></select>
             <select class="agent-selector voice-cli-selector" data-voice-cli-selector title="Select CLI tool"></select>
             <select class="agent-selector voice-model-selector" data-voice-model-selector title="Select model"></select>
-            <div class="voice-transcript" id="voiceTranscript" data-placeholder="Tap mic and speak..."></div>
+            <textarea class="voice-transcript" id="voiceTranscript" placeholder="Type or tap mic and speak..." spellcheck="true"></textarea>
             <button class="voice-mic-btn" id="voiceMicBtn" title="Toggle recording" aria-label="Voice input">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>

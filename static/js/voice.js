@@ -260,6 +260,15 @@
     if (sendBtn) {
       sendBtn.addEventListener('click', sendVoiceMessage);
     }
+    var transcript = document.getElementById('voiceTranscript');
+    if (transcript) {
+      transcript.addEventListener('keydown', function(e) {
+        if (e.ctrlKey && e.key === 'Enter' || e.metaKey && e.key === 'Enter') {
+          e.preventDefault();
+          sendVoiceMessage();
+        }
+      });
+    }
   }
 
   function resampleBuffer(inputBuffer, fromRate, toRate) {
@@ -310,8 +319,12 @@
     if (isRecording) return;
     var el = document.getElementById('voiceTranscript');
     if (el) {
-      el.textContent = '';
-      el.setAttribute('data-final', '');
+      if (el.value !== undefined) {
+        el.value = '';
+      } else {
+        el.textContent = '';
+        el.setAttribute('data-final', '');
+      }
     }
     try {
       mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -357,7 +370,13 @@
     }
     recordedChunks = [];
     var resampled = resampleBuffer(merged, sourceSampleRate, TARGET_SAMPLE_RATE);
-    if (el) el.textContent = 'Transcribing...';
+    if (el) {
+      if (el.value !== undefined) {
+        el.value = 'Transcribing...';
+      } else {
+        el.textContent = 'Transcribing...';
+      }
+    }
     try {
       var wavBuffer = encodeWav(resampled, TARGET_SAMPLE_RATE);
       var resp = await fetch(BASE + '/api/stt', {
@@ -368,27 +387,53 @@
       var data = await resp.json();
       if (data.text) {
         if (el) {
-          el.textContent = data.text;
-          el.setAttribute('data-final', data.text);
+          if (el.value !== undefined) {
+            el.value = data.text;
+          } else {
+            el.textContent = data.text;
+            el.setAttribute('data-final', data.text);
+          }
         }
       } else if (data.error) {
-        if (el) el.textContent = 'Error: ' + data.error;
+        if (el) {
+          if (el.value !== undefined) {
+            el.value = 'Error: ' + data.error;
+          } else {
+            el.textContent = 'Error: ' + data.error;
+          }
+        }
       } else {
-        if (el) el.textContent = '';
+        if (el) {
+          if (el.value !== undefined) {
+            el.value = '';
+          } else {
+            el.textContent = '';
+          }
+        }
       }
     } catch (e) {
-      if (el) el.textContent = 'Transcription failed: ' + e.message;
+      if (el) {
+        if (el.value !== undefined) {
+          el.value = 'Transcription failed: ' + e.message;
+        } else {
+          el.textContent = 'Transcription failed: ' + e.message;
+        }
+      }
     }
   }
 
   function sendVoiceMessage() {
     var el = document.getElementById('voiceTranscript');
     if (!el) return;
-    var text = el.textContent.trim();
+    var text = (el.value || el.textContent || '').trim();
     if (!text || text.startsWith('Transcribing') || text.startsWith('Error')) return;
     addVoiceBlock(text, true);
-    el.textContent = '';
-    el.setAttribute('data-final', '');
+    if (el.value !== undefined) {
+      el.value = '';
+    } else {
+      el.textContent = '';
+      el.setAttribute('data-final', '');
+    }
     if (typeof agentGUIClient !== 'undefined' && agentGUIClient) {
       var input = agentGUIClient.ui.messageInput;
       if (input) {
@@ -768,6 +813,13 @@
         if (data.seq !== undefined && renderedSeqs.has(data.seq)) return;
         if (data.seq !== undefined) renderedSeqs.add(data.seq);
         handleVoiceBlock(data.block, true, data.blockRole);
+      }
+      if (data.type === 'message_created' && data.message) {
+        if (data.conversationId && data.conversationId !== currentConversationId) return;
+        var message = data.message;
+        if (message.role === 'user' && message.content) {
+          handleVoiceBlock({ type: 'text', text: message.content }, true, 'user');
+        }
       }
       if (data.type === 'streaming_start') {
         if (data.conversationId && data.conversationId !== currentConversationId) return;
