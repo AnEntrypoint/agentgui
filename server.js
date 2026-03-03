@@ -1908,13 +1908,13 @@ const server = http.createServer(async (req, res) => {
         for (const tool of tools) {
           queries.updateToolStatus(tool.id, {
             status: tool.installed ? 'installed' : 'not_installed',
-            version: tool.version,
+            version: tool.installedVersion,
             last_check_at: Date.now()
           });
           if (tool.installed) {
-            const updates = await toolManager.checkForUpdates(tool.id, tool.version);
-            if (updates.hasUpdate) {
-              queries.updateToolStatus(tool.id, { update_available: 1, latest_version: updates.latestVersion });
+            const status = await toolManager.checkToolStatusAsync(tool.id);
+            if (status && status.upgradeNeeded) {
+              queries.updateToolStatus(tool.id, { update_available: 1, latest_version: status.publishedVersion });
             }
           }
         }
