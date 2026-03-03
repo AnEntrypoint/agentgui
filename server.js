@@ -1917,9 +1917,9 @@ const server = http.createServer(async (req, res) => {
             if (result.success) {
               queries.updateToolStatus(toolId, { status: 'installed', installed_at: Date.now() });
               queries.addToolInstallHistory(toolId, 'update', 'success', null);
-              await toolManager.checkToolStatusAsync(toolId);
+              const freshStatus = await toolManager.checkToolStatusAsync(toolId);
               if (wsOptimizer && wsOptimizer.broadcast) {
-                wsOptimizer.broadcast({ type: 'tool_update_complete', toolId, data: result });
+                wsOptimizer.broadcast({ type: 'tool_update_complete', toolId, data: { ...result, ...freshStatus } });
               }
             } else {
               queries.updateToolStatus(toolId, { status: 'failed', error_message: result.error });

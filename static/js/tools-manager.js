@@ -138,9 +138,13 @@
     } else if (data.type === 'tool_install_complete' || data.type === 'tool_update_complete') {
       var tool = tools.find(t => t.id === data.toolId);
       if (tool) {
-        tool.status = 'installed';
+        tool.status = data.data?.isUpToDate ? 'installed' : 'needs_update';
         tool.version = data.data?.version || tool.version;
-        tool.hasUpdate = false;
+        tool.installedVersion = data.data?.installedVersion || tool.installedVersion;
+        tool.publishedVersion = data.data?.publishedVersion || tool.publishedVersion;
+        tool.isUpToDate = data.data?.isUpToDate ?? false;
+        tool.upgradeNeeded = data.data?.upgradeNeeded ?? false;
+        tool.hasUpdate = (data.data?.upgradeNeeded && data.data?.installed) ?? false;
         tool.progress = 100;
         operationInProgress.delete(data.toolId);
         setTimeout(fetchTools, 1000);
