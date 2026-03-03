@@ -1580,7 +1580,8 @@ class AgentGUIClient {
 
       let finalPrompt = prompt;
       if (subAgent && agentId === 'claude-code') {
-        finalPrompt = `use ${subAgent} subagent to ${prompt}`;
+        const displaySubAgent = subAgent.split('-·-')[0];
+        finalPrompt = `use ${displaySubAgent} subagent to ${prompt} optimize for speech keep it short optimize for clarity`;
       }
       const streamBody = { id: conversationId, content: finalPrompt, agentId };
       if (model) streamBody.model = model;
@@ -1979,9 +1980,6 @@ class AgentGUIClient {
     if (this.ui.cliSelector) {
       this.ui.cliSelector.disabled = true;
     }
-    if (this.ui.agentSelector) {
-      this.ui.agentSelector.disabled = true;
-    }
 
     this.loadModelsForAgent(agentId).then(() => {
       if (this.ui.modelSelector && model) {
@@ -1997,9 +1995,6 @@ class AgentGUIClient {
       if (this.ui.cliSelector.options.length > 0) {
         this.ui.cliSelector.style.display = 'inline-block';
       }
-    }
-    if (this.ui.agentSelector) {
-      this.ui.agentSelector.disabled = false;
     }
     if (this.ui.modelSelector) {
       this.ui.modelSelector.disabled = false;
