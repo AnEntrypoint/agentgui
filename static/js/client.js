@@ -147,6 +147,7 @@ class AgentGUIClient {
     this.wsManager.on('connected', () => {
       console.log('WebSocket connected');
       this.updateConnectionStatus('connected');
+      this._subscribeToConversationUpdates();
       this._recoverMissedChunks();
       this.emit('ws:connected');
     });
@@ -1375,6 +1376,13 @@ class AgentGUIClient {
     }
     if (this.ui.messageInput) {
       this.ui.messageInput.value = content;
+    }
+  }
+
+  _subscribeToConversationUpdates() {
+    if (!this.state.conversations || this.state.conversations.length === 0) return;
+    for (const conv of this.state.conversations) {
+      this.wsManager.subscribeToConversation(conv.id);
     }
   }
 

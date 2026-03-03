@@ -473,6 +473,10 @@ class WebSocketManager {
     return this.sendMessage({ type: 'subscribe', sessionId, timestamp: Date.now() });
   }
 
+  subscribeToConversation(conversationId) {
+    return this.sendMessage({ type: 'subscribe', conversationId, timestamp: Date.now() });
+  }
+
   resubscribeAll() {
     for (const key of this.activeSubscriptions) {
       const [type, id] = key.split(':');
