@@ -115,16 +115,29 @@
     }
   }
 
-  // Check if terminal view is initially active
-  if (document.getElementById('terminalContainer') && 
-      window.getComputedStyle(document.getElementById('terminalContainer')).display !== 'none') {
-    console.log('Terminal: Terminal view initially visible, starting');
-    startTerminal();
+  function initTerminalEarly() {
+    console.log('Terminal: Initializing terminal early (not yet active)');
+    if (!ensureTerm()) {
+      console.log('Terminal: Waiting for xterm.js to load');
+      setTimeout(initTerminalEarly, 200);
+      return;
+    }
+    console.log('Terminal: Terminal UI initialized and ready for interaction');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initTerminalEarly);
+  } else {
+    initTerminalEarly();
   }
 
   window.addEventListener('view-switched', function(e) {
     if (e.detail.view === 'terminal') {
-      startTerminal();
+      if (!termActive) {
+        termActive = true;
+        connectAndStart();
+        setTimeout(function() { if (fitAddon) try { fitAddon.fit(); } catch(_) {} }, 100);
+      }
     } else if (termActive) {
       stopTerminal();
     }
