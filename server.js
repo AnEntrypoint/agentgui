@@ -4090,33 +4090,79 @@ wsRouter.onLegacy((data, ws) => {
     if (ws.terminalProc) {
       try { ws.terminalProc.kill(); } catch(e) {}
     }
-    const { spawn } = require('child_process');
-    const shell = process.env.SHELL || '/bin/bash';
-    const cwd = data.cwd || process.env.STARTUP_CWD || process.env.HOME || '/';
-    const proc = spawn(shell, [], { cwd, env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }, stdio: ['pipe', 'pipe', 'pipe'] });
-    ws.terminalProc = proc;
-    proc.stdout.on('data', (chunk) => {
-      if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_output', data: chunk.toString('base64'), encoding: 'base64' }));
-    });
-    proc.stderr.on('data', (chunk) => {
-      if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_output', data: chunk.toString('base64'), encoding: 'base64' }));
-    });
-    proc.on('exit', (code) => {
-      if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_exit', code }));
-      ws.terminalProc = null;
-    });
-    proc.on('error', (err) => {
-      console.error('[TERMINAL] Spawn error (contained):', err.message);
-      if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_exit', code: 1, error: err.message }));
-      ws.terminalProc = null;
-    });
-    proc.stdin.on('error', () => {});
-    proc.stdout.on('error', () => {});
-    proc.stderr.on('error', () => {});
-    ws.send(JSON.stringify({ type: 'terminal_started', timestamp: Date.now() }));
+    try {
+      const pty = require('node-pty');
+      const shell = process.env.SHELL || '/bin/bash';
+      const cwd = data.cwd || process.env.STARTUP_CWD || process.env.HOME || '/';
+      const proc = pty.spawn(shell, [], {
+        name: 'xterm-256color',
+        cols: data.cols || 80,
+        rows: data.rows || 24,
+        cwd: cwd,
+        env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }
+      });
+      ws.terminalProc = proc;
+      ws.terminalPty = true;
+      proc.on('data', (chunk) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_output', data: chunk.toString('base64'), encoding: 'base64' }));
+      });
+      proc.on('exit', (code) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_exit', code }));
+        ws.terminalProc = null;
+      });
+      proc.on('error', (err) => {
+        console.error('[TERMINAL] PTY error (contained):', err.message);
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_exit', code: 1, error: err.message }));
+        ws.terminalProc = null;
+      });
+      ws.send(JSON.stringify({ type: 'terminal_started', timestamp: Date.now() }));
+    } catch (e) {
+      console.error('[TERMINAL] Failed to spawn PTY, falling back to pipes:', e.message);
+      const { spawn } = require('child_process');
+      const shell = process.env.SHELL || '/bin/bash';
+      const cwd = data.cwd || process.env.STARTUP_CWD || process.env.HOME || '/';
+      const proc = spawn(shell, ['-i'], { cwd, env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' }, stdio: ['pipe', 'pipe', 'pipe'] });
+      ws.terminalProc = proc;
+      ws.terminalPty = false;
+      proc.stdout.on('data', (chunk) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_output', data: chunk.toString('base64'), encoding: 'base64' }));
+      });
+      proc.stderr.on('data', (chunk) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_output', data: chunk.toString('base64'), encoding: 'base64' }));
+      });
+      proc.on('exit', (code) => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_exit', code }));
+        ws.terminalProc = null;
+      });
+      proc.on('error', (err) => {
+        console.error('[TERMINAL] Spawn error (contained):', err.message);
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'terminal_exit', code: 1, error: err.message }));
+        ws.terminalProc = null;
+      });
+      proc.stdin.on('error', () => {});
+      proc.stdout.on('error', () => {});
+      proc.stderr.on('error', () => {});
+      ws.send(JSON.stringify({ type: 'terminal_started', timestamp: Date.now() }));
+    }
   } else if (data.type === 'terminal_input') {
-    if (ws.terminalProc && ws.terminalProc.stdin.writable) {
-      try { ws.terminalProc.stdin.write(Buffer.from(data.data, 'base64')); } catch (e) {}
+    if (ws.terminalProc) {
+      try {
+        const input = Buffer.from(data.data, 'base64');
+        if (ws.terminalPty) {
+          ws.terminalProc.write(input);
+        } else if (ws.terminalProc.stdin && ws.terminalProc.stdin.writable) {
+          ws.terminalProc.stdin.write(input);
+        }
+      } catch (e) {}
+    }
+  } else if (data.type === 'terminal_resize') {
+    if (ws.terminalProc && ws.terminalPty) {
+      try {
+        const { cols, rows } = data;
+        if (cols && rows && typeof ws.terminalProc.resize === 'function') {
+          ws.terminalProc.resize(cols, rows);
+        }
+      } catch (e) {}
     }
   } else if (data.type === 'terminal_stop') {
     if (ws.terminalProc) {

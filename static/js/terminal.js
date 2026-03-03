@@ -42,9 +42,29 @@
       }
     });
 
-    window.addEventListener('resize', function() {
-      if (fitAddon) try { fitAddon.fit(); } catch(_) {}
+    term.onResize(function(size) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'terminal_resize', cols: size.cols, rows: size.rows }));
+      }
     });
+
+    var resizeTimer;
+    window.addEventListener('resize', function() {
+      if (fitAddon) {
+        try { fitAddon.fit(); } catch(_) {}
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function() {
+          if (term && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'terminal_resize', cols: term.cols, rows: term.rows }));
+          }
+        }, 200);
+      }
+    });
+
+    output.addEventListener('click', function() {
+      if (term && term.focus) term.focus();
+    });
+
     return true;
   }
 
@@ -52,18 +72,22 @@
     console.log('Terminal: Connecting to WebSocket');
     if (ws && ws.readyState === WebSocket.OPEN) {
       console.log('Terminal: Sending terminal_start command');
-      ws.send(JSON.stringify({ type: 'terminal_start', cwd: window.__STARTUP_CWD || undefined }));
+      var dims = term ? { cols: term.cols, rows: term.rows } : { cols: 80, rows: 24 };
+      ws.send(JSON.stringify({ type: 'terminal_start', cwd: window.__STARTUP_CWD || undefined, cols: dims.cols, rows: dims.rows }));
+      setTimeout(function() { if (term && term.focus) term.focus(); }, 100);
       return;
     }
     if (ws && ws.readyState === WebSocket.CONNECTING) {
       console.log('Terminal: WebSocket already connecting');
       return;
     }
-    
+
     ws = new WebSocket(getWsUrl());
     ws.onopen = function() {
       console.log('Terminal: WebSocket connected, starting terminal');
-      ws.send(JSON.stringify({ type: 'terminal_start', cwd: window.__STARTUP_CWD || undefined }));
+      var dims = term ? { cols: term.cols, rows: term.rows } : { cols: 80, rows: 24 };
+      ws.send(JSON.stringify({ type: 'terminal_start', cwd: window.__STARTUP_CWD || undefined, cols: dims.cols, rows: dims.rows }));
+      setTimeout(function() { if (term && term.focus) term.focus(); }, 100);
     };
     ws.onmessage = function(e) {
       try {
