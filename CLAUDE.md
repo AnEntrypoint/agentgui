@@ -91,6 +91,30 @@ All routes are prefixed with `BASE_URL` (default `/gm`).
 - `POST /api/tools/update` - Batch update all tools with available updates
 - `POST /api/tools/refresh-all` - Refresh all tool statuses from package manager
 
+## Tool Update System
+
+Tool updates are managed through a complete pipeline:
+
+**Update Flow:**
+1. Frontend (`static/js/tools-manager.js`) initiates POST to `/api/tools/{id}/update`
+2. Server (`server.js` lines 1904-1961 for individual, 1973-2003 for batch) spawns bunx process
+3. Tool manager (`lib/tool-manager.js` lines 400-432) executes `bunx <package>` and detects new version
+4. Version is saved to database: `queries.updateToolStatus(toolId, { version, status: 'installed' })`
+5. WebSocket broadcasts `tool_update_complete` with version and status data
+6. Frontend updates UI and removes tool from `operationInProgress` set
+
+**Critical Detail:** When updating tools in batch (`/api/tools/update`), the version parameter MUST be included in the database update call (line 1986 in server.js). This ensures database persistence across page reloads.
+
+**Version Detection Sources** (`lib/tool-manager.js` lines 26-87):
+- Claude Code: `~/.claude/plugins/{pluginId}/plugin.json`
+- OpenCode: `~/.config/opencode/agents/{pluginId}/plugin.json`
+- Gemini CLI: `~/.gemini/extensions/{pluginId}/plugin.json`
+- Kilo: `~/.config/kilo/agents/{pluginId}/plugin.json`
+
+**Database Schema** (`database.js` lines 168-199):
+- Table: `tool_installations` (toolId, version, status, installed_at, error_message)
+- Table: `tool_install_history` (action, status, error_message for audit trail)
+
 ## Tool Detection System
 
 The system auto-detects installed AI coding tools via `bunx` package resolution:
@@ -99,7 +123,13 @@ The system auto-detects installed AI coding tools via `bunx` package resolution:
 - **Kilo**: `@kilocode/cli` package (id: gm-kilo)
 - **Claude Code**: `@anthropic-ai/claude-code` package (id: gm-cc)
 
-Tool package names are configured in `lib/tool-manager.js` TOOLS array (lines 6-11). Detection happens by spawning `bunx <package> --version` to check if tools are installed. Response from `/api/tools` includes: id, name, pkg, installed, status (one of: installed|needs_update|not_installed), isUpToDate, upgradeNeeded, hasUpdate. Frontend displays tools in UI and updates based on installation status.
+Tool configuration in `lib/tool-manager.js` TOOLS array includes id, name, pkg, and pluginId. Each tool has a different plugin folder name than its npm package name:
+- Claude Code: pkg='@anthropic-ai/claude-code', pluginId='gm' (stored at ~/.claude/plugins/gm/)
+- Gemini CLI: pkg='@google/gemini-cli', pluginId='gm' (stored at ~/.gemini/extensions/gm/)
+- Kilo: pkg='@kilocode/cli', pluginId='@kilocode/cli' (stored at ~/.config/kilo/agents/@kilocode/cli/)
+- OpenCode: pkg='opencode-ai', pluginId='opencode-ai' (stored at ~/.config/opencode/agents/opencode-ai/)
+
+Detection happens by spawning `bunx <package> --version` to check if tools are installed. Version detection uses pluginId to find the correct plugin.json file. Response from `/api/tools` includes: id, name, pkg, installed, status (one of: installed|needs_update|not_installed), isUpToDate, upgradeNeeded, hasUpdate. Frontend displays tools in UI and updates based on installation status.
 
 ### Tool Installation and Update UI Flow
 
@@ -162,3 +192,76 @@ Speech models (~470MB total) are downloaded automatically on server startup. No 
 
 ### Cache Location
 Models are stored at `~/.gmgui/models/` (whisper in `onnx-community/whisper-base/`, TTS in `tts/`).
+
+## Tool Update Process Fix
+
+### Issue
+Tool update/install operations would complete successfully but the version display in the UI would not update to reflect the new version.
+
+### Root Cause
+The WebSocket broadcast event for tool update/install completion was missing the `version` field. The server was sending only the `freshStatus` object (which contains `installedVersion`), but not including the extracted `version` field from the tool-manager result.
+
+Frontend expected: `data.data.version`
+Backend was sending: only `data.data.installedVersion`
+
+### Solution
+Updated WebSocket broadcasts in `server.js`:
+- Line 1883: Install endpoint now includes `version` in broadcast data
+- Line 1942: Update endpoint now includes `version` in broadcast data
+- Line 1987: Legacy install endpoint now saves `version` to database
+
+The broadcasts now include both the immediately-detected `version` field and the comprehensive `freshStatus` object, ensuring the frontend has complete information to update the UI correctly.
+
+### Testing
+After update/install completes:
+1. WebSocket event `tool_update_complete` or `tool_install_complete` is broadcast
+2. Frontend receives complete data with `version`, `installedVersion`, `isUpToDate`, etc.
+3. UI version display updates to show new version
+4. Status reverts to "Installed" or "Up-to-date" accordingly
+
+## Tool Update Testing & Diagnostics
+
+A comprehensive diagnostic page is available at `http://localhost:3000/gm/tool-update-test.html` (`static/tool-update-test.html`) with 7 interactive test sections:
+
+1. **API Connection Test** - Verifies server HTTP connectivity
+2. **Get Tools Status** - Lists all tools with their current status, versions, and update availability
+3. **WebSocket Connection Test** - Tests real-time event streaming (ping/pong)
+4. **Single Tool Update Test** - Triggers update for a specific tool and monitors completion
+5. **Event Stream Monitoring** - Watches all WebSocket events in real-time
+6. **Database Status** - Checks database accessibility and tool persistence
+7. **System Info** - Displays environment and configuration details
+
+### Batch Update Fix (Critical)
+
+**Issue:** When updating all tools via `/api/tools/update` endpoint, tool versions were not persisted to the database because the `version` parameter was missing from the `updateToolStatus` call.
+
+**Location:** `server.js` line 1986 in the batch update handler (`/api/tools/update`)
+
+**Fix Applied:**
+```javascript
+// BEFORE (missing version):
+queries.updateToolStatus(toolId, { status: 'installed', installed_at: Date.now() });
+
+// AFTER (version preserved):
+const version = result.version || null;
+queries.updateToolStatus(toolId, { status: 'installed', version, installed_at: Date.now() });
+```
+
+**Impact:** Ensures tool versions are correctly saved after batch updates, enabling the UI to display accurate version information and update status across page reloads.
+
+### Testing Tool Updates
+
+**Manual Steps:**
+1. Open `http://localhost:3000/gm/tool-update-test.html`
+2. Click "Get Tools List" and note current versions
+3. Click "Start Update" for a tool (e.g., gm-cc)
+4. Monitor WebSocket events - you should see `tool_update_progress` and `tool_update_complete`
+5. Click "Check Status" to verify version was saved to database
+6. Reload the page - versions should persist
+
+**Expected Outcomes:**
+- Individual tool update: version saved ✓
+- Batch tool update: version saved for all tools ✓
+- Database persists across page reload ✓
+- Frontend shows "Up-to-date" or "Update available" ✓
+- Tool install history records the action ✓
