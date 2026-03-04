@@ -270,7 +270,13 @@
 
     for (var i = 0; i < toolsWithUpdates.length; i++) {
       operationInProgress.add(toolsWithUpdates[i].id);
+      var tool = tools.find(function(t) { return t.id === toolsWithUpdates[i].id; });
+      if (tool) {
+        tool.status = 'updating';
+        tool.progress = 0;
+      }
     }
+    render();
 
     fetch('/gm/api/tools/update', { method: 'POST' })
       .then(function(r) { return r.json(); })
