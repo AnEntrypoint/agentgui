@@ -508,6 +508,9 @@
   var streamingSupported = true;
   var streamingFailedAt = 0;
 
+  var pendingVoiceUpdates = [];
+  var MAX_PENDING_UPDATES = 100;
+
   function optimizePromptForSpeech(text) {
     var optimizationInstructions = ' [Optimize for speech: Keep it short. Use simple words. Use short sentences. Focus on clarity.]';
     return text + optimizationInstructions;
@@ -813,22 +816,29 @@
       if (data.type === 'sync_connected') {
         sendVoiceToServer();
       }
+      if (data.type === 'streaming_progress' || data.type === 'message_created' || data.type === 'streaming_start') {
+        if (data.conversationId && data.conversationId !== currentConversationId) return;
+        if (!voiceActive) {
+          pendingVoiceUpdates.push(data);
+          if (pendingVoiceUpdates.length > MAX_PENDING_UPDATES) {
+            pendingVoiceUpdates.shift();
+          }
+          return;
+        }
+      }
       if (!voiceActive) return;
       if (data.type === 'streaming_progress' && data.block) {
-        if (data.conversationId && data.conversationId !== currentConversationId) return;
         if (data.seq !== undefined && renderedSeqs.has(data.seq)) return;
         if (data.seq !== undefined) renderedSeqs.add(data.seq);
         handleVoiceBlock(data.block, true, data.blockRole);
       }
       if (data.type === 'message_created' && data.message) {
-        if (data.conversationId && data.conversationId !== currentConversationId) return;
         var message = data.message;
         if (message.role === 'user' && message.content) {
           handleVoiceBlock({ type: 'text', text: message.content }, true, 'user');
         }
       }
       if (data.type === 'streaming_start') {
-        if (data.conversationId && data.conversationId !== currentConversationId) return;
         spokenChunks = new Set();
         renderedSeqs = new Set();
         _voiceBreakNext = false;
@@ -838,13 +848,16 @@
       var newConversationId = e.detail.conversationId;
       if (currentConversationId && currentConversationId !== newConversationId) {
         unsubscribeFromConversation();
+        pendingVoiceUpdates = [];
       }
       currentConversationId = newConversationId;
       stopSpeaking();
       spokenChunks = new Set();
       renderedSeqs = new Set();
       if (voiceActive) {
+        subscribeToConversation(currentConversationId);
         loadVoiceBlocks(currentConversationId);
+        processPendingUpdates();
       }
     });
   }
@@ -941,7 +954,9 @@
   function activate() {
     voiceActive = true;
     if (currentConversationId) {
+      subscribeToConversation(currentConversationId);
       loadVoiceBlocks(currentConversationId);
+      processPendingUpdates();
     } else {
       var container = document.getElementById('voiceMessages');
       if (container && !container.hasChildNodes()) {
@@ -950,10 +965,35 @@
     }
   }
 
+  function processPendingUpdates() {
+    if (!voiceActive) return;
+    var updates = pendingVoiceUpdates.splice(0, pendingVoiceUpdates.length);
+    for (var i = 0; i < updates.length; i++) {
+      var data = updates[i];
+      if (data.type === 'streaming_progress' && data.block) {
+        if (data.seq !== undefined && renderedSeqs.has(data.seq)) continue;
+        if (data.seq !== undefined) renderedSeqs.add(data.seq);
+        handleVoiceBlock(data.block, true, data.blockRole);
+      }
+      if (data.type === 'message_created' && data.message) {
+        var message = data.message;
+        if (message.role === 'user' && message.content) {
+          handleVoiceBlock({ type: 'text', text: message.content }, true, 'user');
+        }
+      }
+      if (data.type === 'streaming_start') {
+        spokenChunks = new Set();
+        renderedSeqs = new Set();
+        _voiceBreakNext = false;
+      }
+    }
+  }
+
   function deactivate() {
     voiceActive = false;
     stopSpeaking();
     unsubscribeFromConversation();
+    pendingVoiceUpdates = [];
   }
 
   function escapeHtml(text) {
