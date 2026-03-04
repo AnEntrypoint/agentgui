@@ -13,7 +13,60 @@
       if (!btn.contains(e.target) && !popup.contains(e.target)) closePopup();
     });
     window.addEventListener('ws-message', onWsMessage);
+
+    // Initialize voice controls
+    initVoiceControls();
     refresh();
+  }
+
+  function initVoiceControls() {
+    var autoSpeakToggle = document.getElementById('toolsAutoSpeakToggle');
+    var voiceSelector = document.getElementById('toolsVoiceSelector');
+
+    if (!autoSpeakToggle || !voiceSelector) return;
+
+    // Load saved preferences
+    var savedAutoSpeak = localStorage.getItem('toolsAutoSpeak') === 'true';
+    var savedVoice = localStorage.getItem('toolsVoice') || 'default';
+
+    autoSpeakToggle.checked = savedAutoSpeak;
+    voiceSelector.value = savedVoice;
+
+    // Listen for voice list updates
+    window.addEventListener('ws-message', function(e) {
+      var data = e.detail;
+      if (data && data.type === 'voice_list') {
+        updateVoiceSelector(data.voices);
+      }
+    });
+
+    // Save preferences on change
+    autoSpeakToggle.addEventListener('change', function() {
+      localStorage.setItem('toolsAutoSpeak', this.checked);
+    });
+
+    voiceSelector.addEventListener('change', function() {
+      localStorage.setItem('toolsVoice', this.value);
+    });
+  }
+
+  function updateVoiceSelector(voices) {
+    var voiceSelector = document.getElementById('toolsVoiceSelector');
+    if (!voiceSelector || !voices || !Array.isArray(voices)) return;
+
+    var currentValue = voiceSelector.value;
+    voiceSelector.innerHTML = '<option value="default">Voice</option>';
+
+    voices.forEach(function(voice) {
+      var option = document.createElement('option');
+      option.value = voice;
+      option.textContent = voice;
+      voiceSelector.appendChild(option);
+    });
+
+    if (voices.includes(currentValue)) {
+      voiceSelector.value = currentValue;
+    }
   }
 
   function refresh() {
@@ -200,42 +253,41 @@
     if (!scroll) return;
 
     if (tools.length === 0) {
-      scroll.innerHTML = '<div class="tool-empty-state"><div class="tool-empty-state-icon">⚙️</div><div class="tool-empty-state-text">No tools available</div></div>';
+      scroll.innerHTML = '<div class="tool-empty-state" style="grid-column: 1 / -1;"><div class="tool-empty-state-icon">⚙️</div><div class="tool-empty-state-text">No tools available</div></div>';
       return;
     }
 
     scroll.innerHTML = tools.map(function(tool) {
       var statusClass = getStatusClass(tool);
       var isInstalling = tool.status === 'installing' || tool.status === 'updating';
-      var hasAction = !tool.installed || tool.hasUpdate || tool.status === 'failed';
       var versionInfo = '';
       if (tool.installedVersion || tool.publishedVersion) {
         versionInfo = '<div class="tool-versions">';
         if (tool.installedVersion) {
-          versionInfo += '<span class="tool-version-item">Installed: <strong>' + esc(tool.installedVersion) + '</strong></span>';
+          versionInfo += '<span class="tool-version-item">v' + esc(tool.installedVersion) + '</span>';
         }
-        if (tool.publishedVersion) {
-          versionInfo += '<span class="tool-version-item">Published: <strong>' + esc(tool.publishedVersion) + '</strong></span>';
+        if (tool.publishedVersion && tool.installedVersion !== tool.publishedVersion) {
+          versionInfo += '<span class="tool-version-item">(v' + esc(tool.publishedVersion) + ' available)</span>';
         }
         versionInfo += '</div>';
       }
 
       return '<div class="tool-item">' +
+        '<div style="display: flex; flex-direction: column; gap: 0.3rem;">' +
         '<div class="tool-header">' +
         '<span class="tool-name">' + esc(tool.id) + '</span>' +
-        '<span class="tool-status-indicator ' + statusClass + '">' +
+        '</div>' +
+        '<div class="tool-status-indicator ' + statusClass + '">' +
         '<span class="tool-status-dot"></span>' +
         '<span>' + getStatusText(tool) + '</span>' +
-        '</span>' +
         '</div>' +
         versionInfo +
-        (tool.description ? '<div class="tool-details">' + esc(tool.description) + '</div>' : '') +
         (isInstalling && tool.progress !== undefined ?
           '<div class="tool-progress-container">' +
           '<div class="tool-progress-bar"><div class="tool-progress-fill" style="width:' + Math.min(tool.progress, 100) + '%"></div></div>' +
-          '<div class="tool-progress-text">' + Math.floor(tool.progress) + '%</div>' +
           '</div>' : '') +
-        (tool.error_message ? '<div class="tool-error-message">Error: ' + esc(tool.error_message.substring(0, 60)) + '</div>' : '') +
+        (tool.error_message ? '<div class="tool-error-message">Error: ' + esc(tool.error_message.substring(0, 40)) + '</div>' : '') +
+        '</div>' +
         '<div class="tool-actions">' +
         (tool.status === 'not_installed' ?
           '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.install(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Install</button>' :
@@ -243,7 +295,7 @@
           '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.update(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Update</button>' :
           tool.status === 'failed' ?
           '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.install(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Retry</button>' :
-          '<button class="tool-btn tool-btn-secondary" onclick="window.toolsManager.refresh()" ' + (isRefreshing ? 'disabled' : '') + '>Refresh</button>'
+          '<button class="tool-btn tool-btn-secondary" onclick="window.toolsManager.refresh()" ' + (isRefreshing ? 'disabled' : '') + '>✓</button>'
         ) +
         '</div>' +
         '</div>';
@@ -306,6 +358,28 @@
     },
     install: function(toolId) { install(toolId); },
     update: function(toolId) { update(toolId); },
-    updateAll: function() { updateAll(); }
+    updateAll: function() { updateAll(); },
+    getAutoSpeak: function() {
+      var toggle = document.getElementById('toolsAutoSpeakToggle');
+      return toggle ? toggle.checked : false;
+    },
+    getVoice: function() {
+      var selector = document.getElementById('toolsVoiceSelector');
+      return selector ? selector.value : 'default';
+    },
+    setAutoSpeak: function(value) {
+      var toggle = document.getElementById('toolsAutoSpeakToggle');
+      if (toggle) {
+        toggle.checked = value;
+        localStorage.setItem('toolsAutoSpeak', value);
+      }
+    },
+    setVoice: function(value) {
+      var selector = document.getElementById('toolsVoiceSelector');
+      if (selector && Array.from(selector.options).some(opt => opt.value === value)) {
+        selector.value = value;
+        localStorage.setItem('toolsVoice', value);
+      }
+    }
   };
 })();

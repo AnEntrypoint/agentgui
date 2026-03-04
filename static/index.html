@@ -3125,8 +3125,19 @@
           <div class="tools-popup" id="toolsPopup">
             <div class="tools-popup-content" onclick="event.stopPropagation()">
               <div class="tools-popup-header">
-                <h2>Tools & Extensions</h2>
-                <button class="tools-popup-close" onclick="document.getElementById('toolsPopup').classList.remove('open')">×</button>
+                <div style="display: flex; align-items: center; gap: 0.75rem; flex: 1;">
+                  <h2 style="margin: 0; font-size: 1rem;">Tools & Extensions</h2>
+                </div>
+                <div class="tools-popup-header-controls" style="display: flex; align-items: center; gap: 0.75rem; flex-shrink: 0;">
+                  <label class="tools-voice-toggle" style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="toolsAutoSpeakToggle" style="width: 1rem; height: 1rem; cursor: pointer;">
+                    <span>Auto-speak</span>
+                  </label>
+                  <select class="tools-voice-selector" id="toolsVoiceSelector" style="padding: 0.4rem 0.6rem; font-size: 0.8rem; border-radius: 0.3rem; border: 1px solid var(--color-border); background: var(--color-bg-primary); color: var(--color-text-primary); cursor: pointer;">
+                    <option value="default">Voice</option>
+                  </select>
+                  <button class="tools-popup-close" onclick="document.getElementById('toolsPopup').classList.remove('open')" style="background: none; border: none; color: var(--color-text-secondary); font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1; transition: color 0.2s;">×</button>
+                </div>
               </div>
               <div class="tools-popup-scroll"></div>
               <div class="tools-popup-footer">
