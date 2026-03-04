@@ -1920,7 +1920,7 @@ const server = http.createServer(async (req, res) => {
         }
       }, 360000);
 
-      toolManager.update(toolId, body.targetVersion, (msg) => {
+      toolManager.update(toolId, (msg) => {
         if (wsOptimizer && wsOptimizer.broadcast) {
           wsOptimizer.broadcast({ type: 'tool_update_progress', toolId, data: msg });
         }

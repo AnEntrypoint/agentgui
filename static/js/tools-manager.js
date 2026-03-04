@@ -155,10 +155,10 @@
         }
       });
       render();
-    } else if (data.type === 'tool_install_started' || data.type === 'tool_update_progress') {
+    } else if (data.type === 'tool_install_started' || data.type === 'tool_install_progress' || data.type === 'tool_update_progress') {
       var tool = tools.find(t => t.id === data.toolId);
       if (tool) {
-        tool.status = data.type === 'tool_install_started' ? 'installing' : 'updating';
+        tool.status = (data.type === 'tool_install_started' || data.type === 'tool_install_progress') ? 'installing' : 'updating';
         tool.progress = (tool.progress || 0) + 5;
         if (tool.progress > 90) tool.progress = 90;
         render();
