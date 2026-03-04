@@ -222,7 +222,7 @@
 
       return '<div class="tool-item">' +
         '<div class="tool-header">' +
-        '<span class="tool-name">' + esc(tool.name || tool.id) + '</span>' +
+        '<span class="tool-name">' + esc(tool.id) + '</span>' +
         '<span class="tool-status-indicator ' + statusClass + '">' +
         '<span class="tool-status-dot"></span>' +
         '<span>' + getStatusText(tool) + '</span>' +

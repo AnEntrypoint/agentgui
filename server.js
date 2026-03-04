@@ -1801,7 +1801,7 @@ const server = http.createServer(async (req, res) => {
       const tools = await toolManager.getAllToolsAsync();
       const result = tools.map((t) => ({
         id: t.id,
-        name: t.id,
+        name: t.name,
         pkg: t.pkg,
         installed: t.installed,
         status: t.installed ? (t.isUpToDate ? 'installed' : 'needs_update') : 'not_installed',
