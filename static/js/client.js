@@ -494,19 +494,19 @@ class AgentGUIClient {
 
     let isRecording = false;
 
-    const handleStartRecording = async () => {
+    const startRecording = async () => {
       if (isRecording) return;
+      isRecording = true;
       chatMicBtn.classList.add('recording');
       const result = await window.STTHandler.startRecording();
-      if (result.success) {
-        isRecording = true;
-      } else {
+      if (!result.success) {
+        isRecording = false;
         chatMicBtn.classList.remove('recording');
         alert('Microphone access denied: ' + result.error);
       }
     };
 
-    const handleStopRecording = async () => {
+    const stopRecording = async () => {
       if (!isRecording) return;
       isRecording = false;
       chatMicBtn.classList.remove('recording');
@@ -520,35 +520,35 @@ class AgentGUIClient {
       }
     };
 
-    chatMicBtn.addEventListener('mousedown', async (e) => {
+    chatMicBtn.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      await handleStartRecording();
+      startRecording();
     });
 
-    chatMicBtn.addEventListener('mouseup', async (e) => {
+    chatMicBtn.addEventListener('mouseup', (e) => {
       e.preventDefault();
-      await handleStopRecording();
+      stopRecording();
     });
 
-    chatMicBtn.addEventListener('mouseleave', async (e) => {
+    chatMicBtn.addEventListener('mouseleave', (e) => {
       if (isRecording) {
-        await handleStopRecording();
+        stopRecording();
       }
     });
 
-    chatMicBtn.addEventListener('touchstart', async (e) => {
+    chatMicBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      await handleStartRecording();
+      startRecording();
     });
 
-    chatMicBtn.addEventListener('touchend', async (e) => {
+    chatMicBtn.addEventListener('touchend', (e) => {
       e.preventDefault();
-      await handleStopRecording();
+      stopRecording();
     });
 
-    chatMicBtn.addEventListener('touchcancel', async (e) => {
+    chatMicBtn.addEventListener('touchcancel', (e) => {
       if (isRecording) {
-        await handleStopRecording();
+        stopRecording();
       }
     });
   }
