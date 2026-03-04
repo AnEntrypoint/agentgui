@@ -1890,7 +1890,7 @@ class AgentGUIClient {
         if (this.ui.cliSelector) {
           if (displayAgents.length > 0) {
             this.ui.cliSelector.innerHTML = displayAgents
-              .map(a => `<option value="${a.id}">${a.name}</option>`)
+              .map(a => `<option value="${a.id}">${a.name.split(/[\s\-]+/)[0]}</option>`)
               .join('');
             this.ui.cliSelector.style.display = 'inline-block';
           } else {
@@ -1923,7 +1923,7 @@ class AgentGUIClient {
       const { subAgents } = await window.wsClient.rpc('agent.subagents', { id: cliAgentId });
       if (subAgents && subAgents.length > 0 && this.ui.agentSelector) {
         this.ui.agentSelector.innerHTML = subAgents
-          .map(a => `<option value="${a.id}">${a.name}</option>`)
+          .map(a => `<option value="${a.id}">${a.name.split(/[\s\-]+/)[0]}</option>`)
           .join('');
         this.ui.agentSelector.style.display = 'inline-block';
         this.loadModelsForAgent(cliAgentId);
