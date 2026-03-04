@@ -1844,11 +1844,27 @@ const server = http.createServer(async (req, res) => {
       }
       queries.updateToolStatus(toolId, { status: 'installing' });
       sendJSON(req, res, 200, { success: true, installing: true, estimatedTime: 60000 });
+
+      let installCompleted = false;
+      const installTimeout = setTimeout(() => {
+        if (!installCompleted) {
+          installCompleted = true;
+          queries.updateToolStatus(toolId, { status: 'failed', error_message: 'Install timeout after 6 minutes' });
+          if (wsOptimizer && wsOptimizer.broadcast) {
+            wsOptimizer.broadcast({ type: 'tool_install_failed', toolId, data: { success: false, error: 'Install timeout after 6 minutes' } });
+          }
+          queries.addToolInstallHistory(toolId, 'install', 'failed', 'Install timeout after 6 minutes');
+        }
+      }, 360000);
+
       toolManager.install(toolId, (msg) => {
         if (wsOptimizer && wsOptimizer.broadcast) {
           wsOptimizer.broadcast({ type: 'tool_install_progress', toolId, data: msg });
         }
       }).then((result) => {
+        clearTimeout(installTimeout);
+        if (installCompleted) return;
+        installCompleted = true;
         if (result.success) {
           queries.updateToolStatus(toolId, { status: 'installed', version: result.version, installed_at: Date.now() });
           if (wsOptimizer && wsOptimizer.broadcast) {
@@ -1862,6 +1878,16 @@ const server = http.createServer(async (req, res) => {
           }
           queries.addToolInstallHistory(toolId, 'install', 'failed', result.error);
         }
+      }).catch((err) => {
+        clearTimeout(installTimeout);
+        if (installCompleted) return;
+        installCompleted = true;
+        const error = err?.message || 'Unknown error';
+        queries.updateToolStatus(toolId, { status: 'failed', error_message: error });
+        if (wsOptimizer && wsOptimizer.broadcast) {
+          wsOptimizer.broadcast({ type: 'tool_install_failed', toolId, data: { success: false, error } });
+        }
+        queries.addToolInstallHistory(toolId, 'install', 'failed', error);
       });
       return;
     }
@@ -1881,11 +1907,27 @@ const server = http.createServer(async (req, res) => {
       }
       queries.updateToolStatus(toolId, { status: 'updating' });
       sendJSON(req, res, 200, { success: true, updating: true });
+
+      let updateCompleted = false;
+      const updateTimeout = setTimeout(() => {
+        if (!updateCompleted) {
+          updateCompleted = true;
+          queries.updateToolStatus(toolId, { status: 'failed', error_message: 'Update timeout after 6 minutes' });
+          if (wsOptimizer && wsOptimizer.broadcast) {
+            wsOptimizer.broadcast({ type: 'tool_update_failed', toolId, data: { success: false, error: 'Update timeout after 6 minutes' } });
+          }
+          queries.addToolInstallHistory(toolId, 'update', 'failed', 'Update timeout after 6 minutes');
+        }
+      }, 360000);
+
       toolManager.update(toolId, body.targetVersion, (msg) => {
         if (wsOptimizer && wsOptimizer.broadcast) {
           wsOptimizer.broadcast({ type: 'tool_update_progress', toolId, data: msg });
         }
       }).then((result) => {
+        clearTimeout(updateTimeout);
+        if (updateCompleted) return;
+        updateCompleted = true;
         if (result.success) {
           queries.updateToolStatus(toolId, { status: 'installed', version: result.version, installed_at: Date.now() });
           if (wsOptimizer && wsOptimizer.broadcast) {
@@ -1899,6 +1941,16 @@ const server = http.createServer(async (req, res) => {
           }
           queries.addToolInstallHistory(toolId, 'update', 'failed', result.error);
         }
+      }).catch((err) => {
+        clearTimeout(updateTimeout);
+        if (updateCompleted) return;
+        updateCompleted = true;
+        const error = err?.message || 'Unknown error';
+        queries.updateToolStatus(toolId, { status: 'failed', error_message: error });
+        if (wsOptimizer && wsOptimizer.broadcast) {
+          wsOptimizer.broadcast({ type: 'tool_update_failed', toolId, data: { success: false, error } });
+        }
+        queries.addToolInstallHistory(toolId, 'update', 'failed', error);
       });
       return;
     }
