@@ -271,49 +271,6 @@
     }
   }
 
-  function resampleBuffer(inputBuffer, fromRate, toRate) {
-    if (fromRate === toRate) return inputBuffer;
-    var ratio = fromRate / toRate;
-    var newLen = Math.round(inputBuffer.length / ratio);
-    var result = new Float32Array(newLen);
-    for (var i = 0; i < newLen; i++) {
-      var srcIdx = i * ratio;
-      var lo = Math.floor(srcIdx);
-      var hi = Math.min(lo + 1, inputBuffer.length - 1);
-      var frac = srcIdx - lo;
-      result[i] = inputBuffer[lo] * (1 - frac) + inputBuffer[hi] * frac;
-    }
-    return result;
-  }
-
-  function encodeWav(float32Audio, sampleRate) {
-    var numSamples = float32Audio.length;
-    var bytesPerSample = 2;
-    var dataSize = numSamples * bytesPerSample;
-    var buffer = new ArrayBuffer(44 + dataSize);
-    var view = new DataView(buffer);
-    function writeStr(off, str) {
-      for (var i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i));
-    }
-    writeStr(0, 'RIFF');
-    view.setUint32(4, 36 + dataSize, true);
-    writeStr(8, 'WAVE');
-    writeStr(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * bytesPerSample, true);
-    view.setUint16(32, bytesPerSample, true);
-    view.setUint16(34, 16, true);
-    writeStr(36, 'data');
-    view.setUint32(40, dataSize, true);
-    for (var i = 0; i < numSamples; i++) {
-      var s = Math.max(-1, Math.min(1, float32Audio[i]));
-      view.setInt16(44 + i * 2, s < 0 ? s * 32768 : s * 32767, true);
-    }
-    return buffer;
-  }
 
   async function startRecording() {
     if (isRecording) return;
@@ -326,23 +283,13 @@
         el.setAttribute('data-final', '');
       }
     }
-    try {
-      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      var source = audioContext.createMediaStreamSource(mediaStream);
-      recordedChunks = [];
-      await audioContext.audioWorklet.addModule(BASE + '/js/audio-recorder-processor.js');
-      workletNode = new AudioWorkletNode(audioContext, 'recorder-processor');
-      workletNode.port.onmessage = function(e) {
-        recordedChunks.push(e.data);
-      };
-      source.connect(workletNode);
+    var result = await window.STTHandler.startRecording();
+    if (result.success) {
       isRecording = true;
       var micBtn = document.getElementById('voiceMicBtn');
       if (micBtn) micBtn.classList.add('recording');
-    } catch (e) {
-      isRecording = false;
-      if (el) el.textContent = 'Mic access denied or unavailable: ' + e.message;
+    } else {
+      if (el) el.textContent = 'Mic access denied: ' + result.error;
     }
   }
 
@@ -352,24 +299,7 @@
     var micBtn = document.getElementById('voiceMicBtn');
     if (micBtn) micBtn.classList.remove('recording');
     var el = document.getElementById('voiceTranscript');
-    if (workletNode) { workletNode.port.postMessage('stop'); workletNode.disconnect(); workletNode = null; }
-    if (mediaStream) {
-      mediaStream.getTracks().forEach(function(t) { t.stop(); });
-      mediaStream = null;
-    }
-    var sourceSampleRate = audioContext ? audioContext.sampleRate : 48000;
-    if (audioContext) { audioContext.close().catch(function() {}); audioContext = null; }
-    if (recordedChunks.length === 0) return;
-    var totalLen = 0;
-    for (var i = 0; i < recordedChunks.length; i++) totalLen += recordedChunks[i].length;
-    var merged = new Float32Array(totalLen);
-    var offset = 0;
-    for (var j = 0; j < recordedChunks.length; j++) {
-      merged.set(recordedChunks[j], offset);
-      offset += recordedChunks[j].length;
-    }
-    recordedChunks = [];
-    var resampled = resampleBuffer(merged, sourceSampleRate, TARGET_SAMPLE_RATE);
+
     if (el) {
       if (el.value !== undefined) {
         el.value = 'Transcribing...';
@@ -377,46 +307,23 @@
         el.textContent = 'Transcribing...';
       }
     }
-    try {
-      var wavBuffer = encodeWav(resampled, TARGET_SAMPLE_RATE);
-      var resp = await fetch(BASE + '/api/stt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'audio/wav' },
-        body: wavBuffer
-      });
-      var data = await resp.json();
-      if (data.text) {
-        if (el) {
-          if (el.value !== undefined) {
-            el.value = data.text;
-          } else {
-            el.textContent = data.text;
-            el.setAttribute('data-final', data.text);
-          }
-        }
-      } else if (data.error) {
-        if (el) {
-          if (el.value !== undefined) {
-            el.value = 'Error: ' + data.error;
-          } else {
-            el.textContent = 'Error: ' + data.error;
-          }
-        }
-      } else {
-        if (el) {
-          if (el.value !== undefined) {
-            el.value = '';
-          } else {
-            el.textContent = '';
-          }
-        }
-      }
-    } catch (e) {
+
+    var result = await window.STTHandler.stopRecording();
+    if (result.success) {
       if (el) {
         if (el.value !== undefined) {
-          el.value = 'Transcription failed: ' + e.message;
+          el.value = result.text;
         } else {
-          el.textContent = 'Transcription failed: ' + e.message;
+          el.textContent = result.text;
+          el.setAttribute('data-final', result.text);
+        }
+      }
+    } else {
+      if (el) {
+        if (el.value !== undefined) {
+          el.value = 'Error: ' + result.error;
+        } else {
+          el.textContent = 'Error: ' + result.error;
         }
       }
     }

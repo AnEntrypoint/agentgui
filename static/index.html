@@ -3231,6 +3231,14 @@
             aria-label="Message input"
             rows="1"
           ></textarea>
+          <button class="voice-mic-btn" id="chatMicBtn" title="Record voice input" aria-label="Voice input">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </button>
           <button class="inject-btn" id="injectBtn" title="Inject instructions into running agent" aria-label="Inject instructions">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/>
@@ -3288,6 +3296,7 @@
   <script defer src="/gm/js/terminal.js"></script>
   <script defer src="/gm/js/script-runner.js"></script>
   <script defer src="/gm/js/tools-manager.js"></script>
+  <script defer src="/gm/js/stt-handler.js"></script>
   <script defer src="/gm/js/client.js"></script>
   <script type="module" src="/gm/js/voice.js"></script>
   <script defer src="/gm/js/features.js"></script>

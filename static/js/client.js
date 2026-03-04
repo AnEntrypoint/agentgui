@@ -394,6 +394,8 @@ class AgentGUIClient {
       this.ui.sendButton.addEventListener('click', () => this.startExecution());
     }
 
+    this.setupChatMicButton();
+
     this.ui.stopButton = document.getElementById('stopBtn');
     this.ui.injectButton = document.getElementById('injectBtn');
 
@@ -483,6 +485,52 @@ class AgentGUIClient {
         this.ui.messageInput.style.height = 'auto';
       }
       this.unlockAgentAndModel();
+    });
+  }
+
+  setupChatMicButton() {
+    const chatMicBtn = document.getElementById('chatMicBtn');
+    if (!chatMicBtn) return;
+
+    let isRecording = false;
+
+    chatMicBtn.addEventListener('mousedown', async (e) => {
+      e.preventDefault();
+      if (isRecording) return;
+      isRecording = true;
+      chatMicBtn.classList.add('recording');
+      const result = await window.STTHandler.startRecording();
+      if (!result.success) {
+        isRecording = false;
+        chatMicBtn.classList.remove('recording');
+        alert('Microphone access denied: ' + result.error);
+      }
+    });
+
+    chatMicBtn.addEventListener('mouseup', async (e) => {
+      e.preventDefault();
+      if (!isRecording) return;
+      isRecording = false;
+      chatMicBtn.classList.remove('recording');
+      const result = await window.STTHandler.stopRecording();
+      if (result.success) {
+        if (this.ui.messageInput) {
+          this.ui.messageInput.value = result.text;
+        }
+      } else {
+        alert('Transcription failed: ' + result.error);
+      }
+    });
+
+    chatMicBtn.addEventListener('mouseleave', async (e) => {
+      if (isRecording) {
+        isRecording = false;
+        chatMicBtn.classList.remove('recording');
+        const result = await window.STTHandler.stopRecording();
+        if (result.success && this.ui.messageInput) {
+          this.ui.messageInput.value = result.text;
+        }
+      }
     });
   }
 
