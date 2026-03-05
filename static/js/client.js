@@ -2688,6 +2688,7 @@ class AgentGUIClient {
 
           if (result && ((result.messages && result.messages.length > 0) || (result.chunks && result.chunks.length > 0))) {
             const scrollHeightBefore = scrollContainer.scrollHeight;
+            const scrollTopBefore = scrollContainer.scrollTop;
             const newContent = document.createDocumentFragment();
 
             if (result.messages && result.messages.length > 0) {
@@ -2719,7 +2720,7 @@ class AgentGUIClient {
             }
 
             const scrollHeightAfter = scrollContainer.scrollHeight;
-            scrollContainer.scrollTop = scrollHeightAfter - scrollHeightBefore;
+            scrollContainer.scrollTop = scrollTopBefore + (scrollHeightAfter - scrollHeightBefore);
           }
         } catch (error) {
           console.error('Failed to load earlier messages:', error);
