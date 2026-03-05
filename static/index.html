@@ -1202,6 +1202,178 @@
     .sidebar-list { contain: strict; content-visibility: auto; }
     .message { contain: layout style; content-visibility: auto; contain-intrinsic-size: auto 80px; }
 
+    /* PM2 Monitor Panel */
+    .pm2-monitor-panel {
+      border-top: 1px solid var(--color-border);
+      background: var(--color-bg-secondary);
+      display: flex;
+      flex-direction: column;
+      max-height: 40vh;
+      min-height: 150px;
+    }
+    .pm2-monitor-header {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--color-text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--color-bg-primary);
+      border-bottom: 1px solid var(--color-border);
+      flex-shrink: 0;
+    }
+    .pm2-monitor-actions {
+      display: flex;
+      gap: 0.25rem;
+    }
+    .pm2-action-btn {
+      background: none;
+      border: none;
+      color: var(--color-text-secondary);
+      cursor: pointer;
+      padding: 0.125rem 0.375rem;
+      font-size: 0.875rem;
+      line-height: 1;
+      border-radius: 0.25rem;
+    }
+    .pm2-action-btn:hover {
+      background: var(--color-bg-secondary);
+      color: var(--color-text-primary);
+    }
+    .pm2-process-list {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0.25rem 0;
+    }
+    .pm2-process-item {
+      padding: 0.375rem 0.75rem;
+      margin: 0.125rem 0.5rem;
+      border-radius: 0.375rem;
+      background: var(--color-bg-primary);
+      border-left: 3px solid var(--color-primary);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: background-color 0.15s;
+    }
+    .pm2-process-item:hover {
+      background: var(--color-bg-secondary);
+    }
+    .pm2-process-item.online {
+      border-left-color: var(--color-success);
+    }
+    .pm2-process-item.stopped {
+      border-left-color: var(--color-warning);
+    }
+    .pm2-process-item.errored {
+      border-left-color: var(--color-error);
+    }
+    .pm2-process-name {
+      font-weight: 600;
+      margin-bottom: 0.125rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .pm2-process-meta {
+      display: flex;
+      gap: 0.5rem;
+      font-size: 0.7rem;
+      color: var(--color-text-secondary);
+      flex-wrap: wrap;
+    }
+    .pm2-process-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.125rem;
+    }
+    .pm2-process-actions {
+      margin-top: 0.25rem;
+      display: flex;
+      gap: 0.25rem;
+    }
+    .pm2-btn {
+      padding: 0.125rem 0.375rem;
+      font-size: 0.7rem;
+      border-radius: 0.25rem;
+      border: 1px solid var(--color-border);
+      background: var(--color-bg-primary);
+      color: var(--color-text-primary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .pm2-btn:hover {
+      background: var(--color-primary);
+      color: white;
+      border-color: var(--color-primary);
+    }
+    .pm2-btn.danger:hover {
+      background: var(--color-error);
+      border-color: var(--color-error);
+    }
+    .pm2-loading, .pm2-empty, .pm2-error {
+      padding: 0.75rem;
+      text-align: center;
+      color: var(--color-text-secondary);
+      font-size: 0.8rem;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes fadeOut {
+      from { opacity: 1; }
+      to { opacity: 0; }
+    }
+    .pm2-logs-modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 1rem;
+    }
+    .pm2-logs-content {
+      background: var(--color-bg-primary);
+      border-radius: 0.5rem;
+      width: 100%;
+      max-width: 800px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .pm2-logs-header {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--color-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+    }
+    .pm2-logs-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0.75rem 1rem;
+      font-family: 'Monaco','Menlo','Ubuntu Mono', monospace;
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      background: var(--color-bg-code);
+      color: #e6edf3;
+    }
+    .pm2-logs-footer {
+      padding: 0.5rem 1rem;
+      border-top: 1px solid var(--color-border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 0.5rem;
+    }
+
     /* ===== RESPONSIVE: TABLET ===== */
     @media (min-width: 769px) and (max-width: 1024px) {
       :root { --sidebar-width: 260px; }
@@ -2883,10 +3055,23 @@
         <button class="clone-go-btn" id="cloneGoBtn" title="Clone">Go</button>
         <button class="clone-cancel-btn" id="cloneCancelBtn" title="Cancel">&times;</button>
       </div>
-      <ul class="sidebar-list" data-conversation-list>
-        <li class="sidebar-empty" data-conversation-empty>No conversations yet</li>
-      </ul>
-    </aside>
+       <ul class="sidebar-list" data-conversation-list>
+         <li class="sidebar-empty" data-conversation-empty>No conversations yet</li>
+       </ul>
+       <!-- PM2 Monitor Panel -->
+       <div class="pm2-monitor-panel" id="pm2MonitorPanel">
+         <div class="pm2-monitor-header">
+           <span>PM2 Monitor</span>
+           <div class="pm2-monitor-actions">
+             <button class="pm2-action-btn" id="pm2RefreshBtn" title="Refresh">↻</button>
+             <button class="pm2-action-btn" id="pm2ToggleMonitorBtn" title="Pause monitoring">⏸</button>
+           </div>
+         </div>
+         <div class="pm2-process-list" id="pm2ProcessList">
+           <div class="pm2-loading" id="pm2Loading">Loading PM2 processes...</div>
+         </div>
+       </div>
+     </aside>
 
     <!-- ===== MAIN PANEL ===== -->
     <main id="app" class="main-panel">
@@ -3075,15 +3260,16 @@
   <script defer src="/gm/js/syntax-highlighter.js"></script>
   <script defer src="/gm/js/dialogs.js"></script>
   <script defer src="/gm/js/ui-components.js"></script>
-  <script defer src="/gm/js/conversations.js"></script>
-  <script defer src="/gm/js/terminal.js"></script>
-  <script defer src="/gm/js/script-runner.js"></script>
-  <script defer src="/gm/js/tools-manager.js"></script>
-  <script defer src="/gm/js/stt-handler.js"></script>
-  <script defer src="/gm/js/voice.js"></script>
-  <script defer src="/gm/js/client.js"></script>
-  <script defer src="/gm/js/features.js"></script>
-  <script defer src="/gm/js/agent-auth.js"></script>
+   <script defer src="/gm/js/conversations.js"></script>
+   <script defer src="/gm/js/terminal.js"></script>
+   <script defer src="/gm/js/script-runner.js"></script>
+   <script defer src="/gm/js/tools-manager.js"></script>
+   <script defer src="/gm/js/stt-handler.js"></script>
+   <script defer src="/gm/js/voice.js"></script>
+   <script defer src="/gm/js/pm2-monitor.js"></script>
+   <script defer src="/gm/js/client.js"></script>
+   <script defer src="/gm/js/features.js"></script>
+   <script defer src="/gm/js/agent-auth.js"></script>
 
   <script>
     const savedTheme = localStorage.getItem('theme') || 'light';

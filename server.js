@@ -25,6 +25,7 @@ import { register as registerUtilHandlers } from './lib/ws-handlers-util.js';
 import { startAll as startACPTools, stopAll as stopACPTools, getStatus as getACPStatus, getPort as getACPPort, queryModels as queryACPModels, touch as touchACP } from './lib/acp-manager.js';
 import { installGMAgentConfigs } from './lib/gm-agent-configs.js';
 import * as toolManager from './lib/tool-manager.js';
+import { pm2Manager } from './lib/pm2-manager.js';
 
 
 process.on('uncaughtException', (err, origin) => {
@@ -4045,6 +4046,7 @@ const hotReloadClients = [];
 const syncClients = new Set();
 const subscriptionIndex = new Map();
 const sseStreamHandlers = new Map();
+const pm2Subscribers = new Set();
 
 wss.on('connection', (ws, req) => {
   // req.url in WebSocket is just the path (e.g., '/gm/sync'), not a full URL
@@ -4072,16 +4074,19 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('pong', () => { ws.isAlive = true; });
-    ws.on('close', () => {
-      if (ws.terminalProc) { try { ws.terminalProc.kill(); } catch(e) {} ws.terminalProc = null; }
-      syncClients.delete(ws);
-      wsOptimizer.removeClient(ws);
-      for (const sub of ws.subscriptions) {
-        const idx = subscriptionIndex.get(sub);
-        if (idx) { idx.delete(ws); if (idx.size === 0) subscriptionIndex.delete(sub); }
-      }
-      console.log(`[WebSocket] Client ${ws.clientId} disconnected`);
-    });
+     ws.on('close', () => {
+       if (ws.terminalProc) { try { ws.terminalProc.kill(); } catch(e) {} ws.terminalProc = null; }
+       syncClients.delete(ws);
+       wsOptimizer.removeClient(ws);
+       for (const sub of ws.subscriptions) {
+         const idx = subscriptionIndex.get(sub);
+         if (idx) { idx.delete(ws); if (idx.size === 0) subscriptionIndex.delete(sub); }
+       }
+       if (ws.pm2Subscribed) {
+         pm2Subscribers.delete(ws);
+       }
+       console.log(`[WebSocket] Client ${ws.clientId} disconnected`);
+     });
   }
 });
 
@@ -4094,7 +4099,11 @@ const BROADCAST_TYPES = new Set([
   'streaming_start', 'streaming_progress', 'streaming_complete', 'streaming_error',
   'tool_install_started', 'tool_install_progress', 'tool_install_complete', 'tool_install_failed',
   'tool_update_progress', 'tool_update_complete', 'tool_update_failed',
-  'tools_update_started', 'tools_update_complete', 'tools_refresh_complete'
+  'tools_update_started', 'tools_update_complete', 'tools_refresh_complete',
+  'pm2_monit_update', 'pm2_monitoring_started', 'pm2_monitoring_stopped',
+  'pm2_list_response', 'pm2_start_response', 'pm2_stop_response',
+  'pm2_restart_response', 'pm2_delete_response', 'pm2_logs_response',
+  'pm2_flush_logs_response', 'pm2_ping_response'
 ]);
 
 const wsOptimizer = new WSOptimizer();
@@ -4288,12 +4297,55 @@ wsRouter.onLegacy((data, ws) => {
         }
       } catch (e) {}
     }
-  } else if (data.type === 'terminal_stop') {
-    if (ws.terminalProc) {
-      try { ws.terminalProc.kill(); } catch(e) {}
-      ws.terminalProc = null;
+   } else if (data.type === 'terminal_stop') {
+     if (ws.terminalProc) {
+       try { ws.terminalProc.kill(); } catch(e) {}
+       ws.terminalProc = null;
+     }
+    } else if (data.type === 'pm2_list') {
+      pm2Manager.listProcesses().then(processes => {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pm2_list_response', processes }));
+      }).catch(err => {
+        console.error('[PM2] List error:', err.message);
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pm2_list_response', processes: [] }));
+      });
+    } else if (data.type === 'pm2_start_monitoring') {
+      pm2Subscribers.add(ws);
+      ws.pm2Subscribed = true;
+      ws.send(JSON.stringify({ type: 'pm2_monitoring_started' }));
+    } else if (data.type === 'pm2_stop_monitoring') {
+      pm2Subscribers.delete(ws);
+      ws.pm2Subscribed = false;
+      ws.send(JSON.stringify({ type: 'pm2_monitoring_stopped' }));
+    } else if (data.type === 'pm2_start') {
+      pm2Manager.startProcess(data.name).then(result => {
+        ws.send(JSON.stringify({ type: 'pm2_start_response', name: data.name, ...result }));
+      });
+    } else if (data.type === 'pm2_stop') {
+      pm2Manager.stopProcess(data.name).then(result => {
+        ws.send(JSON.stringify({ type: 'pm2_stop_response', name: data.name, ...result }));
+      });
+    } else if (data.type === 'pm2_restart') {
+      pm2Manager.restartProcess(data.name).then(result => {
+        ws.send(JSON.stringify({ type: 'pm2_restart_response', name: data.name, ...result }));
+      });
+    } else if (data.type === 'pm2_delete') {
+      pm2Manager.deleteProcess(data.name).then(result => {
+        ws.send(JSON.stringify({ type: 'pm2_delete_response', name: data.name, ...result }));
+      });
+    } else if (data.type === 'pm2_logs') {
+      pm2Manager.getLogs(data.name, { lines: data.lines || 100 }).then(result => {
+        ws.send(JSON.stringify({ type: 'pm2_logs_response', name: data.name, ...result }));
+      });
+    } else if (data.type === 'pm2_flush_logs') {
+      pm2Manager.flushLogs(data.name).then(result => {
+        ws.send(JSON.stringify({ type: 'pm2_flush_logs_response', name: data.name, ...result }));
+      });
+    } else if (data.type === 'pm2_ping') {
+      pm2Manager.ping().then(result => {
+        ws.send(JSON.stringify({ type: 'pm2_ping_response', ...result }));
+      });
     }
-  }
 
   } catch (err) { console.error('[WS-LEGACY] Handler error (contained):', err.message); }
 });
@@ -4327,10 +4379,18 @@ if (watch) {
 
 process.on('SIGTERM', () => {
   console.log('[SIGNAL] SIGTERM received - graceful shutdown');
-  stopACPTools().then(() => {
-    wss.close(() => server.close(() => process.exit(0)));
+  pm2Manager.disconnect().then(() => {
+    stopACPTools().then(() => {
+      wss.close(() => server.close(() => process.exit(0)));
+    }).catch(() => {
+      wss.close(() => server.close(() => process.exit(0)));
+    });
   }).catch(() => {
-    wss.close(() => server.close(() => process.exit(0)));
+    stopACPTools().then(() => {
+      wss.close(() => server.close(() => process.exit(0)));
+    }).catch(() => {
+      wss.close(() => server.close(() => process.exit(0)));
+    });
   });
 });
 
@@ -4602,15 +4662,58 @@ function onServerReady() {
     }
   });
 
-  getSpeech().then(s => s.preloadTTS()).catch(e => debugLog('[TTS] Preload failed: ' + e.message));
+   getSpeech().then(s => s.preloadTTS()).catch(e => debugLog('[TTS] Preload failed: ' + e.message));
 
-  performAutoImport();
+   performAutoImport();
 
-  setInterval(performAutoImport, 30000);
+   setInterval(performAutoImport, 30000);
 
-  setInterval(performAgentHealthCheck, 30000);
+   setInterval(performAgentHealthCheck, 30000);
 
-}
+    // Initialize PM2 monitoring with recovery
+    (async () => {
+      try {
+        await pm2Manager.connect();
+        pm2Manager.startMonitoring((update) => {
+          for (const client of pm2Subscribers) {
+            if (client.readyState === 1) {
+              client.send(JSON.stringify(update));
+            }
+          }
+        });
+        console.log('[PM2] Monitoring started');
+      } catch (err) {
+        console.error('[PM2] Initialization failed:', err.message);
+        // Try to heal after 10 seconds if PM2 was not ready yet
+        setTimeout(async () => {
+          try {
+            const healed = await pm2Manager.heal();
+            if (healed.success) {
+              pm2Manager.startMonitoring((update) => {
+                for (const client of pm2Subscribers) {
+                  if (client.readyState === 1) {
+                    client.send(JSON.stringify(update));
+                  }
+                }
+              });
+              console.log('[PM2] Monitoring started after recovery');
+            }
+          } catch (_) {}
+        }, 10000);
+      }
+    })();
+
+    setInterval(async () => {
+      if (!pm2Manager.connected) {
+        try {
+          await pm2Manager.heal();
+          pm2Manager.startMonitoring((update) => {
+            broadcastSync(update);
+          });
+        } catch (_) {}
+      }
+    }, 60000);
+  }
 
 const importMtimeCache = new Map();
 
