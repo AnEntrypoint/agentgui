@@ -2372,6 +2372,10 @@ class AgentGUIClient {
         this.ui.messageInput.disabled = false;
       }
 
+      if (this.ui.stopButton) this.ui.stopButton.classList.remove('visible');
+      if (this.ui.injectButton) this.ui.injectButton.classList.remove('visible');
+      if (this.ui.sendButton) this.ui.sendButton.style.display = '';
+
       var prevId = this.state.currentConversation?.id;
       if (prevId && prevId !== conversationId) {
         if (this.wsManager.isConnected && !this.state.streamingConversations.has(prevId)) {
