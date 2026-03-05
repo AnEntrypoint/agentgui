@@ -1434,6 +1434,62 @@ export const queries = {
     };
   },
 
+  getMessagesBefore(conversationId, beforeId, limit = 50) {
+    const countStmt = prep('SELECT COUNT(*) as count FROM messages WHERE conversationId = ?');
+    const total = countStmt.get(conversationId).count;
+
+    const stmt = prep(`
+      SELECT * FROM messages
+      WHERE conversationId = ? AND id < (SELECT id FROM messages WHERE id = ?)
+      ORDER BY created_at DESC LIMIT ?
+    `);
+    const messages = stmt.all(conversationId, beforeId, limit).reverse();
+
+    return {
+      messages: messages.map(msg => {
+        if (typeof msg.content === 'string') {
+          try {
+            msg.content = JSON.parse(msg.content);
+          } catch (_) {}
+        }
+        return msg;
+      }),
+      total,
+      limit,
+      hasMore: total > (limit + 1)
+    };
+  },
+
+  getChunksBefore(conversationId, beforeTimestamp, limit = 500) {
+    const countStmt = prep('SELECT COUNT(*) as count FROM chunks WHERE conversationId = ?');
+    const total = countStmt.get(conversationId).count;
+
+    const stmt = prep(`
+      SELECT id, sessionId, conversationId, sequence, type, data, created_at
+      FROM chunks
+      WHERE conversationId = ? AND created_at < ?
+      ORDER BY created_at DESC LIMIT ?
+    `);
+    const rows = stmt.all(conversationId, beforeTimestamp, limit);
+    rows.reverse();
+
+    return {
+      chunks: rows.map(row => {
+        try {
+          return {
+            ...row,
+            data: typeof row.data === 'string' ? JSON.parse(row.data) : row.data
+          };
+        } catch (e) {
+          return row;
+        }
+      }),
+      total,
+      limit,
+      hasMore: total > (limit + 1)
+    };
+  },
+
   getChunksSince(sessionId, timestamp) {
     const stmt = prep(
       `SELECT id, sessionId, conversationId, sequence, type, data, created_at

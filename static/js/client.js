@@ -2362,6 +2362,7 @@ class AgentGUIClient {
 
       this.cacheCurrentConversation();
       this.stopChunkPolling();
+      this.removeScrollUpDetection();
       if (this.renderer.resetScrollState) this.renderer.resetScrollState();
       this._userScrolledUp = false;
       this._removeNewContentPill();
@@ -2614,12 +2615,123 @@ class AgentGUIClient {
         }
 
         this.restoreScrollPosition(conversationId);
+        this.setupScrollUpDetection(conversationId);
       }
     } catch (error) {
       if (error.name === 'AbortError') return;
       console.error('Failed to load conversation messages:', error);
       this.showError('Failed to load conversation: ' + error.message);
     }
+  }
+
+  removeScrollUpDetection() {
+    const scrollContainer = document.getElementById(this.config.scrollContainerId);
+    if (scrollContainer && this._scrollUpHandler) {
+      scrollContainer.removeEventListener('scroll', this._scrollUpHandler);
+      this._scrollUpHandler = null;
+    }
+  }
+
+  setupScrollUpDetection(conversationId) {
+    const scrollContainer = document.getElementById(this.config.scrollContainerId);
+    if (!scrollContainer) return;
+
+    if (!this._scrollDetectionState) this._scrollDetectionState = {};
+
+    const detectionState = {
+      isLoading: false,
+      oldestTimestamp: Date.now(),
+      oldestMessageId: null,
+      conversation: conversationId
+    };
+
+    const handleScroll = async () => {
+      const scrollTop = scrollContainer.scrollTop;
+      const scrollHeight = scrollContainer.scrollHeight;
+      const clientHeight = scrollContainer.clientHeight;
+      const THRESHOLD = 300;
+
+      if (scrollTop < THRESHOLD && !detectionState.isLoading && scrollHeight > clientHeight) {
+        detectionState.isLoading = true;
+
+        try {
+          const messagesEl = document.querySelector('.conversation-messages');
+          if (!messagesEl) {
+            detectionState.isLoading = false;
+            return;
+          }
+
+          const firstMessageEl = messagesEl.querySelector('.message[data-msg-id]');
+          if (!firstMessageEl) {
+            const firstChunkEl = messagesEl.querySelector('[data-chunk-created]');
+            if (firstChunkEl) {
+              detectionState.oldestTimestamp = parseInt(firstChunkEl.getAttribute('data-chunk-created')) || 0;
+            }
+          } else {
+            detectionState.oldestMessageId = firstMessageEl.getAttribute('data-msg-id');
+          }
+
+          let result;
+          if (detectionState.oldestMessageId) {
+            result = await window.wsClient.rpc('msg.ls.earlier', {
+              id: conversationId,
+              before: detectionState.oldestMessageId,
+              limit: 50
+            });
+          } else if (detectionState.oldestTimestamp > 0) {
+            result = await window.wsClient.rpc('conv.chunks.earlier', {
+              id: conversationId,
+              before: detectionState.oldestTimestamp,
+              limit: 500
+            });
+          }
+
+          if (result && ((result.messages && result.messages.length > 0) || (result.chunks && result.chunks.length > 0))) {
+            const scrollHeightBefore = scrollContainer.scrollHeight;
+            const newContent = document.createDocumentFragment();
+
+            if (result.messages && result.messages.length > 0) {
+              result.messages.forEach(msg => {
+                const div = document.createElement('div');
+                div.className = `message message-${msg.role}`;
+                div.setAttribute('data-msg-id', msg.id);
+                div.innerHTML = `<div class="message-role">${msg.role.charAt(0).toUpperCase() + msg.role.slice(1)}</div>${this.renderMessageContent(msg.content)}<div class="message-timestamp">${new Date(msg.created_at).toLocaleString()}</div>`;
+                newContent.appendChild(div);
+              });
+            }
+
+            if (result.chunks && result.chunks.length > 0) {
+              result.chunks.forEach(chunk => {
+                const blockEl = this.renderer.renderBlock(chunk.data, chunk.type, false);
+                if (blockEl) {
+                  const wrapper = document.createElement('div');
+                  wrapper.setAttribute('data-chunk-created', chunk.created_at);
+                  wrapper.appendChild(blockEl);
+                  newContent.appendChild(wrapper);
+                }
+              });
+            }
+
+            if (messagesEl.firstChild) {
+              messagesEl.insertBefore(newContent, messagesEl.firstChild);
+            } else {
+              messagesEl.appendChild(newContent);
+            }
+
+            const scrollHeightAfter = scrollContainer.scrollHeight;
+            scrollContainer.scrollTop = scrollHeightAfter - scrollHeightBefore;
+          }
+        } catch (error) {
+          console.error('Failed to load earlier messages:', error);
+        } finally {
+          detectionState.isLoading = false;
+        }
+      }
+    };
+
+    scrollContainer.removeEventListener('scroll', this._scrollUpHandler);
+    this._scrollUpHandler = handleScroll;
+    scrollContainer.addEventListener('scroll', this._scrollUpHandler, { passive: true });
   }
 
   renderMessagesFragment(messages) {
