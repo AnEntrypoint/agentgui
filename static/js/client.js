@@ -102,6 +102,12 @@ class AgentGUIClient {
       // Initialize renderer
       this.renderer.init(this.config.outputContainerId, this.config.scrollContainerId);
 
+      // Initialize image loader
+      if (typeof ImageLoader !== 'undefined') {
+        window.imageLoader = new ImageLoader();
+        console.log('Image loader initialized');
+      }
+
       // Setup event listeners
       this.setupWebSocketListeners();
       this.setupRendererListeners();
@@ -1649,10 +1655,6 @@ class AgentGUIClient {
       }
 
       let finalPrompt = prompt;
-      if (subAgent && agentId === 'claude-code') {
-        const displaySubAgent = subAgent.split('-·-')[0];
-        finalPrompt = `use ${displaySubAgent} subagent to ${prompt}`;
-      }
       const streamBody = { id: conversationId, content: finalPrompt, agentId };
       if (model) streamBody.model = model;
       if (subAgent) streamBody.subAgent = subAgent;

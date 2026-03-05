@@ -119,6 +119,20 @@ class EventProcessor {
         this.stats.transformedEvents++;
       }
 
+      if (event.type === 'file_read' && event.path && this.isImagePath(event.path)) {
+        processed.isImage = true;
+        processed.imagePath = event.path;
+        this.stats.transformedEvents++;
+      }
+
+      if ((event.type === 'text_block' || event.type === 'command_execute' || event.type === 'streaming_progress') && event.content || event.output) {
+        const imagePaths = this.extractImagePaths(event.content || event.output || '');
+        if (imagePaths.length > 0) {
+          processed.detectedImages = imagePaths;
+          this.stats.transformedEvents++;
+        }
+      }
+
       processed.processTime = performance.now() - startTime;
       this.stats.processedEvents++;
 
@@ -443,6 +457,32 @@ class EventProcessor {
       errorCount: 0,
       avgProcessTime: 0
     };
+  }
+
+  /**
+   * Check if a path is an image file
+   */
+  isImagePath(filePath) {
+    if (!filePath || typeof filePath !== 'string') return false;
+    const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'];
+    const ext = this.getFileExtension(filePath);
+    return imageExts.includes(ext);
+  }
+
+  /**
+   * Extract image file paths from text content
+   */
+  extractImagePaths(content) {
+    if (typeof content !== 'string') return [];
+    const paths = [];
+    const pathPattern = /(?:\/[a-zA-Z0-9_.\-]+)+\/[a-zA-Z0-9_.\-]+\.(?:png|jpg|jpeg|gif|webp|svg)/gi;
+    let match;
+    while ((match = pathPattern.exec(content)) !== null) {
+      if (this.isImagePath(match[0])) {
+        paths.push(match[0]);
+      }
+    }
+    return [...new Set(paths)];
   }
 }
 

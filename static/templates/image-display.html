@@ -1,0 +1,76 @@
+<!-- Image Display Container with Lazy Loading -->
+<div class="image-container" data-image-path="{{ imagePath }}" role="img" aria-label="{{ imagePath }}">
+  <!-- Placeholder shown while loading -->
+  <div class="image-placeholder" data-path="{{ imagePath }}" style="
+    background: linear-gradient(90deg, var(--color-bg-tertiary) 25%, var(--color-bg-secondary) 50%, var(--color-bg-tertiary) 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    border-radius: 0.375rem;
+    aspect-ratio: 16/9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-secondary);
+    font-size: 0.875rem;
+  ">
+    Loading image...
+  </div>
+
+  <!-- Actual image element with lazy loading -->
+  <img
+    class="lazy-image"
+    data-src="{{ imagePath }}"
+    alt="{{ imagePath }}"
+    loading="lazy"
+    style="
+      max-width: 100%;
+      max-height: 600px;
+      border-radius: 0.375rem;
+      display: none;
+    "
+  />
+
+  <!-- Image path caption -->
+  <div class="image-caption" style="
+    font-size: 0.75rem;
+    color: var(--color-text-secondary);
+    word-break: break-all;
+    font-family: 'Monaco', 'Menlo', monospace;
+  ">
+    {{ imagePath }}
+  </div>
+</div>
+
+<style>
+@keyframes loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.image-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 0.375rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  margin: 0.5rem 0;
+}
+
+.image-placeholder {
+  animation: loading 1.5s infinite;
+}
+
+.lazy-image {
+  transition: opacity 0.3s ease-in-out;
+}
+
+.image-caption {
+  white-space: pre-wrap;
+}
+</style>
