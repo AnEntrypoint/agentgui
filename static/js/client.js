@@ -1350,7 +1350,8 @@ class AgentGUIClient {
     }
 
     this.disableControls();
-    const savedPrompt = prompt;
+    const ttsActive = window.TTSHandler && window.TTSHandler.getAutoSpeak && window.TTSHandler.getAutoSpeak();
+    const savedPrompt = ttsActive ? prompt + '\n\n[Respond optimized for text-to-speech: use short sentences, simple words, and focus on clarity.]' : prompt;
     if (this.ui.messageInput) {
       this.ui.messageInput.value = '';
       this.ui.messageInput.style.height = 'auto';

@@ -60,7 +60,6 @@
     audioChunkQueue = []; isPlayingChunk = false;
     var cached = ttsAudioCache.get(selectedVoiceId + ':' + text);
     if (cached) { ttsConsecutiveFailures = 0; audioChunkQueue.push(cached); streamDone = true; if (!isPlayingChunk) playNextChunk(); return; }
-    var opt = text + ' [Optimize for speech: Keep it short. Use simple words. Use short sentences. Focus on clarity.]';
     function ok() { ttsConsecutiveFailures = 0; }
     function fail() {
       if (++ttsConsecutiveFailures >= TTS_MAX_FAILURES) { ttsDisabledUntilReset = true; speechQueue = []; }
@@ -68,8 +67,8 @@
       if (!ttsDisabledUntilReset) processQueue();
     }
     function stream() {
-      if (!streamingSupported) { nonStream(opt); return; }
-      fetch(BASE + '/api/tts-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: opt, voiceId: selectedVoiceId }) })
+      if (!streamingSupported) { nonStream(text); return; }
+      fetch(BASE + '/api/tts-stream', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text, voiceId: selectedVoiceId }) })
         .then(function(r) {
           if (!r.ok) { streamingSupported = false; throw 0; }
           var reader = r.body.getReader(), buf = new Uint8Array(0);
