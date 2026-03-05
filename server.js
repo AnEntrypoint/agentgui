@@ -4103,7 +4103,7 @@ const BROADCAST_TYPES = new Set([
   'pm2_monit_update', 'pm2_monitoring_started', 'pm2_monitoring_stopped',
   'pm2_list_response', 'pm2_start_response', 'pm2_stop_response',
   'pm2_restart_response', 'pm2_delete_response', 'pm2_logs_response',
-  'pm2_flush_logs_response', 'pm2_ping_response'
+  'pm2_flush_logs_response', 'pm2_ping_response', 'pm2_unavailable'
 ]);
 
 const wsOptimizer = new WSOptimizer();
@@ -4303,16 +4303,26 @@ wsRouter.onLegacy((data, ws) => {
        ws.terminalProc = null;
      }
     } else if (data.type === 'pm2_list') {
-      pm2Manager.listProcesses().then(processes => {
-        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pm2_list_response', processes }));
-      }).catch(err => {
-        console.error('[PM2] List error:', err.message);
-        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pm2_list_response', processes: [] }));
-      });
+      if (!pm2Manager.connected) {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pm2_unavailable', reason: 'PM2 not connected', timestamp: Date.now() }));
+      } else {
+        pm2Manager.listProcesses().then(processes => {
+          if (ws.readyState === 1) {
+            const hasActive = processes.some(p => ['online','launching','stopping','waiting restart'].includes(p.status));
+            ws.send(JSON.stringify({ type: 'pm2_list_response', processes, hasActive }));
+          }
+        }).catch(() => {
+          if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pm2_unavailable', reason: 'list failed', timestamp: Date.now() }));
+        });
+      }
     } else if (data.type === 'pm2_start_monitoring') {
       pm2Subscribers.add(ws);
       ws.pm2Subscribed = true;
-      ws.send(JSON.stringify({ type: 'pm2_monitoring_started' }));
+      if (!pm2Manager.connected) {
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'pm2_unavailable', reason: 'PM2 not connected', timestamp: Date.now() }));
+      } else {
+        ws.send(JSON.stringify({ type: 'pm2_monitoring_started' }));
+      }
     } else if (data.type === 'pm2_stop_monitoring') {
       pm2Subscribers.delete(ws);
       ws.pm2Subscribed = false;
@@ -4379,7 +4389,8 @@ if (watch) {
 
 process.on('SIGTERM', () => {
   console.log('[SIGNAL] SIGTERM received - graceful shutdown');
-  pm2Manager.disconnect().then(() => {
+  try { pm2Manager.disconnect(); } catch (_) {}
+  Promise.resolve().then(() => {
     stopACPTools().then(() => {
       wss.close(() => server.close(() => process.exit(0)));
     }).catch(() => {
@@ -4670,49 +4681,35 @@ function onServerReady() {
 
    setInterval(performAgentHealthCheck, 30000);
 
-    // Initialize PM2 monitoring with recovery
-    (async () => {
+    // Initialize PM2 monitoring - only when PM2 daemon is available
+    const broadcastPM2 = (update) => {
+      const msg = JSON.stringify(update);
+      for (const client of pm2Subscribers) {
+        if (client.readyState === 1) { try { client.send(msg); } catch (_) {} }
+      }
+    };
+
+    const startPM2Monitoring = async () => {
       try {
         await pm2Manager.connect();
-        pm2Manager.startMonitoring((update) => {
-          for (const client of pm2Subscribers) {
-            if (client.readyState === 1) {
-              client.send(JSON.stringify(update));
-            }
-          }
-        });
+        await pm2Manager.startMonitoring(broadcastPM2);
         console.log('[PM2] Monitoring started');
       } catch (err) {
-        console.error('[PM2] Initialization failed:', err.message);
-        // Try to heal after 10 seconds if PM2 was not ready yet
-        setTimeout(async () => {
-          try {
-            const healed = await pm2Manager.heal();
-            if (healed.success) {
-              pm2Manager.startMonitoring((update) => {
-                for (const client of pm2Subscribers) {
-                  if (client.readyState === 1) {
-                    client.send(JSON.stringify(update));
-                  }
-                }
-              });
-              console.log('[PM2] Monitoring started after recovery');
-            }
-          } catch (_) {}
-        }, 10000);
+        console.log('[PM2] Not available:', err.message);
+        broadcastPM2({ type: 'pm2_unavailable', reason: err.message, timestamp: Date.now() });
       }
-    })();
+    };
+
+    setTimeout(startPM2Monitoring, 2000);
 
     setInterval(async () => {
-      if (!pm2Manager.connected) {
+      if (!pm2Manager.connected && !pm2Manager.monitoring) {
         try {
-          await pm2Manager.heal();
-          pm2Manager.startMonitoring((update) => {
-            broadcastSync(update);
-          });
+          const healed = await pm2Manager.heal();
+          if (healed.success) await pm2Manager.startMonitoring(broadcastPM2);
         } catch (_) {}
       }
-    }, 60000);
+    }, 30000);
   }
 
 const importMtimeCache = new Map();
