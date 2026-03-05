@@ -1038,6 +1038,44 @@ export const queries = {
     }
   },
 
+  deleteAllConversations() {
+    try {
+      const conversations = prep('SELECT id, claudeSessionId FROM conversations').all();
+
+      for (const conv of conversations) {
+        if (conv.claudeSessionId) {
+          this.deleteClaudeSessionFile(conv.claudeSessionId);
+        }
+      }
+
+      const deleteAllStmt = db.transaction(() => {
+        const allSessionIds = prep('SELECT id FROM sessions').all().map(r => r.id);
+
+        prep('DELETE FROM stream_updates');
+        prep('DELETE FROM chunks');
+        prep('DELETE FROM events');
+
+        if (allSessionIds.length > 0) {
+          const placeholders = allSessionIds.map(() => '?').join(',');
+          db.prepare(`DELETE FROM stream_updates WHERE sessionId IN (${placeholders})`).run(...allSessionIds);
+          db.prepare(`DELETE FROM chunks WHERE sessionId IN (${placeholders})`).run(...allSessionIds);
+          db.prepare(`DELETE FROM events WHERE sessionId IN (${placeholders})`).run(...allSessionIds);
+        }
+
+        prep('DELETE FROM sessions');
+        prep('DELETE FROM messages');
+        prep('DELETE FROM conversations');
+      });
+
+      deleteAllStmt();
+      console.log('[deleteAllConversations] Deleted all conversations and associated Claude Code files');
+      return true;
+    } catch (err) {
+      console.error('[deleteAllConversations] Error deleting all conversations:', err.message);
+      return false;
+    }
+  },
+
   cleanup() {
     const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
     const now = Date.now();

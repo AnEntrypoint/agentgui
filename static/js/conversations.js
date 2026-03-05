@@ -47,6 +47,7 @@ class ConversationManager {
     this.setupWebSocketListener();
     this.setupFolderBrowser();
     this.setupCloneUI();
+    this.setupDeleteAllButton();
 
     this._pollInterval = setInterval(() => this.loadConversations(), 30000);
 
@@ -243,6 +244,40 @@ class ConversationManager {
     window.dispatchEvent(new CustomEvent('create-new-conversation', {
       detail: { workingDirectory: expanded, title: dirName }
     }));
+  }
+
+  setupDeleteAllButton() {
+    this.deleteAllBtn = document.getElementById('deleteAllConversationsBtn');
+    if (!this.deleteAllBtn) return;
+    this.deleteAllBtn.addEventListener('click', () => this.confirmDeleteAll());
+  }
+
+  async confirmDeleteAll() {
+    if (this.conversations.length === 0) {
+      window.UIDialog.alert('No conversations to delete', 'Information');
+      return;
+    }
+
+    const confirmed = await window.UIDialog.confirm(
+      `Delete all ${this.conversations.length} conversation(s) and associated Claude Code artifacts?\n\nThis action cannot be undone.`,
+      'Delete All Conversations'
+    );
+    if (!confirmed) return;
+
+    try {
+      this.deleteAllBtn.disabled = true;
+      await window.wsClient.rpc('conv.del.all', {});
+      console.log('[ConversationManager] Deleted all conversations');
+      this.conversations = [];
+      this.activeId = null;
+      window.dispatchEvent(new CustomEvent('conversation-deselected'));
+      this.render();
+    } catch (err) {
+      console.error('[ConversationManager] Delete all error:', err);
+      window.UIDialog.alert('Failed to delete all conversations: ' + (err.message || 'Unknown error'), 'Error');
+    } finally {
+      this.deleteAllBtn.disabled = false;
+    }
   }
 
   setupCloneUI() {
