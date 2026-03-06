@@ -190,6 +190,20 @@ class AgentGUIClient {
       const dot = document.querySelector('.connection-dot');
       if (dot) dot.classList.remove('degrading');
     });
+
+    // Preserve controls state across tab switches
+    window.addEventListener('view-switched', (e) => {
+      const view = e.detail.view;
+      if (view === 'chat') {
+        const convId = this.state.currentConversation?.id;
+        const isStreaming = convId && this.state.streamingConversations.has(convId);
+        if (isStreaming) {
+          this.disableControls();
+        } else {
+          this.enableControls();
+        }
+      }
+    });
   }
 
   /**
