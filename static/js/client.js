@@ -2515,7 +2515,8 @@ class AgentGUIClient {
           this.conversationCache.delete(conversationId);
           this.syncPromptState(conversationId);
           this.restoreScrollPosition(conversationId);
-          this.enableControls();
+          // Prompt state is immutable: computed from shouldResumeStreaming via syncPromptState
+          // Do not call enableControls/disableControls here - prompt state is determined by streaming status
           return;
         }
       }
@@ -2747,8 +2748,11 @@ class AgentGUIClient {
   }
 
   syncPromptState(conversationId) {
-    const isStreaming = this.state.streamingConversations.has(conversationId);
+    const conversation = this.state.currentConversation;
+    if (!conversation || conversation.id !== conversationId) return;
+
     if (this.ui.messageInput) {
+      const isStreaming = this.state.streamingConversations.has(conversationId);
       if (isStreaming) {
         this.ui.messageInput.disabled = true;
       } else {
