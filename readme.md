@@ -1,92 +1,153 @@
 # AgentGUI
 
 [![GitHub Pages](https://img.shields.io/badge/GitHub_Pages-Enabled-blue?logo=github)](https://anentrypoint.github.io/agentgui/)
-[![Weekly Downloads](https://img.shields.io/npm/dw/agentgui?color=brightgreen)](https://www.npmjs.com/package/agentgui)
+[![npm version](https://badge.fury.io/js/agentgui.svg)](https://www.npmjs.com/package/agentgui)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A multi-agent GUI for AI coding assistants. Connects to CLI-based agents (Claude Code, Gemini CLI, OpenCode, Goose, and others) and provides a web interface with real-time streaming output.
+**Multi-agent GUI client for AI coding agents** with real-time streaming, WebSocket sync, and SQLite persistence.
 
-## Quick Start
+![AgentGUI Main Interface](docs/screenshot-main.png)
 
+## ✨ Features
+
+- **🤖 Multi-Agent Support** - Claude Code, Gemini CLI, OpenCode, Goose, Kilo, and more
+- **📡 Real-Time Streaming** - Live execution visualization with WebSocket sync
+- **💾 Persistent Storage** - SQLite-based conversation and session history
+- **🎤 Voice I/O** - Built-in speech-to-text and text-to-speech with @huggingface/transformers
+- **📁 File Browser** - Integrated file system explorer with drag-drop upload
+- **🔧 Tool Manager** - Install and update agent plugins directly from UI
+- **🎨 Modern UI** - Dark/light themes with responsive design
+- **🔌 ACP Protocol** - Auto-discovery and lifecycle management for ACP tools
+
+## 📸 Screenshots
+
+<table>
+  <tr>
+    <td><img src="docs/screenshot-chat.png" alt="Chat View" width="400"/><br/><em>Chat & Conversation View</em></td>
+    <td><img src="docs/screenshot-files.png" alt="Files Browser" width="400"/><br/><em>File System Browser</em></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshot-terminal.png" alt="Terminal" width="400"/><br/><em>Terminal & Execution Output</em></td>
+    <td><img src="docs/screenshot-tools-popup.png" alt="Tools" width="400"/><br/><em>Tool Management</em></td>
+  </tr>
+</table>
+
+## 🚀 Quick Start
 
 ```bash
+# Install globally
+npm install -g agentgui
+
+# Run the server
+agentgui
+
+# Or use npx
 npx agentgui
 ```
 
-Or install and run manually:
+Server starts on `http://localhost:3000` and redirects to `/gm/`.
 
-```bash
-git clone https://github.com/AnEntrypoint/agentgui.git
-cd agentgui
-npm install
-npm run dev
+## 📋 System Requirements
+
+- **Node.js**: v18+ or Bun v1.0+
+- **OS**: Linux, macOS, or Windows
+- **RAM**: 2GB+ recommended
+- **Disk**: 500MB for voice models (auto-downloaded)
+
+## 🏗️ Architecture
+
+```
+server.js              HTTP server + WebSocket + API routes
+database.js            SQLite (WAL mode) + queries
+lib/claude-runner.js   Agent framework - spawns CLI processes
+lib/acp-manager.js     ACP tool lifecycle management
+lib/speech.js          Speech-to-text + text-to-speech
+static/                Frontend (vanilla JS, no build step)
 ```
 
-Open `http://localhost:3000` in your browser.
+### Key Components
 
-## 📊 Project Stats
+- **Agent Discovery**: Scans PATH for known CLI binaries at startup
+- **Database**: `~/.gmgui/data.db` - conversations, messages, events, sessions, stream chunks
+- **WebSocket**: Real-time sync at `BASE_URL/sync` with subscribe/unsubscribe
+- **ACP Tools**: Auto-launches OpenCode (port 18100) and Kilo (port 18101) as HTTP servers
 
-Check out our **[GitHub Pages site](https://anentrypoint.github.io/agentgui/)** for:
+## 🔌 API Endpoints
 
-- 📈 Live weekly download statistics
-- ⭐ Star the project button
-- ✨ Feature highlights
-- 🚀 Quick start guide
+All routes prefixed with `BASE_URL` (default `/gm`):
 
-The site automatically updates on every push to main with the latest npm download data.
+### Conversations
+- `GET /api/conversations` - List all conversations
+- `POST /api/conversations` - Create new conversation
+- `GET /api/conversations/:id` - Get conversation details
+- `POST /api/conversations/:id/messages` - Send message
+- `POST /api/conversations/:id/stream` - Start streaming execution
 
-## What It Does
+### Tools
+- `GET /api/tools` - List detected tools with installation status
+- `POST /api/tools/:id/install` - Install tool
+- `POST /api/tools/:id/update` - Update tool
+- `POST /api/tools/update` - Batch update all tools
 
-- Auto-discovers AI coding agents installed on your system (Claude Code, Gemini CLI, OpenCode, Goose, Codex, Kiro, etc.)
-- Runs agents with streaming JSON output and displays results in real-time via WebSocket
-- Manages conversations with SQLite persistence
-- Supports concurrent agent sessions
-- Provides file browsing and upload for agent working directories
-- Includes speech-to-text and text-to-speech
+### Voice
+- `POST /api/stt` - Speech-to-text (raw audio)
+- `POST /api/tts` - Text-to-speech
+- `GET /api/speech-status` - Model loading status
 
-## Architecture
+## 🎙️ Voice Models
 
-- `server.js` - HTTP server, REST API, WebSocket endpoint, static file serving
-- `database.js` - SQLite database (WAL mode) at `~/.gmgui/data.db`
-- `lib/claude-runner.js` - Agent runner framework, spawns CLI processes and parses streaming output
-- `lib/speech.js` - Speech processing via Hugging Face transformers
-- `static/` - Browser client with streaming renderer, WebSocket manager, and HTML templates
-- `bin/gmgui.cjs` - CLI entry point for `npx agentgui`
+Speech models (~470MB) are auto-downloaded on first launch:
+- **Whisper Base** (~280MB) - STT from HuggingFace
+- **TTS Models** (~190MB) - Custom text-to-speech
 
-## Text-to-Speech on Windows
+Models cached at `~/.gmgui/models/`.
 
-On Windows, AgentGUI automatically sets up pocket-tts (text-to-speech) on your first TTS request. No manual setup required.
+## 🛠️ Development
 
-### What Happens
-1. Server detects Python 3.9+ installation
-2. Creates virtual environment at `~/.gmgui/pocket-venv`
-3. Installs pocket-tts via pip
-4. All subsequent TTS requests use cached installation
+```bash
+# Clone repository
+git clone https://github.com/AnEntrypoint/agentgui.git
+cd agentgui
 
-### Requirements
-- Python 3.9+ (check with `python --version`)
-- ~200 MB free disk space
-- Internet connection for first setup
+# Install dependencies
+npm install
 
-### Troubleshooting
-- **Python not found**: Download from https://www.python.org and ensure "Add Python to PATH" is checked
-- **Setup fails**: Check that you have write access to your home directory (~/.gmgui/)
-- **Manual cleanup**: Delete `%USERPROFILE%\.gmgui\pocket-venv` and try again
+# Run dev server with watch mode
+npm run dev
 
-For manual setup or detailed troubleshooting, see the setup instructions in the code or check `/api/speech-status` endpoint for error details.
+# Build portable binaries
+npm run build:portable
+```
 
-## Configuration
+## 📦 Tool Detection
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | 3000 | Server port |
-| `BASE_URL` | /gm | URL prefix |
-| `HOT_RELOAD` | true | Watch mode for development |
+AgentGUI auto-detects installed AI coding tools:
+- **Claude Code**: `@anthropic-ai/claude-code`
+- **Gemini CLI**: `@google/gemini-cli`
+- **OpenCode**: `opencode-ai`
+- **Kilo**: `@kilocode/cli`
+- **Codex**: `@openai/codex`
 
-## License
+Install/update directly from the Tools UI.
 
-MIT
+## 🌐 Environment Variables
 
-## Repository
+- `PORT` - Server port (default: 3000)
+- `BASE_URL` - URL prefix (default: /gm)
+- `STARTUP_CWD` - Working directory for agents
+- `HOT_RELOAD` - Set to "false" to disable watch mode
 
-https://github.com/AnEntrypoint/agentgui
+## 📝 License
 
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🤝 Contributing
+
+Contributions welcome! Please read our contributing guidelines before submitting PRs.
+
+## 🔗 Links
+
+- [GitHub Repository](https://github.com/AnEntrypoint/agentgui)
+- [npm Package](https://www.npmjs.com/package/agentgui)
+- [Documentation](https://anentrypoint.github.io/agentgui/)
+- [Issue Tracker](https://github.com/AnEntrypoint/agentgui/issues)

@@ -1,104 +1,260 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AgentGUI - Multi-Agent AI Client</title>
-    <link rel="stylesheet" href="styles.css">
-    <link rel="icon" type="image/x-icon" href="https://github.com/AnEntrypoint/agentgui/raw/main/agentgui.ico">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentGUI - Multi-Agent GUI Client</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background: #f9fafb;
+    }
+    
+    .hero {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 4rem 2rem;
+      text-align: center;
+    }
+    
+    .hero h1 {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+      font-weight: 700;
+    }
+    
+    .hero p {
+      font-size: 1.25rem;
+      opacity: 0.9;
+      max-width: 600px;
+      margin: 0 auto 2rem;
+    }
+    
+    .cta-button {
+      display: inline-block;
+      background: white;
+      color: #667eea;
+      padding: 1rem 2rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      transition: transform 0.2s;
+    }
+    
+    .cta-button:hover {
+      transform: translateY(-2px);
+    }
+    
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 3rem 2rem;
+    }
+    
+    .section-title {
+      font-size: 2rem;
+      text-align: center;
+      margin-bottom: 2rem;
+      color: #1f2937;
+    }
+    
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+    
+    .feature-card {
+      background: white;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
+      transition: transform 0.2s;
+    }
+    
+    .feature-card:hover {
+      transform: translateY(-4px);
+    }
+    
+    .feature-icon {
+      font-size: 2.5rem;
+      margin-bottom: 1rem;
+    }
+    
+    .feature-card h3 {
+      font-size: 1.25rem;
+      margin-bottom: 0.75rem;
+      color: #667eea;
+    }
+    
+    .screenshots {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin: 2rem 0;
+    }
+    
+    .screenshot-card {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .screenshot-card img {
+      width: 100%;
+      display: block;
+    }
+    
+    .screenshot-card p {
+      padding: 1rem;
+      text-align: center;
+      font-weight: 600;
+      color: #667eea;
+    }
+    
+    .code-block {
+      background: #1f2937;
+      color: #f9fafb;
+      padding: 1.5rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+    }
+    
+    .code-block code {
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 0.9rem;
+    }
+    
+    footer {
+      background: #1f2937;
+      color: white;
+      text-align: center;
+      padding: 2rem;
+      margin-top: 4rem;
+    }
+    
+    @media (max-width: 768px) {
+      .hero h1 { font-size: 2rem; }
+      .hero p { font-size: 1rem; }
+      .features-grid { grid-template-columns: 1fr; }
+      .screenshots { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="logo">
-                <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect width="64" height="64" rx="12" fill="url(#gradient)"/>
-                    <path d="M32 16L44 32L32 48L20 32L32 16Z" stroke="white" stroke-width="3" fill="none"/>
-                    <circle cx="32" cy="32" r="8" fill="white"/>
-                    <defs>
-                        <linearGradient id="gradient" x1="0" y1="0" x2="64" y2="64">
-                            <stop offset="0%" stop-color="#6366f1"/>
-                            <stop offset="100%" stop-color="#8b5cf6"/>
-                        </linearGradient>
-                    </defs>
-                </svg>
-            </div>
-            <h1>AgentGUI</h1>
-            <p class="subtitle">Multi-agent ACP client with real-time communication</p>
-            <div class="stats">
-                <div class="stat-item">
-                    <span class="stat-value" id="weekly-downloads">Loading...</span>
-                    <span class="stat-label">Weekly Downloads</span>
-                </div>
-            </div>
-            <div class="cta-buttons">
-                <a href="https://github.com/AnEntrypoint/agentgui" target="_blank" class="btn btn-primary" id="star-btn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
-                    </svg>
-                    Star on GitHub
-                </a>
-                <a href="https://github.com/AnEntrypoint/agentgui#readme" target="_blank" class="btn btn-secondary">
-                    View Documentation
-                </a>
-            </div>
-        </header>
+  <div class="hero">
+    <h1>AgentGUI</h1>
+    <p>Multi-agent GUI client for AI coding agents with real-time streaming, WebSocket sync, and SQLite persistence</p>
+    <a href="https://github.com/AnEntrypoint/agentgui" class="cta-button">View on GitHub</a>
+  </div>
 
-        <section class="features">
-            <h2>Features</h2>
-            <div class="feature-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">⚡</div>
-                    <h3>Real-Time Streaming</h3>
-                    <p>Live WebSocket sync with instant updates across multiple agents</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🤖</div>
-                    <h3>Multi-Agent Support</h3>
-                    <p>Use Claude Code, Gemini CLI, OpenCode, Goose, and more</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">💾</div>
-                    <h3>SQLite Persistence</h3>
-                    <p>All conversations and events safely stored locally</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🎤</div>
-                    <h3>Voice Integration</h3>
-                    <p>Speech-to-text and text-to-speech with HuggingFace</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🔧</div>
-                    <h3>Portable Executable</h3>
-                    <p>Windows build with bundled models, no installation needed</p>
-                </div>
-                <div class="feature-card">
-                    <div class="feature-icon">🌐</div>
-                    <h3>Web Interface</h3>
-                    <p>Modern browser-based UI accessible from any device</p>
-                </div>
-            </div>
-        </section>
-
-        <section class="quick-start">
-            <h2>Quick Start</h2>
-            <div class="code-block">
-                <code>npm install -g agentgui</code>
-                <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-            </div>
-            <p class="note">Then run <code>agentgui</code> and open <a href="http://localhost:3000/gm/">http://localhost:3000/gm/</a></p>
-        </section>
-
-        <footer>
-            <p>Built with ❤️ by the AgentGUI team</p>
-            <p class="footer-links">
-                <a href="https://github.com/AnEntrypoint/agentgui">GitHub</a> •
-                <a href="https://github.com/AnEntrypoint/agentgui/issues">Issues</a> •
-                <a href="https://github.com/AnEntrypoint/agentgui#readme">Docs</a>
-            </p>
-        </footer>
+  <div class="container">
+    <h2 class="section-title">Features</h2>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>Real-time Streaming</h3>
+        <p>Watch agents work with live output, tool calls, and file operations in real-time.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <h3>Multi-Agent Support</h3>
+        <p>Switch between Claude Code, Gemini CLI, OpenCode, Kilo, and more from one interface.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">💾</div>
+        <h3>Session Persistence</h3>
+        <p>Full conversation history with SQLite database and session management.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <h3>WebSocket Sync</h3>
+        <p>Live updates across multiple clients with automatic reconnection.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">🎤</div>
+        <h3>Voice Integration</h3>
+        <p>Speech-to-text and text-to-speech support powered by Transformers.js.</p>
+      </div>
+      
+      <div class="feature-card">
+        <div class="feature-icon">🛠️</div>
+        <h3>Tool Management</h3>
+        <p>Install and update agent plugins directly from the UI.</p>
+      </div>
     </div>
 
-    <script src="script.js"></script>
+    <h2 class="section-title">Screenshots</h2>
+    <div class="screenshots">
+      <div class="screenshot-card">
+        <img src="docs/screenshot-main.png" alt="Main Interface">
+        <p>Main Interface</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="docs/screenshot-chat.png" alt="Chat View">
+        <p>Chat View</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="docs/screenshot-files.png" alt="Files Browser">
+        <p>Files Browser</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="docs/screenshot-terminal.png" alt="Terminal View">
+        <p>Terminal View</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="docs/screenshot-tools-popup.png" alt="Tools Management">
+        <p>Tools Management</p>
+      </div>
+      <div class="screenshot-card">
+        <img src="docs/screenshot-conversation.png" alt="Conversation">
+        <p>Conversation</p>
+      </div>
+    </div>
+
+    <h2 class="section-title">Quick Start</h2>
+    <div class="code-block">
+      <code>npm install
+npm run dev
+
+# Server starts on http://localhost:3000/gm/</code>
+    </div>
+
+    <h2 class="section-title">System Requirements</h2>
+    <div class="feature-card" style="max-width: 600px; margin: 0 auto;">
+      <ul style="list-style-position: inside;">
+        <li>Node.js 18+</li>
+        <li>SQLite 3</li>
+        <li>Modern browser (Chrome, Firefox, Safari, Edge)</li>
+      </ul>
+    </div>
+
+    <h2 class="section-title">Architecture</h2>
+    <div class="code-block">
+      <code>server.js              HTTP server + WebSocket + API routes
+database.js            SQLite (WAL mode), schema, queries
+lib/claude-runner.js   Agent framework - CLI process spawner
+lib/acp-manager.js     ACP tool lifecycle management
+lib/speech.js          STT/TTS via @huggingface/transformers
+static/js/client.js    Main client logic
+static/js/streaming-renderer.js  Event rendering</code>
+    </div>
+  </div>
+
+  <footer>
+    <p>&copy; 2024 AgentGUI. MIT License.</p>
+    <p><a href="https://github.com/AnEntrypoint/agentgui" style="color: #667eea;">GitHub</a></p>
+  </footer>
 </body>
 </html>
