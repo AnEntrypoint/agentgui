@@ -676,8 +676,9 @@ export const queries = {
   },
 
   getResumableConversations() {
-    // Get conversations with active/pending sessions that can be resumed
-    // Check sessions table directly for actual active status, don't filter by claudeSessionId
+    // Get conversations with incomplete sessions that can be resumed.
+    // Only includes sessions with status: active, pending, interrupted.
+    // Excludes complete and error sessions - agents that finished should not be resumed.
     const stmt = prep(
       `SELECT DISTINCT c.id, c.title, c.claudeSessionId, c.agentId, c.agentType, c.workingDirectory, c.model, c.subAgent
        FROM conversations c
