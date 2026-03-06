@@ -677,12 +677,11 @@ export const queries = {
 
   getResumableConversations() {
     // Get conversations with active/pending sessions that can be resumed
-    // Include conversations regardless of isStreaming flag - check database for actual active sessions
+    // Check sessions table directly for actual active status, don't filter by claudeSessionId
     const stmt = prep(
       `SELECT DISTINCT c.id, c.title, c.claudeSessionId, c.agentId, c.agentType, c.workingDirectory, c.model, c.subAgent
        FROM conversations c
-       WHERE c.claudeSessionId IS NOT NULL AND c.claudeSessionId != ''
-       AND EXISTS (
+       WHERE EXISTS (
          SELECT 1 FROM sessions s
          WHERE s.conversationId = c.id
          AND s.status IN ('active', 'pending', 'interrupted')

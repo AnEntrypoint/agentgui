@@ -2513,6 +2513,7 @@ class AgentGUIClient {
           const cachedHasActivity = cached.conversation.messageCount > 0 || this.state.streamingConversations.has(conversationId);
           this.applyAgentAndModelSelection(cached.conversation, cachedHasActivity);
           this.conversationCache.delete(conversationId);
+          this.syncPromptState(conversationId);
           this.restoreScrollPosition(conversationId);
           this.enableControls();
           return;
@@ -2726,13 +2727,9 @@ class AgentGUIClient {
           this.chunkPollState.lastFetchTimestamp = lastChunkTime;
           this.startChunkPolling(conversationId);
           this.disableControls();
-          // IMMUTABLE STATE: Prompt is disabled during active streaming, do NOT enable
-          if (this.ui.messageInput) this.ui.messageInput.disabled = true;
+          this.syncPromptState(conversationId);
         } else {
-          // IMMUTABLE STATE: Prompt is enabled when NOT streaming (only disabled on WebSocket disconnect)
-          if (this.ui.messageInput && this.wsManager.isConnected) {
-            this.ui.messageInput.disabled = false;
-          }
+          this.syncPromptState(conversationId);
         }
 
         this.restoreScrollPosition(conversationId);
@@ -2742,6 +2739,17 @@ class AgentGUIClient {
       if (error.name === 'AbortError') return;
       console.error('Failed to load conversation messages:', error);
       this.showError('Failed to load conversation: ' + error.message);
+    }
+  }
+
+  syncPromptState(conversationId) {
+    const isStreaming = this.state.streamingConversations.has(conversationId);
+    if (this.ui.messageInput) {
+      if (isStreaming) {
+        this.ui.messageInput.disabled = true;
+      } else {
+        this.ui.messageInput.disabled = !this.wsManager.isConnected;
+      }
     }
   }
 
