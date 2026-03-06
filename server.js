@@ -1005,10 +1005,14 @@ const server = http.createServer(async (req, res) => {
 
     if (pathOnly === '/api/conversations' && req.method === 'GET') {
       const conversations = queries.getConversationsList();
-      // Filter out stale streaming state for conversations not in activeExecutions
+      // Filter out stale streaming state: check both activeExecutions AND database active sessions
       for (const conv of conversations) {
-        if (conv.isStreaming && !activeExecutions.has(conv.id)) {
-          conv.isStreaming = 0;
+        if (conv.isStreaming) {
+          const hasActiveSession = queries.getSessionsByStatus(conv.id, 'active').length > 0 ||
+                                   queries.getSessionsByStatus(conv.id, 'pending').length > 0;
+          if (!activeExecutions.has(conv.id) && !hasActiveSession) {
+            conv.isStreaming = 0;
+          }
         }
       }
             sendJSON(req, res, 200, { conversations });
