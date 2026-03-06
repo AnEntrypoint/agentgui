@@ -4452,7 +4452,7 @@ function recoverStaleSessions() {
 async function resumeInterruptedStreams() {
   try {
     const resumableConvs = queries.getResumableConversations ? queries.getResumableConversations() : [];
-    const toResume = resumableConvs.filter(c => c.agentType === 'claude-code');
+    const toResume = resumableConvs;
 
     if (toResume.length === 0) return;
 

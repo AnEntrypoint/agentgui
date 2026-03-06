@@ -578,16 +578,15 @@
     }
 
     .message-user {
-      background-color: var(--color-primary);
-      color: white;
       margin-left: auto;
       border-bottom-right-radius: 0.25rem;
+      color: var(--color-text-primary);
     }
 
     .message-assistant {
-      background-color: var(--color-bg-secondary);
       margin-right: auto;
       border-bottom-left-radius: 0.25rem;
+      color: var(--color-text-primary);
     }
 
     /* Consecutive assistant messages: join them visually */
@@ -609,11 +608,10 @@
       text-transform: uppercase;
       letter-spacing: 0.04em;
       margin-bottom: 0.125rem;
-      opacity: 0.7;
     }
 
-    .message-user .message-role { color: rgba(255,255,255,0.8); }
-    .message-assistant .message-role { color: var(--color-text-secondary); }
+    .message-user .message-role { color: #7a9abf; }
+    .message-assistant .message-role { color: #8a9a7a; }
 
     .message-content {
       font-size: 0.9rem;
@@ -625,10 +623,10 @@
     .message-timestamp {
       font-size: 0.7rem;
       margin-top: 0.25rem;
-      opacity: 0.6;
+      opacity: 0.5;
     }
 
-    .message-user .message-timestamp { color: rgba(255,255,255,0.7); }
+    .message-user .message-timestamp { color: var(--color-text-secondary); }
     .message-assistant .message-timestamp { color: var(--color-text-secondary); }
 
     .message-blocks {

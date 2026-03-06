@@ -1439,6 +1439,7 @@ class AgentGUIClient {
 
         this.lockAgentAndModel(agentId, model);
         await this.streamToConversation(conv.id, savedPrompt, agentId, model, subAgent);
+        this.clearDraft(conv.id);
         this._confirmOptimisticMessage(pendingId);
       } else {
         const agentId = this.getCurrentAgent();
@@ -1458,6 +1459,7 @@ class AgentGUIClient {
         }
 
         await this.streamToConversation(conversation.id, savedPrompt, agentId, model, subAgent);
+        this.clearDraft(conversation.id);
         this._confirmOptimisticMessage(pendingId);
       }
     } catch (error) {

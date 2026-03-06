@@ -78,6 +78,11 @@ class ConversationManager {
     return agent?.name || agentId;
   }
 
+  formatModelLabel(model) {
+    if (!model) return '';
+    return ' (' + model.replace(/^claude-/i, '').replace(/-\d{8,}.*$/, '').replace(/-/g, ' ') + ')';
+  }
+
   setupDelegatedListeners() {
     this.listEl.addEventListener('click', (e) => {
       const deleteBtn = e.target.closest('[data-delete-conv]');
@@ -430,7 +435,7 @@ class ConversationManager {
     const title = conv.title || `Conversation ${conv.id.slice(0, 8)}`;
     const timestamp = conv.created_at ? new Date(conv.created_at).toLocaleDateString() : 'Unknown';
     const agent = this.getAgentDisplayName(conv.agentId || conv.agentType);
-    const modelLabel = conv.model ? ` (${conv.model})` : '';
+    const modelLabel = this.formatModelLabel(conv.model);
     const wd = conv.workingDirectory ? pathBasename(conv.workingDirectory) : '';
     const metaParts = [agent + modelLabel, timestamp];
     if (wd) metaParts.push(wd);
@@ -458,7 +463,7 @@ class ConversationManager {
     const title = conv.title || `Conversation ${conv.id.slice(0, 8)}`;
     const timestamp = conv.created_at ? new Date(conv.created_at).toLocaleDateString() : 'Unknown';
     const agent = this.getAgentDisplayName(conv.agentId || conv.agentType);
-    const modelLabel = conv.model ? ` (${conv.model})` : '';
+    const modelLabel = this.formatModelLabel(conv.model);
     const wd = conv.workingDirectory ? pathBasename(conv.workingDirectory) : '';
     const metaParts = [agent + modelLabel, timestamp];
     if (wd) metaParts.push(wd);
