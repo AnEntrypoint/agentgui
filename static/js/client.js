@@ -2553,8 +2553,12 @@ class AgentGUIClient {
       const hasMoreChunks = totalChunks && chunks.length < totalChunks;
 
       const clientKnowsStreaming = this.state.streamingConversations.has(conversationId);
-      const shouldResumeStreaming = (isActivelyStreaming || clientKnowsStreaming) && latestSession &&
+      const shouldResumeStreaming = latestSession &&
         (latestSession.status === 'active' || latestSession.status === 'pending');
+
+      if (this.ui.messageInput) {
+        this.ui.messageInput.disabled = shouldResumeStreaming;
+      }
 
       const outputEl = document.getElementById('output');
       if (outputEl) {
