@@ -191,6 +191,15 @@ class AgentGUIClient {
       if (dot) dot.classList.remove('degrading');
     });
 
+    // Switch to idle view when selecting non-streaming conversation
+    window.addEventListener('conversation-selected', (e) => {
+      const convId = e.detail.conversationId;
+      const isStreaming = convId && this.state.streamingConversations.has(convId);
+      if (!isStreaming && window.switchView) {
+        window.switchView('chat');
+      }
+    });
+
     // Preserve controls state across tab switches
     window.addEventListener('view-switched', (e) => {
       const view = e.detail.view;

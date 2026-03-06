@@ -179,6 +179,8 @@
     });
   }
 
+  window.switchView = switchView;
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();
