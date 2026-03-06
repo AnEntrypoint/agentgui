@@ -619,13 +619,11 @@ class StreamingRenderer {
       case 'TodoWrite':
         if (input.todos && Array.isArray(input.todos)) {
           const statusIcons = { completed: '&#9989;', in_progress: '&#9881;', pending: '&#9744;' };
-          const hasInProgress = input.todos.some(t => t.status === 'in_progress');
           const completedCount = input.todos.filter(t => t.status === 'completed').length;
           const totalCount = input.todos.length;
           const items = input.todos.map(t => `<div class="todo-item"><span class="todo-status">${statusIcons[t.status] || '&#9744;'}</span><span class="todo-text">${this.escapeHtml(t.content || '')}</span></div>`).join('');
-          const openAttr = hasInProgress ? 'open' : '';
           const summary = `<summary class="folded-tool-bar" style="cursor:pointer;padding:0.5rem;background:var(--color-bg-secondary);border-radius:0.25rem;user-select:none"><span style="font-weight:600;font-size:0.9rem">📋 Tasks</span><span style="margin-left:0.5rem;font-size:0.8rem;color:var(--color-text-secondary)">${completedCount}/${totalCount} complete</span></summary>`;
-          return `<details class="folded-tool" ${openAttr}>${summary}<div class="folded-tool-body tool-param-todos" style="padding:0.75rem">${items}</div></details>`;
+          return `<details class="folded-tool" open>${summary}<div class="folded-tool-body tool-param-todos" style="padding:0.75rem">${items}</div></details>`;
         }
         return this.renderJsonParams(input);
 
@@ -2187,7 +2185,7 @@ class StreamingRenderer {
     summary.textContent = summaryText;
 
     const details = document.createElement('details');
-    details.className = `block-type-${block.type}`;
+    details.className = `block-type-${block.type} ${this._getBlockTypeClass(block.type)}`;
     details.setAttribute('data-block-type', block.type);
     details.setAttribute('data-lazy-load', 'pending');
     details.appendChild(summary);

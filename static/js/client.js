@@ -2565,7 +2565,7 @@ class AgentGUIClient {
       }
 
       if (this.ui.messageInput) {
-        this.ui.messageInput.disabled = shouldResumeStreaming;
+        this.ui.messageInput.disabled = false;
       }
 
       const outputEl = document.getElementById('output');
