@@ -948,6 +948,26 @@
     .inject-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .inject-btn.visible { display: flex; }
 
+    .queue-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      background-color: #8b5cf6;
+      color: white;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background-color 0.15s;
+      margin-right: 0.25rem;
+    }
+
+    .queue-btn:hover:not(:disabled) { background-color: #7c3aed; }
+    .queue-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .queue-btn.visible { display: flex; }
+
     .steer-btn {
       display: none;
       align-items: center;
@@ -3183,6 +3203,11 @@
           <button class="inject-btn" id="injectBtn" title="Inject instructions into running agent" aria-label="Inject instructions">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/>
+            </svg>
+          </button>
+          <button class="queue-btn" id="queueBtn" title="Queue message for running agent" aria-label="Queue message">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M15 13H1v-2h14v2zm0-4H1V7h14v2zM1 19h14v-2H1v2z"/>
             </svg>
           </button>
           <button class="steer-btn" id="steerBtn" title="Steer running agent with message" aria-label="Steer agent">

@@ -458,6 +458,7 @@ class AgentGUIClient {
 
     this.ui.stopButton = document.getElementById('stopBtn');
     this.ui.injectButton = document.getElementById('injectBtn');
+    this.ui.queueButton = document.getElementById('queueBtn');
     this.ui.steerButton = document.getElementById('steerBtn');
 
     if (this.ui.stopButton) {
@@ -482,6 +483,28 @@ class AgentGUIClient {
           console.log('Inject response:', data);
         } catch (err) {
           console.error('Failed to inject:', err);
+        }
+      });
+    }
+
+    if (this.ui.queueButton) {
+      this.ui.queueButton.addEventListener('click', async () => {
+        if (!this.state.currentConversation) return;
+        const message = this.ui.messageInput?.value || '';
+        if (!message.trim()) {
+          this.showError('Please enter a message to queue');
+          return;
+        }
+        try {
+          const data = await window.wsClient.rpc('conv.queue', { id: this.state.currentConversation.id, content: message });
+          console.log('Queue response:', data);
+          if (this.ui.messageInput) {
+            this.ui.messageInput.value = '';
+            this.ui.messageInput.style.height = 'auto';
+          }
+        } catch (err) {
+          console.error('Failed to queue:', err);
+          this.showError('Failed to queue: ' + err.message);
         }
       });
     }
@@ -726,19 +749,13 @@ class AgentGUIClient {
     if (this.state.currentConversation?.id !== data.conversationId) {
       console.log('Streaming started for non-active conversation:', data.conversationId);
       this.state.streamingConversations.set(data.conversationId, true);
+      this.updateBusyPromptArea(data.conversationId);
       this.emit('streaming:start', data);
       return;
     }
 
-    // Show stop, steer, queue, and inject buttons when streaming starts for current conversation
-    if (this.ui.stopButton) this.ui.stopButton.classList.add('visible');
-    if (this.ui.injectButton) this.ui.injectButton.classList.add('visible');
-    if (this.ui.steerButton) this.ui.steerButton.classList.add('visible');
-    if (this.ui.queueButton) this.ui.queueButton.classList.add('visible');
-    if (this.ui.sendButton) this.ui.sendButton.style.display = 'none';
-    this.ensurePromptAreaAlwaysEnabled();
-
     this.state.streamingConversations.set(data.conversationId, true);
+    this.updateBusyPromptArea(data.conversationId);
     this.state.currentSession = {
       id: data.sessionId,
       conversationId: data.conversationId,
@@ -977,11 +994,13 @@ class AgentGUIClient {
     if (conversationId && this.state.currentConversation?.id !== conversationId) {
       console.log('Streaming error for non-active conversation:', conversationId);
       this.state.streamingConversations.delete(conversationId);
+      this.updateBusyPromptArea(conversationId);
       this.emit('streaming:error', data);
       return;
     }
 
     this.state.streamingConversations.delete(conversationId);
+    this.updateBusyPromptArea(conversationId);
 
     // Stop polling for chunks
     this.stopChunkPolling();
@@ -1021,23 +1040,19 @@ class AgentGUIClient {
     console.log('Streaming completed:', data);
     this._clearThinkingCountdown();
 
-    // Hide stop, steer, and inject buttons when streaming completes
-    if (this.ui.stopButton) this.ui.stopButton.classList.remove('visible');
-    if (this.ui.injectButton) this.ui.injectButton.classList.remove('visible');
-    if (this.ui.steerButton) this.ui.steerButton.classList.remove('visible');
-    if (this.ui.sendButton) this.ui.sendButton.style.display = '';
-
     const conversationId = data.conversationId || this.state.currentSession?.conversationId;
     if (conversationId) this.invalidateCache(conversationId);
 
     if (conversationId && this.state.currentConversation?.id !== conversationId) {
       console.log('Streaming completed for non-active conversation:', conversationId);
       this.state.streamingConversations.delete(conversationId);
+      this.updateBusyPromptArea(conversationId);
       this.emit('streaming:complete', data);
       return;
     }
 
     this.state.streamingConversations.delete(conversationId);
+    this.updateBusyPromptArea(conversationId);
 
     this.stopChunkPolling();
 
@@ -2489,6 +2504,7 @@ class AgentGUIClient {
 
       if (this.ui.stopButton) this.ui.stopButton.classList.remove('visible');
       if (this.ui.injectButton) this.ui.injectButton.classList.remove('visible');
+      if (this.ui.queueButton) this.ui.queueButton.classList.remove('visible');
       if (this.ui.steerButton) this.ui.steerButton.classList.remove('visible');
       if (this.ui.sendButton) this.ui.sendButton.style.display = '';
 
@@ -2668,27 +2684,27 @@ class AgentGUIClient {
                 toolResultBlocks.set(chunk.id, chunk);
                 return;
               }
-              const element = this.renderer.renderBlock(chunk.block, chunk);
+              const element = this.renderer.renderBlock(chunk.block, chunk, blockFrag);
               if (!element) return;
-              // Ensure CSS classes are always applied for styling consistency
               element.classList.add('block-loaded');
-              element.classList.add(`block-type-${chunk.block.type}`);
               blockFrag.appendChild(element);
             });
 
             blocksEl.appendChild(blockFrag);
 
-            toolResultBlocks.forEach((chunk, chunkId) => {
-              const lastBlock = blocksEl.lastElementChild;
-              if (lastBlock?.classList?.contains('block-type-tool_use')) {
-                lastBlock.classList.remove('has-success', 'has-error');
-                lastBlock.classList.add(chunk.block.is_error ? 'has-error' : 'has-success');
-                const contextWithParent = { ...chunk, parentIsOpen: lastBlock.hasAttribute('open') };
-                const element = this.renderer.renderBlock(chunk.block, contextWithParent);
-                if (element && element !== blockFrag.lastElementChild) {
-                  element.classList.add('block-loaded');
-                  lastBlock.appendChild(element);
-                }
+            toolResultBlocks.forEach((chunk) => {
+              const toolUseId = chunk.block.tool_use_id;
+              const toolUseEl = toolUseId
+                ? blocksEl.querySelector(`.block-tool-use[data-tool-use-id="${toolUseId}"]`)
+                : blocksEl.lastElementChild?.classList?.contains('block-type-tool_use') ? blocksEl.lastElementChild : null;
+              if (!toolUseEl) return;
+              toolUseEl.classList.remove('has-success', 'has-error');
+              toolUseEl.classList.add(chunk.block.is_error ? 'has-error' : 'has-success');
+              const contextWithParent = { ...chunk, parentIsOpen: toolUseEl.hasAttribute('open') };
+              const element = this.renderer.renderBlock(chunk.block, contextWithParent, toolUseEl);
+              if (element) {
+                element.classList.add('block-loaded');
+                toolUseEl.appendChild(element);
               }
             });
 
@@ -2779,20 +2795,22 @@ class AgentGUIClient {
   }
 
   updateBusyPromptArea(conversationId) {
+    if (this.state.currentConversation?.id !== conversationId) return;
     const isStreaming = this.state.streamingConversations.has(conversationId);
     const isConnected = this.wsManager?.isConnected;
 
     const injectBtn = document.getElementById('injectBtn');
     const steerBtn = document.getElementById('steerBtn');
+    const queueBtn = document.getElementById('queueBtn');
     const stopBtn = document.getElementById('stopBtn');
 
-    if (injectBtn) injectBtn.style.display = isStreaming ? 'flex' : 'none';
-    if (steerBtn) steerBtn.style.display = isStreaming ? 'flex' : 'none';
-    if (stopBtn) stopBtn.style.display = isStreaming ? 'flex' : 'none';
+    [injectBtn, steerBtn, queueBtn, stopBtn].forEach(btn => {
+      if (!btn) return;
+      btn.classList.toggle('visible', isStreaming);
+      btn.disabled = !isConnected;
+    });
 
-    if (injectBtn) injectBtn.disabled = !isConnected;
-    if (steerBtn) steerBtn.disabled = !isConnected;
-    if (stopBtn) stopBtn.disabled = !isConnected;
+    if (this.ui.sendButton) this.ui.sendButton.style.display = isStreaming ? 'none' : '';
   }
 
   removeScrollUpDetection() {
@@ -3070,6 +3088,9 @@ class AgentGUIClient {
     if (this.ui.steerButton && this.ui.steerButton.classList.contains('visible')) {
       this.ui.steerButton.disabled = !this.wsManager.isConnected;
     }
+    if (this.ui.queueButton && this.ui.queueButton.classList.contains('visible')) {
+      this.ui.queueButton.disabled = !this.wsManager.isConnected;
+    }
   }
 
   /**
@@ -3102,6 +3123,10 @@ class AgentGUIClient {
     if (this.ui.steerButton) {
       this.ui.steerButton.classList.add('visible');
       this.ui.steerButton.disabled = !this.wsManager.isConnected;
+    }
+    if (this.ui.queueButton) {
+      this.ui.queueButton.classList.add('visible');
+      this.ui.queueButton.disabled = !this.wsManager.isConnected;
     }
   }
 

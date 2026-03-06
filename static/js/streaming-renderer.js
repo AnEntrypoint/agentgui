@@ -1230,7 +1230,8 @@ class StreamingRenderer {
     const toolName = block.tool_name || block.name || '';
 
     // Special handling for TodoWrite: render directly without success wrapper
-    if (toolName.includes('TodoWrite') && typeof content === 'object' && content.todos && Array.isArray(content.todos)) {
+    // Detect by tool name OR by content structure (todos array)
+    if ((toolName.includes('TodoWrite') || (typeof content === 'object' && Array.isArray(content?.todos))) && typeof content === 'object' && content.todos && Array.isArray(content.todos)) {
       const statusIcons = { completed: '&#9989;', in_progress: '&#9881;', pending: '&#9744;' };
       const completedCount = content.todos.filter(t => t.status === 'completed').length;
       const totalCount = content.todos.length;
@@ -2200,8 +2201,8 @@ class StreamingRenderer {
     summary.textContent = summaryText;
 
     const details = document.createElement('details');
-    const className = `block-${block.type} block-type-${block.type} ${this._getBlockTypeClass(block.type)}`;
-    details.className = className;
+    details.className = `block-${block.type}`;
+    details.classList.add(this._getBlockTypeClass(block.type));
     details.setAttribute('data-block-type', block.type);
     details.setAttribute('data-lazy-load', 'pending');
     details.open = block.type === 'success' || (block.type === 'tool_result' && !block.is_error);
