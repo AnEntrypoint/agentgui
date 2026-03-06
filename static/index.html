@@ -864,9 +864,15 @@
       display: inline-block;
     }
 
+    .message-input-container {
+      position: relative;
+      flex: 1;
+      display: flex;
+    }
+
     .message-textarea {
       flex: 1;
-      padding: 0.625rem 0.875rem;
+      padding: 0.625rem 2.75rem 0.625rem 0.875rem;
       border: none;
       border-radius: 0.75rem;
       background-color: var(--color-bg-secondary);
@@ -1144,11 +1150,14 @@
     }
 
     .voice-mic-btn {
+      position: absolute;
+      top: 4px;
+      right: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 44px;
-      height: 44px;
+      width: 36px;
+      height: 36px;
       background: var(--color-bg-secondary);
       color: var(--color-text-secondary);
       border: 2px solid var(--color-border);
@@ -3187,21 +3196,23 @@
           <select class="agent-selector cli-selector" data-cli-selector title="Select CLI tool"></select>
           <select class="agent-selector sub-agent-selector" data-agent-selector title="Select sub-agent" style="display:none"></select>
           <select class="model-selector" data-model-selector title="Select model" data-empty="true"></select>
-          <textarea
-            class="message-textarea"
-            data-message-input
-            placeholder="Message AgentGUI... (Ctrl+Enter to send)"
-            aria-label="Message input"
-            rows="1"
-          ></textarea>
-          <button class="voice-mic-btn" id="chatMicBtn" title="Record voice input" aria-label="Voice input">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-              <line x1="12" y1="19" x2="12" y2="23"/>
-              <line x1="8" y1="23" x2="16" y2="23"/>
-            </svg>
-          </button>
+          <div class="message-input-container">
+            <textarea
+              class="message-textarea"
+              data-message-input
+              placeholder="Message AgentGUI... (Ctrl+Enter to send)"
+              aria-label="Message input"
+              rows="1"
+            ></textarea>
+            <button class="voice-mic-btn" id="chatMicBtn" title="Record voice input" aria-label="Voice input">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+          </div>
           <button class="inject-btn" id="injectBtn" title="Inject instructions into running agent" aria-label="Inject instructions">
             <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/>
