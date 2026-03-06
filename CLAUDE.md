@@ -219,6 +219,91 @@ After update/install completes:
 3. UI version display updates to show new version
 4. Status reverts to "Installed" or "Up-to-date" accordingly
 
+## Base64 Image Rendering in File Read Events
+
+### Problem: Images Displaying as Raw Text
+
+When an agent reads an image file, the streaming event may not have `type='file_read'`. It can arrive with any type (or fall through to the default case in the renderer switch). Without the `renderGeneric` fallback, the image data displays as raw base64 text instead of an `<img>` element.
+
+### Event Structure for Image File Reads
+
+Two nested structures are used by different agent versions. Both must be handled:
+
+**Structure A** (nested under `source`):
+```json
+{
+  "type": "<anything>",
+  "path": "/path/to/image.png",
+  "content": {
+    "source": {
+      "type": "base64",
+      "data": "<base64-string>"
+    },
+    "media_type": "image/png"
+  }
+}
+```
+
+**Structure B** (flat inside `content`):
+```json
+{
+  "type": "<anything>",
+  "path": "/path/to/image.png",
+  "content": {
+    "type": "base64",
+    "data": "<base64-string>"
+  }
+}
+```
+
+**Structure C** (content is raw base64 string, no wrapping object):
+```json
+{
+  "type": "<anything>",
+  "path": "/path/to/image.png",
+  "content": "iVBORw0KGgo..."
+}
+```
+Structure C is detected by `detectBase64Image()` which checks magic-byte prefixes (PNG: `iVBORw0KGgo`, JPEG: `/9j/4AAQ`, WebP: `UklGRi`, GIF: `R0lGODlh`).
+
+### Two Rendering Paths in streaming-renderer.js
+
+**Path 1 – Direct dispatch** (`renderEvent` switch statement):
+- `case 'file_read'` routes directly to `renderFileRead(event)`.
+- Handles all three content structures above.
+
+**Path 2 – Generic fallback** (`renderGeneric`):
+- Called for any event type not matched by the switch (the `default` case).
+- First thing it does: check for `event.content?.source?.type === 'base64'` OR `event.content?.type === 'base64'` AND `event.path` present.
+- If true, delegates to `renderFileRead(event)` so the image renders correctly.
+- Without this fallback, any file-read event that arrives with an unrecognised type displays as raw key-value text.
+
+### MIME Type Resolution in renderFileRead
+
+Priority order inside `renderFileRead`:
+1. `event.media_type` field (explicit)
+2. Detected from magic bytes via `detectBase64Image()` → maps `jpeg` → `image/jpeg`, others → `image/<type>`
+3. Falls back to `application/octet-stream` (shows broken image)
+
+Always include `media_type` on the event when possible. If absent, magic-byte detection covers PNG/JPEG/WebP/GIF automatically.
+
+### Debugging Checklist When Images Show as Text
+
+1. `console.log(event)` the raw event object arriving at the renderer — verify `content` structure.
+2. Check `event.type` — if it is not `'file_read'`, the switch default fires `renderGeneric`.
+3. Confirm `renderGeneric` has the base64 fallback guard at the top (search for `content?.source?.type === 'base64'`).
+4. Confirm `renderFileRead` handles both `content.source.data` and `content.data` paths (both exist in the code).
+5. Verify `event.path` is set — the fallback in `renderGeneric` requires `event.path` to delegate correctly.
+6. If `media_type` is missing and content is not PNG/JPEG/WebP/GIF, add it to the event or extend `detectBase64Image` signatures.
+
+### Why Two Attempts Failed Before the Fix
+
+- Attempt 1: Modified only `renderFileRead` but the event had an unrecognised type so the switch never reached `renderFileRead`.
+- Attempt 2: Added fallback in `renderGeneric` but checked only `event.content?.source?.type === 'base64'` — missed Structure B where data sits directly on `event.content` (no `source` nesting).
+- Fix: `renderGeneric` now checks both structures before falling through to generic key-value rendering.
+
+---
+
 ## Tool Update Testing & Diagnostics
 
 A comprehensive diagnostic page is available at `http://localhost:3000/gm/tool-update-test.html` (`static/tool-update-test.html`) with 7 interactive test sections:

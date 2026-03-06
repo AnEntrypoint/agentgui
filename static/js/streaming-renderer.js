@@ -1996,6 +1996,11 @@ class StreamingRenderer {
    * Render generic event with formatted key-value pairs
    */
   renderGeneric(event) {
+    // Check if this is actually a file read with base64 image content
+    if ((event.content?.source?.type === 'base64' || event.content?.type === 'base64') && event.path) {
+      return this.renderFileRead(event);
+    }
+
     const div = document.createElement('div');
     div.className = 'event-generic mb-3 p-3 bg-gray-100 dark:bg-gray-800 rounded text-sm';
     div.dataset.eventId = event.id || '';
