@@ -1179,9 +1179,11 @@ class AgentGUIClient {
         outputEl.appendChild(queueEl);
       }
 
+      const isStreaming = this.state.streamingConversations.has(conversationId);
       queueEl.innerHTML = queue.map((q, i) => `
         <div class="queue-item" data-message-id="${q.messageId}" style="padding:0.5rem 1rem;margin:0.5rem 0;border-radius:0.375rem;background:var(--color-warning);color:#000;font-size:0.875rem;display:flex;align-items:center;gap:0.5rem;">
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${i + 1}. ${this.escapeHtml(q.content)}</span>
+          ${isStreaming ? `<button class="queue-steer-btn" data-index="${i}" style="padding:0.25rem 0.5rem;background:#06b6d4;border:1px solid #0891b2;border-radius:0.25rem;cursor:pointer;font-size:0.75rem;color:#fff;">Steer</button>` : ''}
           <button class="queue-edit-btn" data-index="${i}" style="padding:0.25rem 0.5rem;background:transparent;border:1px solid #000;border-radius:0.25rem;cursor:pointer;font-size:0.75rem;">Edit</button>
           <button class="queue-delete-btn" data-index="${i}" style="padding:0.25rem 0.5rem;background:transparent;border:1px solid #000;border-radius:0.25rem;cursor:pointer;font-size:0.75rem;">Delete</button>
         </div>
@@ -1190,7 +1192,21 @@ class AgentGUIClient {
       if (!queueEl._listenersAttached) {
         queueEl._listenersAttached = true;
         queueEl.addEventListener('click', async (e) => {
-          if (e.target.classList.contains('queue-delete-btn')) {
+          if (e.target.classList.contains('queue-steer-btn')) {
+            const index = parseInt(e.target.dataset.index);
+            const q = queue[index];
+            try {
+              const data = await window.wsClient.rpc('conv.steer', { id: conversationId, content: q.content });
+              console.log('Steer response:', data);
+              if (data.ok && data.steered) {
+                // Remove from queue after successful steer
+                await window.wsClient.rpc('q.del', { id: conversationId, messageId: q.messageId });
+              }
+            } catch (err) {
+              console.error('Failed to steer:', err);
+              this.showError('Failed to steer: ' + err.message);
+            }
+          } else if (e.target.classList.contains('queue-delete-btn')) {
             const index = parseInt(e.target.dataset.index);
             const msgId = queue[index].messageId;
             if (await window.UIDialog.confirm('Delete this queued message?', 'Delete Message')) {
