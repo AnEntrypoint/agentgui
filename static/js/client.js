@@ -730,11 +730,13 @@ class AgentGUIClient {
       return;
     }
 
-    // Show stop, steer, and inject buttons when streaming starts for current conversation
+    // Show stop, steer, queue, and inject buttons when streaming starts for current conversation
     if (this.ui.stopButton) this.ui.stopButton.classList.add('visible');
     if (this.ui.injectButton) this.ui.injectButton.classList.add('visible');
     if (this.ui.steerButton) this.ui.steerButton.classList.add('visible');
+    if (this.ui.queueButton) this.ui.queueButton.classList.add('visible');
     if (this.ui.sendButton) this.ui.sendButton.style.display = 'none';
+    this.ensurePromptAreaAlwaysEnabled();
 
     this.state.streamingConversations.set(data.conversationId, true);
     this.state.currentSession = {
@@ -3059,6 +3061,15 @@ class AgentGUIClient {
     }
     const injectBtn = document.getElementById('injectBtn');
     if (injectBtn) injectBtn.disabled = false;
+  }
+
+  /**
+   * Ensure prompt area is always enabled and shows queue/steer when agent streaming
+   */
+  ensurePromptAreaAlwaysEnabled() {
+    if (this.ui.messageInput) {
+      this.ui.messageInput.disabled = false;
+    }
   }
 
   /**
