@@ -865,7 +865,7 @@ class AgentGUIClient {
     this.startChunkPolling(data.conversationId);
 
     // Show queue/steer UI when streaming starts (for busy prompt)
-    this.fetchAndRenderQueue(data.conversationId);
+    this.showStreamingPromptButtons();
 
     // IMMUTABLE: Prompt area remains enabled - user can queue/steer messages
     this.emit('streaming:start', data);
@@ -2774,6 +2774,25 @@ class AgentGUIClient {
     if (this.ui.messageInput) {
       this.ui.messageInput.disabled = false;
     }
+
+    this.updateBusyPromptArea(conversationId);
+  }
+
+  updateBusyPromptArea(conversationId) {
+    const isStreaming = this.state.streamingConversations.has(conversationId);
+    const isConnected = this.wsManager?.isConnected;
+
+    const injectBtn = document.getElementById('injectBtn');
+    const steerBtn = document.getElementById('steerBtn');
+    const stopBtn = document.getElementById('stopBtn');
+
+    if (injectBtn) injectBtn.style.display = isStreaming ? 'flex' : 'none';
+    if (steerBtn) steerBtn.style.display = isStreaming ? 'flex' : 'none';
+    if (stopBtn) stopBtn.style.display = isStreaming ? 'flex' : 'none';
+
+    if (injectBtn) injectBtn.disabled = !isConnected;
+    if (steerBtn) steerBtn.disabled = !isConnected;
+    if (stopBtn) stopBtn.disabled = !isConnected;
   }
 
   removeScrollUpDetection() {
@@ -3044,6 +3063,13 @@ class AgentGUIClient {
     if (this.ui.sendButton) {
       this.ui.sendButton.disabled = !this.wsManager.isConnected;
     }
+    // Also disable queue/steer buttons if disconnected
+    if (this.ui.injectButton && this.ui.injectButton.classList.contains('visible')) {
+      this.ui.injectButton.disabled = !this.wsManager.isConnected;
+    }
+    if (this.ui.steerButton && this.ui.steerButton.classList.contains('visible')) {
+      this.ui.steerButton.disabled = !this.wsManager.isConnected;
+    }
   }
 
   /**
@@ -3063,6 +3089,20 @@ class AgentGUIClient {
     }
     const injectBtn = document.getElementById('injectBtn');
     if (injectBtn) injectBtn.disabled = false;
+  }
+
+  /**
+   * Show queue/steer buttons when streaming (busy prompt state)
+   */
+  showStreamingPromptButtons() {
+    if (this.ui.injectButton) {
+      this.ui.injectButton.classList.add('visible');
+      this.ui.injectButton.disabled = !this.wsManager.isConnected;
+    }
+    if (this.ui.steerButton) {
+      this.ui.steerButton.classList.add('visible');
+      this.ui.steerButton.disabled = !this.wsManager.isConnected;
+    }
   }
 
   /**
