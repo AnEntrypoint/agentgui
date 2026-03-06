@@ -564,7 +564,6 @@ class AgentGUIClient {
       if (outputEl) outputEl.innerHTML = '';
       if (this.ui.messageInput) {
         this.ui.messageInput.value = '';
-        this.ui.messageInput.disabled = false;
         this.ui.messageInput.style.height = 'auto';
       }
       this.unlockAgentAndModel();
@@ -863,6 +862,9 @@ class AgentGUIClient {
     // Start polling for chunks from database
     this.startChunkPolling(data.conversationId);
 
+    // Show queue/steer UI when streaming starts (for busy prompt)
+    this.fetchAndRenderQueue(data.conversationId);
+
     this.disableControls();
     this.emit('streaming:start', data);
   }
@@ -982,6 +984,10 @@ class AgentGUIClient {
     // Stop polling for chunks
     this.stopChunkPolling();
 
+    // Clear queue indicator on error
+    const queueEl = document.querySelector('.queue-indicator');
+    if (queueEl) queueEl.remove();
+
     // If this is a premature ACP end, render distinct warning block
     if (data.isPrematureEnd) {
       this.renderer.queueEvent({
@@ -1032,6 +1038,10 @@ class AgentGUIClient {
     this.state.streamingConversations.delete(conversationId);
 
     this.stopChunkPolling();
+
+    // Clear queue indicator when streaming completes
+    const queueEl = document.querySelector('.queue-indicator');
+    if (queueEl) queueEl.remove();
 
     const sessionId = data.sessionId || this.state.currentSession?.id;
     const streamingEl = document.getElementById(`streaming-${sessionId}`);
@@ -2372,24 +2382,21 @@ class AgentGUIClient {
 
   /**
    * Disable UI controls during streaming
-   * NOTE: Only disables stop button visibility. Prompt, input, and inject remain enabled.
+   * NOTE: Prompt area is IMMUTABLE - always enabled while connected.
+   * Streaming state is rendered via queue/steer buttons, not input disabling.
    */
   disableControls() {
-    // Prompt area and inject button are NEVER disabled during streaming
-    // Only stop button behavior changes
-    const stopBtn = document.getElementById('stopBtn');
-    if (stopBtn) stopBtn.disabled = false;
+    // IMMUTABLE: Prompt state managed only by syncPromptState() based on WebSocket connection
+    // Never disable input during streaming - use queue/steer visibility instead
   }
 
   /**
    * Enable UI controls
-   * NOTE: Restores stop button visibility. Prompt area always stays enabled.
+   * NOTE: Prompt area is always enabled when connected.
    */
   enableControls() {
-    // Prompt area and inject button are always enabled unless disconnected
-    // Only stop button behavior changes
-    const stopBtn = document.getElementById('stopBtn');
-    if (stopBtn) stopBtn.disabled = true;
+    // IMMUTABLE: Prompt state managed only by syncPromptState() based on WebSocket connection
+    // Never disable input during streaming - use queue/steer visibility instead
   }
 
   /**
@@ -2661,6 +2668,7 @@ class AgentGUIClient {
               }
               const element = this.renderer.renderBlock(chunk.block, chunk);
               if (!element) return;
+              element.classList.add('block-loaded');
               blockFrag.appendChild(element);
             });
 
@@ -2674,6 +2682,7 @@ class AgentGUIClient {
                 const contextWithParent = { ...chunk, parentIsOpen: lastBlock.hasAttribute('open') };
                 const element = this.renderer.renderBlock(chunk.block, contextWithParent);
                 if (element && element !== blockFrag.lastElementChild) {
+                  element.classList.add('block-loaded');
                   lastBlock.appendChild(element);
                 }
               }
@@ -2759,7 +2768,7 @@ class AgentGUIClient {
     if (!conversation || conversation.id !== conversationId) return;
 
     if (this.ui.messageInput) {
-      this.ui.messageInput.disabled = !this.wsManager.isConnected;
+      this.ui.messageInput.disabled = false;
     }
   }
 
@@ -3034,14 +3043,11 @@ class AgentGUIClient {
   }
 
   /**
-   * Disable prompt area (input and inject button) only on disconnect
+   * Disable prompt area - NEVER CALLED. Prompt must always be enabled.
+   * Keeping method for backward compatibility but it does nothing.
    */
   disablePromptArea() {
-    if (this.ui.messageInput) {
-      this.ui.messageInput.disabled = true;
-    }
-    const injectBtn = document.getElementById('injectBtn');
-    if (injectBtn) injectBtn.disabled = true;
+    // NEVER disable messageInput - prompt must always be writable
   }
 
   /**

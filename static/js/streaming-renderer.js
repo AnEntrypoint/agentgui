@@ -751,6 +751,7 @@ class StreamingRenderer {
     if (block.id) details.dataset.toolUseId = block.id;
     details.classList.add(this._getBlockTypeClass('tool_use'));
     details.classList.add(this._getToolColorClass(toolName));
+    details.open = true;
     const summary = document.createElement('summary');
     summary.className = 'folded-tool-bar';
     const displayName = this.getToolUseDisplayName(toolName);
@@ -1226,6 +1227,20 @@ class StreamingRenderer {
   renderBlockToolResult(block, context) {
     const isError = block.is_error || false;
     const content = block.content || '';
+    const toolName = block.tool_name || block.name || '';
+
+    // Special handling for TodoWrite: render directly without success wrapper
+    if (toolName.includes('TodoWrite') && typeof content === 'object' && content.todos && Array.isArray(content.todos)) {
+      const statusIcons = { completed: '&#9989;', in_progress: '&#9881;', pending: '&#9744;' };
+      const completedCount = content.todos.filter(t => t.status === 'completed').length;
+      const totalCount = content.todos.length;
+      const items = content.todos.map(t => `<div class="todo-item"><span class="todo-status">${statusIcons[t.status] || '&#9744;'}</span><span class="todo-text">${this.escapeHtml(t.content || '')}</span></div>`).join('');
+      const div = document.createElement('div');
+      div.className = 'block-tool-result';
+      div.innerHTML = `<details class="folded-tool" open><summary class="folded-tool-bar" style="cursor:pointer;padding:0.5rem;background:var(--color-bg-secondary);border-radius:0.25rem;user-select:none"><span style="font-weight:600;font-size:0.9rem">📋 Tasks</span><span style="margin-left:0.5rem;font-size:0.8rem;color:var(--color-text-secondary)">${completedCount}/${totalCount} complete</span></summary><div class="folded-tool-body tool-param-todos" style="padding:0.75rem">${items}</div></details>`;
+      return div;
+    }
+
     const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
 
     const details = document.createElement('details');
@@ -2185,7 +2200,8 @@ class StreamingRenderer {
     summary.textContent = summaryText;
 
     const details = document.createElement('details');
-    details.className = `block-type-${block.type} ${this._getBlockTypeClass(block.type)}`;
+    const className = `block-${block.type} block-type-${block.type} ${this._getBlockTypeClass(block.type)}`;
+    details.className = className;
     details.setAttribute('data-block-type', block.type);
     details.setAttribute('data-lazy-load', 'pending');
     details.open = block.type === 'success' || (block.type === 'tool_result' && !block.is_error);
