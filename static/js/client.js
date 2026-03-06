@@ -2659,7 +2659,7 @@ class AgentGUIClient {
                 toolResultBlocks.set(chunk.id, chunk);
                 return;
               }
-              const element = this.renderer.renderBlockHeader(chunk.block, chunk);
+              const element = this.renderer.renderBlock(chunk.block, chunk);
               if (!element) return;
               blockFrag.appendChild(element);
             });
@@ -2759,12 +2759,7 @@ class AgentGUIClient {
     if (!conversation || conversation.id !== conversationId) return;
 
     if (this.ui.messageInput) {
-      const isStreaming = this.state.streamingConversations.has(conversationId);
-      if (isStreaming) {
-        this.ui.messageInput.disabled = true;
-      } else {
-        this.ui.messageInput.disabled = !this.wsManager.isConnected;
-      }
+      this.ui.messageInput.disabled = !this.wsManager.isConnected;
     }
   }
 

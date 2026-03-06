@@ -2188,6 +2188,7 @@ class StreamingRenderer {
     details.className = `block-type-${block.type} ${this._getBlockTypeClass(block.type)}`;
     details.setAttribute('data-block-type', block.type);
     details.setAttribute('data-lazy-load', 'pending');
+    details.open = block.type === 'success' || (block.type === 'tool_result' && !block.is_error);
     details.appendChild(summary);
 
     // Attach lazy loader on first open
