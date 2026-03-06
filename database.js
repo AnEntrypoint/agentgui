@@ -37,6 +37,7 @@ try {
   db.run('PRAGMA foreign_keys = ON');
   db.run('PRAGMA encoding = "UTF-8"');
   db.run('PRAGMA synchronous = NORMAL');
+  db.run('PRAGMA busy_timeout = 5000');
   db.run('PRAGMA cache_size = -64000');
   db.run('PRAGMA mmap_size = 268435456');
   db.run('PRAGMA temp_store = MEMORY');
@@ -48,6 +49,7 @@ try {
     db.pragma('foreign_keys = ON');
     db.pragma('encoding = "UTF-8"');
     db.pragma('synchronous = NORMAL');
+    db.pragma('busy_timeout = 5000');
     db.pragma('cache_size = -64000');
     db.pragma('mmap_size = 268435456');
     db.pragma('temp_store = MEMORY');
