@@ -9,6 +9,15 @@ Multi-agent GUI client for AI coding agents (Claude Code, Gemini CLI, OpenCode, 
 
 ![Main Interface](docs/screenshot-main.png)
 
+## Why AgentGUI?
+
+Modern AI coding requires juggling multiple agents, each in their own terminal. AgentGUI solves this by providing a unified interface where you can:
+
+- **Compare agents side-by-side** - Test the same prompt across Claude Code, Gemini CLI, OpenCode, and others
+- **Preserve context** - Every conversation, file change, and terminal output is automatically saved
+- **Resume interrupted work** - Pick up exactly where you left off, even after system restarts
+- **Work visually** - See streaming responses, file changes, and tool calls in real-time instead of raw JSON
+
 ## Features
 
 - 🤖 **Multi-Agent Support** - Switch between Claude Code, Gemini CLI, OpenCode, Kilo, and more from one interface
@@ -83,6 +92,18 @@ static/js/websocket-manager.js   WebSocket connection handling
 - Database lives at `~/.gmgui/data.db` (WAL mode for concurrent access)
 - WebSocket endpoint at `/gm/sync` for real-time updates
 - ACP tools (OpenCode, Kilo) auto-launch as HTTP servers on startup with health checks
+
+## Use Cases
+
+**Multi-Agent Comparison**: Run the same task through different agents to compare approaches, quality, and speed.
+
+**Long-Running Projects**: Build complex features across multiple sessions without losing context or conversation history.
+
+**Team Collaboration**: Share conversation URLs and working directories for pair programming with AI agents.
+
+**Agent Development**: Test and debug custom agents with full visibility into streaming events and tool calls.
+
+**Offline Speech**: Use local speech-to-text and text-to-speech without API costs or internet dependency.
 
 ## REST API
 
