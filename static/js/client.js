@@ -1319,10 +1319,17 @@ class AgentGUIClient {
 
   async handleAllConversationsDeleted(data) {
     this.state.currentConversation = null;
+    this.state.conversations = [];
+    this.state.sessionEvents = [];
+    this.conversationCache.clear();
+    this.conversationListCache = { data: [], timestamp: 0, ttl: 30000 };
+    this.draftPrompts.clear();
     window.dispatchEvent(new CustomEvent('conversation-deselected'));
     if (window.conversationManager) {
+      this.state.currentConversation = null;
       await window.conversationManager.loadConversations();
     }
+    this.clearOutput();
   }
 
   isHtmlContent(text) {

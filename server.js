@@ -4144,7 +4144,7 @@ wss.on('connection', (ws, req) => {
 
 const BROADCAST_TYPES = new Set([
   'message_created', 'conversation_created', 'conversation_updated',
-  'conversations_updated', 'conversation_deleted', 'queue_status', 'queue_updated',
+  'conversations_updated', 'conversation_deleted', 'all_conversations_deleted', 'queue_status', 'queue_updated',
   'rate_limit_hit', 'rate_limit_clear',
   'script_started', 'script_stopped', 'script_output',
   'model_download_progress', 'stt_progress', 'tts_setup_progress', 'voice_list',

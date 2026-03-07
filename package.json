@@ -21,6 +21,7 @@
     "postinstall": "node scripts/patch-fsbrowse.js"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.4.1",
     "@anthropic-ai/claude-code": "^2.1.37",
     "@google/gemini-cli": "latest",
     "@huggingface/transformers": "^3.8.1",

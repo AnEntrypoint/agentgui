@@ -568,6 +568,11 @@ class ConversationManager {
         this.updateConversation(msg.conversation.id, msg.conversation);
       } else if (msg.type === 'conversation_deleted') {
         this.deleteConversation(msg.conversationId);
+      } else if (msg.type === 'all_conversations_deleted') {
+        this.conversations = [];
+        this.activeId = null;
+        this.streamingConversations.clear();
+        this.showEmpty('No conversations yet');
       } else if (msg.type === 'streaming_start' && msg.conversationId) {
         this.streamingConversations.add(msg.conversationId);
         this.render();

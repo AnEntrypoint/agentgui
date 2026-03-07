@@ -350,3 +350,39 @@ queries.updateToolStatus(toolId, { status: 'installed', version, installed_at: D
 - Database persists across page reload ✓
 - Frontend shows "Up-to-date" or "Update available" ✓
 - Tool install history records the action ✓
+
+---
+
+## ACP SDK Integration
+
+### Current Status
+- **@agentclientprotocol/sdk** (`^0.4.1`) has been added to dependencies
+- The SDK is positioned as the main protocol for client-server and server-ACP tools communication
+
+### Clear All Conversations Fix
+
+**Issue:** After clicking "Clear All Conversations", the conversation threads would reappear in the sidebar.
+
+**Root Cause:** The `all_conversations_deleted` broadcast event was being sent by the server (in `lib/ws-handlers-conv.js`), but:
+1. The event type was not in the `BROADCAST_TYPES` set in `server.js`, so it wasn't being broadcast to all clients
+2. The conversation manager (`static/js/conversations.js`) had no handler for this event type
+3. Client cleanup in `handleAllConversationsDeleted` was incomplete
+
+**Solution Applied:**
+1. Added `'all_conversations_deleted'` to `BROADCAST_TYPES` set (server.js:4147)
+2. Added event handler in conversation manager to clear all local state (conversations.js:573-577)
+3. Enhanced client cleanup to clear all caches and state before reloading (client.js:1321-1330)
+
+**Files Modified:**
+- `server.js`: Added `all_conversations_deleted` to BROADCAST_TYPES
+- `static/js/conversations.js`: Added handler for all_conversations_deleted event
+- `static/js/client.js`: Enhanced handleAllConversationsDeleted with complete state cleanup
+
+### Next Steps for Full ACP SDK Integration
+The ACP SDK dependency has been added. Full integration would involve:
+1. Replacing custom WebSocket protocol with ACP SDK's RPC/messaging layer
+2. Updating `lib/acp-manager.js` to use ACP SDK for ACP tool communication
+3. Migrating `lib/ws-protocol.js` handlers to use ACP SDK message types
+4. Updating client-side WebSocket handlers to work with ACP SDK events
+
+This refactoring is optional and can be done incrementally as needed.
