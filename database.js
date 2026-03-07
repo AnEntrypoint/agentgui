@@ -1060,19 +1060,9 @@ export const queries = {
       }
 
       const deleteAllStmt = db.transaction(() => {
-        const allSessionIds = prep('SELECT id FROM sessions').all().map(r => r.id);
-
         prep('DELETE FROM stream_updates');
         prep('DELETE FROM chunks');
         prep('DELETE FROM events');
-
-        if (allSessionIds.length > 0) {
-          const placeholders = allSessionIds.map(() => '?').join(',');
-          db.prepare(`DELETE FROM stream_updates WHERE sessionId IN (${placeholders})`).run(...allSessionIds);
-          db.prepare(`DELETE FROM chunks WHERE sessionId IN (${placeholders})`).run(...allSessionIds);
-          db.prepare(`DELETE FROM events WHERE sessionId IN (${placeholders})`).run(...allSessionIds);
-        }
-
         prep('DELETE FROM sessions');
         prep('DELETE FROM messages');
         prep('DELETE FROM conversations');

@@ -699,6 +699,9 @@ class AgentGUIClient {
         case 'conversation_created':
           this.handleConversationCreated(data);
           break;
+        case 'all_conversations_deleted':
+          this.handleAllConversationsDeleted(data);
+          break;
         case 'message_created':
           this.handleMessageCreated(data);
           break;
@@ -1298,6 +1301,14 @@ class AgentGUIClient {
       this._rateLimitSafetyTimer = null;
     }
     this.enableControls();
+  }
+
+  handleAllConversationsDeleted(data) {
+    this.state.currentConversation = null;
+    window.dispatchEvent(new CustomEvent('conversation-deselected'));
+    if (window.conversationManager) {
+      window.conversationManager.loadConversations();
+    }
   }
 
   isHtmlContent(text) {
