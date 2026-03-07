@@ -1317,11 +1317,11 @@ class AgentGUIClient {
     this.enableControls();
   }
 
-  handleAllConversationsDeleted(data) {
+  async handleAllConversationsDeleted(data) {
     this.state.currentConversation = null;
     window.dispatchEvent(new CustomEvent('conversation-deselected'));
     if (window.conversationManager) {
-      window.conversationManager.loadConversations();
+      await window.conversationManager.loadConversations();
     }
   }
 
