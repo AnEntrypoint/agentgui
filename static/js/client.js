@@ -491,17 +491,21 @@ class AgentGUIClient {
             this.showError('Please enter a message to steer');
             return;
           }
-          try {
-            const data = await window.wsClient.rpc('conv.steer', { id: this.state.currentConversation.id, content: message });
-            console.log('Steer response:', data);
-            if (this.ui.messageInput) {
-              this.ui.messageInput.value = '';
-              this.ui.messageInput.style.height = 'auto';
-            }
-          } catch (err) {
-            console.error('Failed to steer:', err);
-            this.showError('Failed to steer: ' + err.message);
+
+          // Capture message and clear UI immediately (no await)
+          const steerMsg = message;
+          if (this.ui.messageInput) {
+            this.ui.messageInput.value = '';
+            this.ui.messageInput.style.height = 'auto';
           }
+
+          // Fire RPC in background, don't await
+          window.wsClient.rpc('conv.steer', { id: this.state.currentConversation.id, content: steerMsg })
+            .then(data => console.log('Steer response:', data))
+            .catch(err => {
+              console.error('Failed to steer:', err);
+              this.showError('Failed to steer: ' + err.message);
+            });
         } else {
           const instructions = await window.UIDialog.prompt('Enter instructions to inject into the running agent:', '', 'Inject Instructions');
           if (!instructions) return;
