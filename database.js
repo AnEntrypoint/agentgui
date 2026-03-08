@@ -949,7 +949,15 @@ export const queries = {
     return result.changes || 0;
   },
 
-  createEvent(type, data, conversationId = null, sessionId = null) {
+  createEvent(type, data, conversationId = null, sessionId = null, idempotencyKey = null) {
+    if (idempotencyKey) {
+      const cached = this.getIdempotencyKey(idempotencyKey);
+      if (cached) {
+        console.log(`[event-idempotency] Event already exists for key ${idempotencyKey}, returning cached`);
+        return JSON.parse(cached);
+      }
+    }
+
     const id = generateId('evt');
     const now = Date.now();
 
@@ -958,7 +966,7 @@ export const queries = {
     );
     stmt.run(id, type, conversationId, sessionId, JSON.stringify(data), now);
 
-    return {
+    const event = {
       id,
       type,
       conversationId,
@@ -966,6 +974,12 @@ export const queries = {
       data,
       created_at: now
     };
+
+    if (idempotencyKey) {
+      this.setIdempotencyKey(idempotencyKey, event);
+    }
+
+    return event;
   },
 
   getEvent(id) {

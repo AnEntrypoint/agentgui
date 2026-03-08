@@ -696,6 +696,9 @@ class AgentGUIClient {
         case 'streaming_start':
           this.handleStreamingStart(data).catch(e => console.error('handleStreamingStart error:', e));
           break;
+        case 'streaming_resumed':
+          this.handleStreamingResumed(data).catch(e => console.error('handleStreamingResumed error:', e));
+          break;
         case 'streaming_progress':
           this.handleStreamingProgress(data);
           break;
@@ -918,6 +921,19 @@ class AgentGUIClient {
 
     // IMMUTABLE: Prompt area remains enabled - user can queue/steer messages
     this.emit('streaming:start', data);
+  }
+
+  async handleStreamingResumed(data) {
+    console.log('Streaming resumed:', data);
+    const conv = this.state.currentConversation || { id: data.conversationId };
+    await this.handleStreamingStart({
+      type: 'streaming_start',
+      sessionId: data.sessionId,
+      conversationId: data.conversationId,
+      agentId: conv.agentType || conv.agentId || 'claude-code',
+      resumed: true,
+      timestamp: data.timestamp
+    });
   }
 
   handleStreamingProgress(data) {

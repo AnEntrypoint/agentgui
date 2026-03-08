@@ -4243,16 +4243,28 @@ wsRouter.onLegacy((data, ws) => {
       timestamp: Date.now()
     }));
 
+    // Notify client if this conversation has an active streaming execution
+    if (data.conversationId && activeExecutions.has(data.conversationId)) {
+      const execution = activeExecutions.get(data.conversationId);
+      const conv = queries.getConversation(data.conversationId);
+      ws.send(JSON.stringify({
+        type: 'streaming_start',
+        sessionId: execution.sessionId,
+        conversationId: data.conversationId,
+        agentId: conv?.agentType || conv?.agentId || 'claude-code',
+        resumed: true,
+        timestamp: Date.now()
+      }));
+    }
+
     // Inject pending checkpoint events if this is a conversation subscription
     if (data.conversationId && checkpointManager.hasPendingCheckpoint(data.conversationId)) {
       const checkpoint = checkpointManager.getPendingCheckpoint(data.conversationId);
       if (checkpoint) {
         console.log(`[checkpoint] Injecting ${checkpoint.events.length} events to client for ${data.conversationId}`);
 
-        // Get the session to use for the injection
         const latestSession = queries.getLatestSession(data.conversationId);
         if (latestSession) {
-          // Send streaming_resumed event first
           ws.send(JSON.stringify({
             type: 'streaming_resumed',
             sessionId: latestSession.id,
@@ -4263,7 +4275,6 @@ wsRouter.onLegacy((data, ws) => {
             timestamp: Date.now()
           }));
 
-          // Inject each checkpoint event
           checkpointManager.injectCheckpointEvents(latestSession.id, checkpoint, (evt) => {
             ws.send(JSON.stringify({
               ...evt,
