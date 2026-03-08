@@ -4242,6 +4242,38 @@ wsRouter.onLegacy((data, ws) => {
       conversationId: data.conversationId,
       timestamp: Date.now()
     }));
+
+    // Inject pending checkpoint events if this is a conversation subscription
+    if (data.conversationId && checkpointManager.hasPendingCheckpoint(data.conversationId)) {
+      const checkpoint = checkpointManager.getPendingCheckpoint(data.conversationId);
+      if (checkpoint) {
+        console.log(`[checkpoint] Injecting ${checkpoint.events.length} events to client for ${data.conversationId}`);
+
+        // Get the session to use for the injection
+        const latestSession = queries.getLatestSession(data.conversationId);
+        if (latestSession) {
+          // Send streaming_resumed event first
+          ws.send(JSON.stringify({
+            type: 'streaming_resumed',
+            sessionId: latestSession.id,
+            conversationId: data.conversationId,
+            resumeFrom: checkpoint.sessionId,
+            eventCount: checkpoint.events.length,
+            chunkCount: checkpoint.chunks.length,
+            timestamp: Date.now()
+          }));
+
+          // Inject each checkpoint event
+          checkpointManager.injectCheckpointEvents(latestSession.id, checkpoint, (evt) => {
+            ws.send(JSON.stringify({
+              ...evt,
+              sessionId: latestSession.id,
+              conversationId: data.conversationId
+            }));
+          });
+        }
+      }
+    }
   } else if (data.type === 'unsubscribe') {
     if (data.sessionId) {
       ws.subscriptions.delete(data.sessionId);
@@ -4585,27 +4617,11 @@ async function resumeInterruptedStreams() {
           timestamp: Date.now()
         });
 
-        // Inject checkpoint events before streaming starts
+        // Store checkpoint to inject when client subscribes (not now, since no clients connected yet)
         if (checkpoint) {
-          broadcastSync({
-            type: 'streaming_resumed',
-            sessionId: session.id,
-            conversationId: conv.id,
-            resumeFrom: previousSessionId,
-            eventCount: checkpoint.events.length,
-            chunkCount: checkpoint.chunks.length,
-            timestamp: Date.now()
-          });
-
-          checkpointManager.injectCheckpointEvents(session.id, checkpoint, (evt) => {
-            broadcastSync({
-              ...evt,
-              sessionId: session.id,
-              conversationId: conv.id
-            });
-          });
-
+          checkpointManager.storeCheckpointForDelay(conv.id, checkpoint);
           checkpointManager.markSessionResumed(previousSessionId);
+          console.log(`[RESUME] Checkpoint stored for ${conv.id}, will inject on next client subscribe`);
         }
 
         const messageId = lastMsg?.id || null;
