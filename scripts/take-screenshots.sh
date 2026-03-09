@@ -24,14 +24,14 @@ echo "Saving to $DOCS_DIR"
 
 ab open "$BASE_URL"
 ab wait --load networkidle
-ab wait ".conversation-item"
+sleep 1
 
 ab screenshot --full "$DOCS_DIR/screenshot-main.png"
 echo "Saved screenshot-main.png"
 
-ab eval 'document.querySelector(".conversation-item").click()'
+ab eval 'document.querySelector(".conversation-item")?.click()'
+sleep 2
 ab wait --load networkidle
-ab wait ".message, .event-block, .streaming-event, #chatView, .chat-messages"
 
 ab screenshot --full "$DOCS_DIR/screenshot-chat.png"
 echo "Saved screenshot-chat.png"
@@ -39,20 +39,24 @@ echo "Saved screenshot-chat.png"
 ab screenshot --full "$DOCS_DIR/screenshot-conversation.png"
 echo "Saved screenshot-conversation.png"
 
-ab eval 'document.getElementById("toolsManagerBtn")?.click()'
-ab wait "#toolsPopup.open, .tools-popup.open"
+ab eval 'var b=document.getElementById("toolsManagerBtn"); if(b){b.style.display="";b.click();}'
+sleep 1
 
 ab screenshot --full "$DOCS_DIR/screenshot-tools-popup.png"
 echo "Saved screenshot-tools-popup.png"
 
-ab eval 'document.querySelector("[data-view=files]")?.click()'
-ab wait "[data-view=files].active, .files-view, #filesView"
+ab eval 'var p=document.getElementById("toolsPopup"); if(p)p.classList.remove("open");'
+sleep 0.5
+
+ab eval 'document.querySelector(".view-toggle-btn[data-view=\"files\"]")?.click()'
+sleep 2
+ab wait --load networkidle
 
 ab screenshot --full "$DOCS_DIR/screenshot-files.png"
 echo "Saved screenshot-files.png"
 
-ab eval 'document.querySelector("[data-view=terminal]")?.click()'
-ab wait "#terminalContainer:not([style*=\"display:none\"]), .terminal-container:not([style*=\"display:none\"])"
+ab eval 'document.querySelector(".view-toggle-btn[data-view=\"terminal\"]")?.click()'
+sleep 1
 
 ab screenshot --full "$DOCS_DIR/screenshot-terminal.png"
 echo "Saved screenshot-terminal.png"
