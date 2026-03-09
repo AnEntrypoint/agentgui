@@ -453,17 +453,17 @@ class StreamingRenderer {
     let html = this.escapeHtml(text);
 
     // Render markdown bold: **text** -> <strong>text</strong>
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-gray-900 dark:text-gray-100">$1</strong>');
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-base-content">$1</strong>');
 
     // Render markdown italic: *text* or _text_
-    html = html.replace(/\*([^*]+)\*/g, '<em class="italic text-gray-700 dark:text-gray-300">$1</em>');
-    html = html.replace(/_([^_]+)_/g, '<em class="italic text-gray-700 dark:text-gray-300">$1</em>');
+    html = html.replace(/\*([^*]+)\*/g, '<em class="italic text-base-content/70">$1</em>');
+    html = html.replace(/_([^_]+)_/g, '<em class="italic text-base-content/70">$1</em>');
 
     // Render inline code: `code`
     html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
 
     // Render markdown links: [text](url)
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-blue-600 dark:text-blue-400 hover:underline" target="_blank">$1</a>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="link link-primary" target="_blank">$1</a>');
 
     // Convert line breaks
     html = html.replace(/\n/g, '<br>');
@@ -1565,20 +1565,20 @@ class StreamingRenderer {
    */
   renderStreamingStart(event) {
     const div = document.createElement('div');
-    div.className = 'event-streaming-start card mb-3 p-4 bg-blue-50 dark:bg-blue-900';
+    div.className = 'event-streaming-start card mb-3 p-4 alert alert-info';
     div.dataset.eventId = event.id || event.sessionId || '';
     div.dataset.eventType = 'streaming_start';
 
     const time = new Date(event.timestamp).toLocaleTimeString();
     div.innerHTML = `
       <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 text-blue-600 dark:text-blue-400 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg class="w-5 h-5 text-info animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" fill="none" opacity="0.25"></circle>
           <path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
         </svg>
         <div class="flex-1">
-          <h4 class="font-semibold text-blue-900 dark:text-blue-200">Streaming Started</h4>
-          <p class="text-sm text-blue-700 dark:text-blue-300">${time}</p>
+          <h4 class="font-semibold text-info-content">Streaming Started</h4>
+          <p class="text-sm text-info-content/70">${time}</p>
         </div>
       </div>
     `;
@@ -1604,8 +1604,8 @@ class StreamingRenderer {
     div.innerHTML = `
       <div class="flex items-center gap-2 text-sm">
         <span class="text-secondary">${percentage}%</span>
-        <div class="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-          <div class="bg-blue-500 h-full transition-all" style="width: ${percentage}%"></div>
+        <div class="progress progress-primary flex-1">
+          <div class="progress-bar" style="width: ${percentage}%"></div>
         </div>
       </div>
     `;
@@ -1617,7 +1617,7 @@ class StreamingRenderer {
    */
   renderStreamingComplete(event) {
     const div = document.createElement('div');
-    div.className = 'event-streaming-complete card mb-3 p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950 border border-green-200 dark:border-green-800 rounded-lg';
+    div.className = 'event-streaming-complete card mb-3 p-4 alert alert-success rounded-lg';
     div.dataset.eventId = event.id || event.sessionId || '';
     div.dataset.eventType = 'streaming_complete';
 
@@ -1627,19 +1627,19 @@ class StreamingRenderer {
     div.innerHTML = `
       <div class="flex items-start gap-3">
         <div class="flex-shrink-0 mt-0.5">
-          <svg class="w-6 h-6 text-green-600 dark:text-green-400 animate-bounce" fill="currentColor" viewBox="0 0 20 20">
+          <svg class="w-6 h-6 text-success animate-bounce" fill="currentColor" viewBox="0 0 20 20">
             <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
           </svg>
         </div>
         <div class="flex-1">
-          <h4 class="font-bold text-lg text-green-900 dark:text-green-200">✨ Execution Complete</h4>
+          <h4 class="font-bold text-lg text-success-content">✨ Execution Complete</h4>
           <div class="mt-2 grid grid-cols-2 gap-3 text-sm">
             <div>
-              <span class="text-green-700 dark:text-green-400 font-semibold">${eventCount}</span>
-              <span class="text-green-600 dark:text-green-500">events processed</span>
+              <span class="text-success font-semibold">${eventCount}</span>
+              <span class="text-success/70">events processed</span>
             </div>
             <div class="text-right">
-              <span class="text-green-600 dark:text-green-500">${time}</span>
+              <span class="text-success/70">${time}</span>
             </div>
           </div>
         </div>
@@ -1764,7 +1764,7 @@ class StreamingRenderer {
 
     div.innerHTML = `
       <div class="flex items-center gap-3 mb-2">
-        <svg class="w-4 h-4 text-orange-600 dark:text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+        <svg class="w-4 h-4 text-warning" fill="currentColor" viewBox="0 0 20 20">
           <path fill-rule="evenodd" d="M9.243 3.03a1 1 0 01.727 1.155L9.53 6h2.94l.56-2.243a1 1 0 111.94.486L14.53 6H17a1 1 0 110 2h-2.97l-.5 2H17a1 1 0 110 2h-3.03l-.56 2.243a1 1 0 11-1.94-.486L12.47 14H9.53l-.56 2.243a1 1 0 11-1.94-.486L7.47 14H4a1 1 0 110-2h3.03l.5-2H4a1 1 0 110-2h2.97l.56-2.243a1 1 0 011.155-.727zM9.03 8l.5 2h2.94l-.5-2H9.03z" clip-rule="evenodd"></path>
         </svg>
         <div class="flex-1">
@@ -1773,9 +1773,9 @@ class StreamingRenderer {
         </div>
       </div>
       <div class="flex gap-4 text-xs">
-        ${changes.added ? `<span class="text-green-600 dark:text-green-400">+${changes.added}</span>` : ''}
-        ${changes.modified ? `<span class="text-blue-600 dark:text-blue-400">~${changes.modified}</span>` : ''}
-        ${changes.deleted ? `<span class="text-red-600 dark:text-red-400">-${changes.deleted}</span>` : ''}
+        ${changes.added ? `<span class="text-success">+${changes.added}</span>` : ''}
+        ${changes.modified ? `<span class="text-info">~${changes.modified}</span>` : ''}
+        ${changes.deleted ? `<span class="text-error">-${changes.deleted}</span>` : ''}
         ${total === 0 ? '<span class="text-secondary">no changes</span>' : ''}
       </div>
     `;
@@ -1897,16 +1897,16 @@ class StreamingRenderer {
       if (part.type === 'html') {
         html += `<div class="html-content mb-3">${part.content}</div>`;
       } else if (part.type === 'text') {
-        html += `<div class="p-4 bg-white dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800 mb-3 leading-relaxed text-sm">${this.parseAndRenderMarkdown(part.content)}</div>`;
+        html += `<div class="card card-body mb-3 leading-relaxed text-sm">${this.parseAndRenderMarkdown(part.content)}</div>`;
       } else if (part.type === 'code') {
         if (part.language.toLowerCase() === 'html') {
           html += `<div class="html-rendered-container mb-3">
             <div class="html-rendered-label">Rendered HTML</div>
-            <div class="html-content bg-white dark:bg-gray-800 p-4 overflow-x-auto">${part.code}</div>
+            <div class="html-content bg-base-100 p-4 overflow-x-auto">${part.code}</div>
           </div>`;
         } else {
           const partLineCount = part.code.split('\n').length;
-          html += `<div class="mb-3 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800">
+          html += `<div class="card mb-3 rounded-lg overflow-hidden">
             <details class="collapsible-code">
               <summary class="collapsible-code-summary">
                 <span>${this.escapeHtml(part.language)} - ${partLineCount} line${partLineCount !== 1 ? 's' : ''}</span>
@@ -1916,7 +1916,7 @@ class StreamingRenderer {
                   </svg>
                 </button>
               </summary>
-              <pre class="bg-gray-900 text-gray-100 p-4 overflow-x-auto" style="margin:0;border-radius:0 0 0.375rem 0.375rem"><code class="language-${this.escapeHtml(part.language)}">${this.escapeHtml(part.code)}</code></pre>
+              <pre class="bg-base-300 text-base-content p-4 overflow-x-auto" style="margin:0;border-radius:0 0 0.375rem 0.375rem"><code class="language-${this.escapeHtml(part.language)}">${this.escapeHtml(part.code)}</code></pre>
             </details>
           </div>`;
         }
@@ -1957,7 +1957,7 @@ class StreamingRenderer {
     // Render HTML code blocks as actual HTML elements
     if (language === 'html') {
       div.innerHTML = `
-        <div class="html-rendered-container alert-info text-xs mb-2 text-blue-700 dark:text-blue-300">
+        <div class="html-rendered-container alert alert-info text-xs mb-2">
           Rendered HTML
         </div>
         <div class="html-content">
@@ -1969,7 +1969,7 @@ class StreamingRenderer {
       div.innerHTML = `
         <details class="collapsible-code">
           <summary class="collapsible-code-summary">${this.escapeHtml(language)} - ${codeLineCount} line${codeLineCount !== 1 ? 's' : ''}</summary>
-          <pre class="bg-gray-900 text-gray-100 p-4 overflow-x-auto" style="margin:0;border-radius:0 0 0.375rem 0.375rem"><code class="language-${this.escapeHtml(language)}">${this.escapeHtml(code)}</code></pre>
+          <pre class="bg-base-300 text-base-content p-4 overflow-x-auto" style="margin:0;border-radius:0 0 0.375rem 0.375rem"><code class="language-${this.escapeHtml(language)}">${this.escapeHtml(code)}</code></pre>
         </details>
       `;
     }
@@ -1981,15 +1981,15 @@ class StreamingRenderer {
    */
   renderThinking(event) {
     const div = document.createElement('div');
-    div.className = 'event-thinking mb-3 p-4 bg-purple-50 dark:bg-purple-900 rounded';
+    div.className = 'event-thinking mb-3 p-4 alert rounded';
     div.dataset.eventId = event.id || '';
     div.dataset.eventType = 'thinking_block';
 
     const text = event.thinking || event.content || '';
     div.innerHTML = `
       <details>
-        <summary class="cursor-pointer font-semibold text-purple-900 dark:text-purple-200">Thinking</summary>
-        <p class="mt-3 text-sm text-purple-800 dark:text-purple-300 whitespace-pre-wrap">${this.escapeHtml(text)}</p>
+        <summary class="cursor-pointer font-semibold text-base-content">Thinking</summary>
+        <p class="mt-3 text-sm text-base-content/80 whitespace-pre-wrap">${this.escapeHtml(text)}</p>
       </details>
     `;
     return div;
@@ -2024,7 +2024,7 @@ class StreamingRenderer {
     }
 
     const div = document.createElement('div');
-    div.className = 'event-generic mb-3 p-3 bg-gray-100 dark:bg-gray-800 rounded text-sm';
+    div.className = 'event-generic mb-3 p-3 bg-base-200 rounded text-sm';
     div.dataset.eventId = event.id || '';
     div.dataset.eventType = event.type;
 

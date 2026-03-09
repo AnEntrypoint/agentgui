@@ -194,7 +194,7 @@ class UIComponents {
     container.className = 'flex items-center gap-3 justify-center p-4';
     container.innerHTML = `
       <div class="spinner-simple spinner-primary ${sizeClasses[size] || sizeClasses['medium']}"></div>
-      <span class="text-gray-700 dark:text-gray-300">${UIComponents.escapeHtml(text)}</span>
+      <span class="text-base-content">${UIComponents.escapeHtml(text)}</span>
     `;
     return container;
   }
@@ -240,7 +240,7 @@ class UIComponents {
 
     container.innerHTML = `
       <details ${isOpen ? 'open' : ''}>
-        <summary class="cursor-pointer font-semibold hover:bg-gray-100 dark:hover:bg-gray-800 px-2 py-1 rounded transition-colors">
+        <summary class="cursor-pointer font-semibold hover:bg-base-200 px-2 py-1 rounded transition-colors">
           ${UIComponents.escapeHtml(title)}
         </summary>
         <div class="content mt-2 ml-4">

@@ -1,6 +1,6 @@
 <!-- Test Results Display -->
 <div class="test-results-display card" role="region" aria-label="Test execution results">
-  <div class="card-header flex items-center justify-between mb-3 pb-3 border-b">
+  <div class="card-header mb-3 pb-3 border-b">
     <h4 class="font-semibold">Test Results</h4>
     <div class="test-summary flex gap-2">
       <span class="badge-result passed" aria-label="Passed tests">{{ passedCount }}</span>
@@ -33,7 +33,7 @@
   <div class="test-list space-y-1">
     {{ for suite in testSuites }}
     <details class="test-suite">
-      <summary class="cursor-pointer py-2 px-3 rounded hover:bg-hover-bg flex items-center gap-2">
+      <summary class="cursor-pointer py-2 px-3 rounded hover:bg-base-200 flex items-center gap-2">
         <svg class="w-4 h-4 chevron" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
           <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
         </svg>
