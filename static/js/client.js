@@ -1355,7 +1355,8 @@ class AgentGUIClient {
       this.state.currentConversation = null;
       await window.conversationManager.loadConversations();
     }
-    this.clearOutput();
+    const outputEl = document.getElementById('output');
+    if (outputEl) outputEl.innerHTML = '';
   }
 
   isHtmlContent(text) {
