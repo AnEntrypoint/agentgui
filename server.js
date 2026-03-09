@@ -1838,6 +1838,7 @@ const server = http.createServer(async (req, res) => {
         id: t.id,
         name: t.name,
         pkg: t.pkg,
+        category: t.category || 'plugin',
         installed: t.installed,
         status: t.installed ? (t.isUpToDate ? 'installed' : 'needs_update') : 'not_installed',
         isUpToDate: t.isUpToDate,
@@ -2006,10 +2007,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathOnly === '/api/tools/update' && req.method === 'POST') {
-      sendJSON(req, res, 200, { updating: true, toolCount: 4 });
-      broadcastSync({ type: 'tools_update_started', tools: ['gm-cc', 'gm-oc', 'gm-gc', 'gm-kilo'] });
+      const allToolIds = ['cli-claude', 'cli-opencode', 'cli-gemini', 'cli-kilo', 'cli-codex', 'gm-cc', 'gm-oc', 'gm-gc', 'gm-kilo'];
+      sendJSON(req, res, 200, { updating: true, toolCount: allToolIds.length });
+      broadcastSync({ type: 'tools_update_started', tools: allToolIds });
       setImmediate(async () => {
-        const toolIds = ['gm-cc', 'gm-oc', 'gm-gc', 'gm-kilo'];
+        const toolIds = allToolIds;
         const results = {};
         for (const toolId of toolIds) {
           try {
@@ -4766,7 +4768,7 @@ function onServerReady() {
     }, 6000);
   }).catch(err => console.error('[ACP] Startup error:', err.message));
 
-  const toolIds = ['gm-oc', 'gm-gc', 'gm-kilo', 'gm-cc', 'codex'];
+  const toolIds = ['cli-claude', 'cli-opencode', 'cli-gemini', 'cli-kilo', 'cli-codex', 'gm-cc', 'gm-oc', 'gm-gc', 'gm-kilo'];
   queries.initializeToolInstallations(toolIds.map(id => ({ id })));
   console.log('[TOOLS] Starting background provisioning...');
   toolManager.autoProvision((evt) => {

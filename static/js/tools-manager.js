@@ -304,49 +304,41 @@
       return;
     }
 
-    scroll.innerHTML = tools.map(function(tool) {
+    var cliTools = tools.filter(function(t) { return t.category === 'cli'; });
+    var pluginTools = tools.filter(function(t) { return t.category === 'plugin'; });
+    var uncategorized = tools.filter(function(t) { return !t.category; });
+
+    function renderToolCard(tool) {
       var statusClass = getStatusClass(tool);
       var isInstalling = tool.status === 'installing' || tool.status === 'updating';
       var versionInfo = '';
       if (tool.installedVersion || tool.publishedVersion) {
         versionInfo = '<div class="tool-versions">';
-        if (tool.installedVersion) {
-          versionInfo += '<span class="tool-version-item">v' + esc(tool.installedVersion) + '</span>';
-        }
-        if (tool.publishedVersion && tool.installedVersion !== tool.publishedVersion) {
-          versionInfo += '<span class="tool-version-item">(v' + esc(tool.publishedVersion) + ' available)</span>';
-        }
+        if (tool.installedVersion) versionInfo += '<span class="tool-version-item">v' + esc(tool.installedVersion) + '</span>';
+        if (tool.publishedVersion && tool.installedVersion !== tool.publishedVersion) versionInfo += '<span class="tool-version-item">(v' + esc(tool.publishedVersion) + ' available)</span>';
         versionInfo += '</div>';
       }
-
       return '<div class="tool-item">' +
         '<div style="display: flex; flex-direction: column; gap: 0.3rem;">' +
-        '<div class="tool-header">' +
-        '<span class="tool-name">' + esc(tool.name || tool.id) + '</span>' +
-        '</div>' +
-        '<div class="tool-status-indicator ' + statusClass + '">' +
-        '<span class="tool-status-dot"></span>' +
-        '<span>' + getStatusText(tool) + '</span>' +
-        '</div>' +
+        '<div class="tool-header"><span class="tool-name">' + esc(tool.name || tool.id) + '</span></div>' +
+        '<div class="tool-status-indicator ' + statusClass + '"><span class="tool-status-dot"></span><span>' + getStatusText(tool) + '</span></div>' +
         versionInfo +
-        (isInstalling && tool.progress !== undefined ?
-          '<div class="tool-progress-container">' +
-          '<div class="tool-progress-bar"><div class="tool-progress-fill" style="width:' + Math.min(tool.progress, 100) + '%"></div></div>' +
-          '</div>' : '') +
+        (isInstalling && tool.progress !== undefined ? '<div class="tool-progress-container"><div class="tool-progress-bar"><div class="tool-progress-fill" style="width:' + Math.min(tool.progress, 100) + '%"></div></div></div>' : '') +
         (tool.error_message ? '<div class="tool-error-message">Error: ' + esc(tool.error_message.substring(0, 40)) + '</div>' : '') +
         '</div>' +
         '<div class="tool-actions">' +
-        (tool.status === 'not_installed' ?
-          '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.install(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Install</button>' :
-          (tool.hasUpdate || tool.status === 'needs_update') ?
-          '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.update(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Update</button>' :
-          tool.status === 'failed' ?
-          '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.install(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Retry</button>' :
-          '<button class="tool-btn tool-btn-secondary" onclick="window.toolsManager.refresh()" ' + (isRefreshing ? 'disabled' : '') + '>✓</button>'
-        ) +
-        '</div>' +
-        '</div>';
-    }).join('');
+        (tool.status === 'not_installed' ? '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.install(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Install</button>' :
+          (tool.hasUpdate || tool.status === 'needs_update') ? '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.update(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Update</button>' :
+          tool.status === 'failed' ? '<button class="tool-btn tool-btn-primary" onclick="window.toolsManager.install(\'' + tool.id + '\')" ' + (operationInProgress.has(tool.id) ? 'disabled' : '') + '>Retry</button>' :
+          '<button class="tool-btn tool-btn-secondary" onclick="window.toolsManager.refresh()" ' + (isRefreshing ? 'disabled' : '') + '>✓</button>') +
+        '</div></div>';
+    }
+
+    var html = '';
+    if (cliTools.length) html += '<div class="tool-section-header">CLI Agents</div>' + cliTools.map(renderToolCard).join('');
+    if (pluginTools.length) html += '<div class="tool-section-header">GM Plugins</div>' + pluginTools.map(renderToolCard).join('');
+    if (uncategorized.length) html += uncategorized.map(renderToolCard).join('');
+    scroll.innerHTML = html;
   }
 
   function esc(s) {

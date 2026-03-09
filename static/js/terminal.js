@@ -157,11 +157,14 @@
 
   window.addEventListener('view-switched', function(e) {
     if (e.detail.view === 'terminal') {
-      if (!termActive) {
-        termActive = true;
-        connectAndStart();
-        setTimeout(function() { if (fitAddon) try { fitAddon.fit(); } catch(_) {} }, 100);
+      if (!ensureTerm()) {
+        setTimeout(function() { window.dispatchEvent(new CustomEvent('view-switched', { detail: { view: 'terminal' } })); }, 200);
+        return;
       }
+      termActive = true;
+      connectAndStart();
+      setTimeout(function() { if (fitAddon) try { fitAddon.fit(); } catch(_) {} }, 50);
+      setTimeout(function() { if (fitAddon) try { fitAddon.fit(); } catch(_) {} }, 300);
     } else if (termActive) {
       stopTerminal();
     }
