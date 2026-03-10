@@ -4725,6 +4725,9 @@ function performAgentHealthCheck() {
 }
 
 function onServerReady() {
+  // Clear tool status cache to ensure fresh detection of installed tools
+  toolManager.clearStatusCache();
+
   console.log(`GMGUI running on http://localhost:${PORT}${BASE_URL}/`);
   console.log(`Agents: ${discoveredAgents.map(a => a.name).join(', ') || 'none'}`);
   console.log(`Hot reload: ${watch ? 'on' : 'off'}`);
