@@ -514,9 +514,22 @@ async function discoverExternalACPServers() {
   return externalAgents;
 }
 
-const discoveredAgents = discoverAgents();
-console.log('[STARTUP] Agent discovery:', discoveredAgents.map(a => ({ id: a.id, found: !!a.path })));
+let discoveredAgents = [];
 initializeDescriptors(discoveredAgents);
+
+// Agent discovery happens asynchronously in background to not block startup
+async function initializeAgentDiscovery() {
+  try {
+    discoveredAgents = discoverAgents();
+    initializeDescriptors(discoveredAgents);
+    console.log('[AGENTS] Discovered:', discoveredAgents.map(a => ({ id: a.id, found: !!a.path })));
+  } catch (err) {
+    console.error('[AGENTS] Discovery error:', err.message);
+  }
+}
+
+// Start immediately but don't wait for it
+initializeAgentDiscovery().catch(() => {});
 
 const modelCache = new Map();
 
