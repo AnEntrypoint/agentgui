@@ -971,6 +971,18 @@ class AgentGUIClient {
     if (!this.state.streamingBlocks) this.state.streamingBlocks = [];
     this.state.streamingBlocks.push(block);
 
+    // Thinking blocks are transient and not stored in DB, so render immediately
+    if (block.type === 'thinking' && this.state.currentSession?.id === data.sessionId) {
+      const streamingEl = document.getElementById(`streaming-${data.sessionId}`);
+      if (streamingEl) {
+        const blocksEl = streamingEl.querySelector('.streaming-blocks');
+        if (blocksEl) {
+          const el = this.renderer.renderBlock(block, data, blocksEl);
+          if (el) blocksEl.appendChild(el);
+        }
+      }
+    }
+
     // WebSocket is now just a notification trigger, not data source
     // Actual blocks come from database polling in startChunkPolling()
   }

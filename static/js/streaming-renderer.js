@@ -334,7 +334,9 @@ class StreamingRenderer {
         case 'code_block':
           return this.renderCode(event);
         case 'thinking_block':
-          return this.renderThinking(event);
+          // Thinking blocks are now rendered immediately via handleStreamingProgress
+          // Don't render them here to avoid duplicates
+          return null;
         case 'tool_use':
           return this.renderToolUse(event);
         default:

@@ -4222,6 +4222,7 @@ const BROADCAST_TYPES = new Set([
   'streaming_start', 'streaming_progress', 'streaming_complete', 'streaming_error',
   'tool_install_started', 'tool_install_progress', 'tool_install_complete', 'tool_install_failed',
   'tool_update_progress', 'tool_update_complete', 'tool_update_failed',
+  'tool_status_update',
   'tools_update_started', 'tools_update_complete', 'tools_refresh_complete',
   'pm2_monit_update', 'pm2_monitoring_started', 'pm2_monitoring_stopped',
   'pm2_list_response', 'pm2_start_response', 'pm2_stop_response',
@@ -4839,6 +4840,11 @@ function onServerReady() {
     } else if (evt.type === 'tool_install_failed' || evt.type === 'tool_update_failed') {
       queries.updateToolStatus(evt.toolId, { status: 'failed', error_message: evt.data?.error });
       queries.addToolInstallHistory(evt.toolId, evt.type.includes('update') ? 'update' : 'install', 'failed', evt.data?.error);
+    } else if (evt.type === 'tool_status_update') {
+      const d = evt.data || {};
+      if (d.installed) {
+        queries.updateToolStatus(evt.toolId, { status: 'installed', version: d.installedVersion || null, installed_at: Date.now() });
+      }
     }
   }).catch(err => console.error('[TOOLS] Auto-provision error:', err.message));
 

@@ -287,6 +287,17 @@
         operationInProgress.delete(data.toolId);
         render();
       }
+    } else if (data.type === 'tool_status_update') {
+      var tool = tools.find(t => t.id === data.toolId);
+      if (tool && data.data) {
+        if (data.data.installed) {
+          tool.status = data.data.isUpToDate ? 'installed' : 'needs_update';
+          tool.installed = true;
+          tool.isUpToDate = data.data.isUpToDate ?? true;
+          tool.installedVersion = data.data.installedVersion || tool.installedVersion;
+        }
+        render();
+      }
     } else if (data.type === 'tools_update_complete') {
       fetchTools();
     } else if (data.type === 'tools_refresh_complete') {
