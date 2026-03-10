@@ -1897,24 +1897,21 @@ const server = http.createServer(async (req, res) => {
         }));
         sendJSON(req, res, 200, { tools: result });
       } catch (err) {
-        console.log('[TOOLS-API] Error getting tools, returning synchronously cached status:', err.message);
-        // Return synchronous tool status (from cache) - this provides immediate response with last-known status
-        const tools = toolManager.TOOLS.map(tool => {
-          const status = toolManager.checkToolStatus(tool.id);
-          return {
-            id: tool.id,
-            name: tool.name,
-            pkg: tool.pkg,
-            category: tool.category || 'plugin',
-            installed: status?.installed || false,
-            status: (status?.installed) ? (status?.isUpToDate ? 'installed' : 'needs_update') : 'not_installed',
-            isUpToDate: status?.isUpToDate || false,
-            upgradeNeeded: status?.upgradeNeeded || false,
-            hasUpdate: (status?.upgradeNeeded && status?.installed) || false,
-            installedVersion: status?.installedVersion || null,
-            publishedVersion: status?.publishedVersion || null
-          };
-        });
+        console.log('[TOOLS-API] Error getting tools, returning cached status:', err.message);
+        // Return synchronously cached tool status - this provides immediate response with last-known status
+        const tools = toolManager.getAllToolsSync().map((t) => ({
+          id: t.id,
+          name: t.name,
+          pkg: t.pkg,
+          category: t.category || 'plugin',
+          installed: t.installed || false,
+          status: (t.installed) ? (t.isUpToDate ? 'installed' : 'needs_update') : 'not_installed',
+          isUpToDate: t.isUpToDate || false,
+          upgradeNeeded: t.upgradeNeeded || false,
+          hasUpdate: (t.upgradeNeeded && t.installed) || false,
+          installedVersion: t.installedVersion || null,
+          publishedVersion: t.publishedVersion || null
+        }));
         sendJSON(req, res, 200, { tools });
       }
       return;
