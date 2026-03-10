@@ -391,20 +391,31 @@ expressApp.use(BASE_URL + '/files/:conversationId', (req, res, next) => {
 function findCommand(cmd) {
   const isWindows = os.platform() === 'win32';
   const localBin = path.join(path.dirname(fileURLToPath(import.meta.url)), 'node_modules', '.bin', isWindows ? cmd + '.cmd' : cmd);
-  if (fs.existsSync(localBin)) return localBin;
+  if (fs.existsSync(localBin)) {
+    console.log(`[agent-discovery] Found ${cmd} in local node_modules`);
+    return localBin;
+  }
   try {
-    // Add timeout to prevent hanging during agent discovery
-    const timeoutMs = 2000;
+    // Increase timeout to 10 seconds to handle slower systems and running agents
+    const timeoutMs = 10000;
     if (isWindows) {
       const result = execSync(`where ${cmd}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: timeoutMs }).trim();
-      return result.split('\n')[0].trim();
+      if (result) {
+        console.log(`[agent-discovery] Found ${cmd} in PATH`);
+        return result.split('\n')[0].trim();
+      }
     } else {
       const result = execSync(`which ${cmd}`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'], timeout: timeoutMs }).trim();
-      return result;
+      if (result) {
+        console.log(`[agent-discovery] Found ${cmd} in PATH`);
+        return result;
+      }
     }
-  } catch (_) {
+  } catch (err) {
+    console.log(`[agent-discovery] ${cmd} not found or timed out`);
     return null;
   }
+  return null;
 }
 
 async function queryACPServerAgents(baseUrl) {
