@@ -909,18 +909,30 @@ class AgentGUIClient {
           console.warn('Failed to load prior messages for streaming view:', e);
         }
       }
-      const streamingDiv = document.createElement('div');
-      streamingDiv.className = 'message message-assistant streaming-message';
-      streamingDiv.id = `streaming-${data.sessionId}`;
-      streamingDiv.innerHTML = `
-        <div class="message-role">Assistant</div>
-        <div class="message-blocks streaming-blocks"></div>
-        <div class="streaming-indicator" style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;color:var(--color-text-secondary);font-size:0.875rem;">
-          <span class="animate-spin" style="display:inline-block;width:1rem;height:1rem;border:2px solid var(--color-border);border-top-color:var(--color-primary);border-radius:50%;"></span>
-          <span class="streaming-indicator-label">Thinking...</span>
-        </div>
-      `;
-      messagesEl.appendChild(streamingDiv);
+      let streamingDiv = document.getElementById(`streaming-${data.sessionId}`);
+      if (!streamingDiv) {
+        streamingDiv = document.createElement('div');
+        streamingDiv.className = 'message message-assistant streaming-message';
+        streamingDiv.id = `streaming-${data.sessionId}`;
+        streamingDiv.innerHTML = `
+          <div class="message-role">Assistant</div>
+          <div class="message-blocks streaming-blocks"></div>
+          <div class="streaming-indicator" style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;color:var(--color-text-secondary);font-size:0.875rem;">
+            <span class="animate-spin" style="display:inline-block;width:1rem;height:1rem;border:2px solid var(--color-border);border-top-color:var(--color-primary);border-radius:50%;"></span>
+            <span class="streaming-indicator-label">Thinking...</span>
+          </div>
+        `;
+        messagesEl.appendChild(streamingDiv);
+      } else {
+        // Reuse existing div - ensure streaming class and single indicator
+        streamingDiv.classList.add('streaming-message');
+        streamingDiv.querySelectorAll('.streaming-indicator').forEach(ind => ind.remove());
+        const indDiv = document.createElement('div');
+        indDiv.className = 'streaming-indicator';
+        indDiv.style = 'display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0;color:var(--color-text-secondary);font-size:0.875rem;';
+        indDiv.innerHTML = `<span class="animate-spin" style="display:inline-block;width:1rem;height:1rem;border:2px solid var(--color-border);border-top-color:var(--color-primary);border-radius:50%;"></span><span class="streaming-indicator-label">Thinking...</span>`;
+        streamingDiv.appendChild(indDiv);
+      }
       this.scrollToBottom(true);
     }
 
@@ -1149,10 +1161,13 @@ class AgentGUIClient {
     if (queueEl) queueEl.remove();
 
     const sessionId = data.sessionId || this.state.currentSession?.id;
+    // Remove ALL streaming indicators from the entire messages container
+    const outputEl2 = document.getElementById('output');
+    if (outputEl2) {
+      outputEl2.querySelectorAll('.streaming-indicator').forEach(ind => ind.remove());
+    }
     const streamingEl = document.getElementById(`streaming-${sessionId}`);
     if (streamingEl) {
-      // Remove ALL streaming indicators (not just the first one)
-      streamingEl.querySelectorAll('.streaming-indicator').forEach(ind => ind.remove());
       streamingEl.classList.remove('streaming-message');
       const prevTextEl = streamingEl.querySelector('.streaming-text-current');
       if (prevTextEl) prevTextEl.classList.remove('streaming-text-current');
