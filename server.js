@@ -372,19 +372,32 @@ expressApp.post(BASE_URL + '/api/upload/:conversationId', (req, res) => {
   }
 });
 
+// Cache fsbrowse routers per conversation to ensure API calls work
+const fsbrowseRouters = new Map();
+
 // fsbrowse file browser - mounted per conversation workingDirectory
 // Route: /gm/files/:conversationId/*
 expressApp.use(BASE_URL + '/files/:conversationId', (req, res, next) => {
-  const conv = queries.getConversation(req.params.conversationId);
+  const convId = req.params.conversationId;
+  const conv = queries.getConversation(convId);
   if (!conv || !conv.workingDirectory) {
     return res.status(404).json({ error: 'Conversation not found or no working directory' });
   }
+
   // Normalize the working directory path to avoid Windows path duplication issues
   const normalizedWorkingDir = path.resolve(conv.workingDirectory);
-  // Create a fresh fsbrowse router for this conversation's directory
-  const router = fsbrowse({ baseDir: normalizedWorkingDir, name: 'Files' });
-  // Strip the conversationId param from the path before passing to fsbrowse
-  req.baseUrl = BASE_URL + '/files/' + req.params.conversationId;
+
+  // Get or create cached fsbrowse router for this conversation
+  let router = fsbrowseRouters.get(convId);
+  if (!router) {
+    router = fsbrowse({ baseDir: normalizedWorkingDir, name: 'Files' });
+    fsbrowseRouters.set(convId, router);
+  }
+
+  // Set baseUrl before calling the router
+  req.baseUrl = BASE_URL + '/files/' + convId;
+  req.url = req.url.replace(new RegExp(`^${BASE_URL}/files/${convId}`), '');
+
   router(req, res, next);
 });
 
