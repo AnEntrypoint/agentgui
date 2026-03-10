@@ -14,14 +14,14 @@
     pre, code { font-family: 'Courier New', monospace; }
     .arch-diagram { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 1.5rem; overflow-x: auto; color: #94a3b8; font-size: 0.8rem; line-height: 1.6; }
   nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-  [data-theme="dark"] nav { background: rgba(20, 10, 45, 0.88) !important; border-color: rgba(118, 75, 162, 0.4) !important; color: #e2e8f0; }
-  [data-theme="light"] nav { background: rgba(232, 225, 255, 0.92) !important; border-color: rgba(102, 126, 234, 0.3) !important; color: #1e1b4b; }
+  #site-nav { background: rgba(20, 10, 45, 0.88); border-color: rgba(118, 75, 162, 0.4); }
+  #site-nav.light { background: rgba(232, 225, 255, 0.92); border-color: rgba(102, 126, 234, 0.3); }
   </style>
 </head>
 <body class="bg-base-1 text-content1">
 
   <!-- Nav -->
-  <nav class="border-b px-6 py-3 flex items-center justify-between">
+  <nav id="site-nav" class="border-b px-6 py-3 flex items-center justify-between">
     <span class="font-bold text-lg">AgentGUI</span>
     <div class="flex items-center gap-3">
       <a href="https://github.com/AnEntrypoint/agentgui" class="btn btn-sm btn-ghost">GitHub</a>
@@ -39,6 +39,7 @@
       html.setAttribute('data-theme', isDark ? 'light' : 'dark');
       document.getElementById('icon-sun').style.display = isDark ? 'block' : 'none';
       document.getElementById('icon-moon').style.display = isDark ? 'none' : 'block';
+      document.getElementById('site-nav').classList.toggle('light', isDark);
     }
   </script>
 
