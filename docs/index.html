@@ -1,633 +1,267 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="AgentGUI - Multi-agent GUI for AI coding assistants. Real-time streaming interface for Claude Code, Gemini CLI, OpenCode, and more.">
+  <meta name="description" content="AgentGUI - Multi-agent GUI for Claude Code, Gemini CLI, OpenCode and more. Real-time streaming, dark mode, voice, and SQLite persistence.">
   <title>AgentGUI - Multi-Agent GUI for AI Coding Assistants</title>
-  
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/rippleui@1.12.1/dist/css/styles.css"/>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    :root {
-      --primary: #3b82f6;
-      --primary-dark: #1e40af;
-      --secondary: #10b981;
-      --bg-dark: #111827;
-      --bg-darker: #0f172a;
-      --text-light: #f9fafb;
-      --text-gray: #9ca3af;
-      --border: #374151;
-    }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      line-height: 1.6;
-      color: #333;
-      background: #ffffff;
-    }
-
-    /* Hero Section */
-    .hero {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 120px 20px 80px;
-      text-align: center;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .hero::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120"><path fill="%23ffffff" fill-opacity="0.1" d="M0,0 L1200,0 L1200,60 Q600,120 0,60 Z"/></svg>') no-repeat bottom;
-      background-size: cover;
-    }
-
-    .hero-content {
-      max-width: 900px;
-      margin: 0 auto;
-      position: relative;
-      z-index: 1;
-    }
-
-    .hero h1 {
-      font-size: 3.5rem;
-      font-weight: 800;
-      margin-bottom: 1.5rem;
-      line-height: 1.2;
-    }
-
-    .hero p {
-      font-size: 1.3rem;
-      margin-bottom: 2.5rem;
-      opacity: 0.95;
-    }
-
-    .badges {
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-bottom: 2rem;
-    }
-
-    .badges img {
-      height: 20px;
-    }
-
-    .cta-buttons {
-      display: flex;
-      gap: 1rem;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-
-    .btn {
-      padding: 14px 32px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 1.1rem;
-      transition: all 0.3s ease;
-      display: inline-block;
-    }
-
-    .btn-primary {
-      background: white;
-      color: #667eea;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.2);
-    }
-
-    .btn-primary:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
-    }
-
-    .btn-secondary {
-      background: rgba(255,255,255,0.2);
-      color: white;
-      border: 2px solid white;
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255,255,255,0.3);
-      transform: translateY(-2px);
-    }
-
-    /* Container */
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 20px;
-    }
-
-    /* Section */
-    .section {
-      padding: 80px 20px;
-    }
-
-    .section-title {
-      text-align: center;
-      font-size: 2.5rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-      color: #1f2937;
-    }
-
-    .section-subtitle {
-      text-align: center;
-      font-size: 1.2rem;
-      color: #6b7280;
-      margin-bottom: 4rem;
-      max-width: 700px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-
-    /* Features Grid */
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 2.5rem;
-      margin-top: 3rem;
-    }
-
-    .feature-card {
-      background: white;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 2rem;
-      transition: all 0.3s ease;
-    }
-
-    .feature-card:hover {
-      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-      transform: translateY(-5px);
-    }
-
-    .feature-icon {
-      font-size: 2.5rem;
-      margin-bottom: 1rem;
-    }
-
-    .feature-card h3 {
-      font-size: 1.3rem;
-      margin-bottom: 0.8rem;
-      color: #1f2937;
-    }
-
-    .feature-card p {
-      color: #6b7280;
-      line-height: 1.7;
-    }
-
-    /* Screenshots */
-    .screenshot-gallery {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1.5rem;
-      margin-top: 3rem;
-    }
-
-    .screenshot-gallery.two-col {
-      grid-template-columns: repeat(2, 1fr);
-      margin-top: 1.5rem;
-    }
-
-    .screenshot-item {
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.12);
-      transition: all 0.3s ease;
-      background: #1f2937;
-    }
-
-    .screenshot-item:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 40px rgba(0,0,0,0.2);
-    }
-
-    .screenshot-item img {
-      width: 100%;
-      height: auto;
-      display: block;
-    }
-
-    .screenshot-caption {
-      padding: 0.875rem 1rem;
-      background: #1f2937;
-      text-align: center;
-      font-weight: 600;
-      color: #e5e7eb;
-      font-size: 0.9rem;
-      letter-spacing: 0.02em;
-    }
-
-    /* Code Block */
-    .code-block {
-      background: #1f2937;
-      color: #f9fafb;
-      padding: 2rem;
-      border-radius: 12px;
-      font-family: 'Courier New', monospace;
-      font-size: 1.1rem;
-      position: relative;
-      margin: 2rem 0;
-    }
-
-    .code-block pre {
-      margin: 0;
-      overflow-x: auto;
-    }
-
-    .copy-btn {
-      position: absolute;
-      top: 1rem;
-      right: 1rem;
-      background: #374151;
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: background 0.2s;
-    }
-
-    .copy-btn:hover {
-      background: #4b5563;
-    }
-
-    /* Architecture */
-    .architecture {
-      background: #f9fafb;
-      padding: 3rem;
-      border-radius: 12px;
-      margin-top: 3rem;
-    }
-
-    .architecture pre {
-      background: white;
-      padding: 2rem;
-      border-radius: 8px;
-      overflow-x: auto;
-      font-size: 0.9rem;
-      line-height: 1.6;
-      border: 1px solid #e5e7eb;
-    }
-
-    /* Footer */
-    .footer {
-      background: #1f2937;
-      color: #9ca3af;
-      text-align: center;
-      padding: 3rem 20px;
-    }
-
-    .footer-links {
-      display: flex;
-      gap: 2rem;
-      justify-content: center;
-      margin-bottom: 1.5rem;
-      flex-wrap: wrap;
-    }
-
-    .footer-links a {
-      color: #9ca3af;
-      text-decoration: none;
-      transition: color 0.2s;
-    }
-
-    .footer-links a:hover {
-      color: white;
-    }
-
-    /* Responsive */
-    @media (max-width: 768px) {
-      .hero h1 {
-        font-size: 2.5rem;
-      }
-
-      .hero p {
-        font-size: 1.1rem;
-      }
-
-      .section-title {
-        font-size: 2rem;
-      }
-
-      .features-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .screenshot-gallery,
-      .screenshot-gallery.two-col {
-        grid-template-columns: 1fr;
-      }
-    }
+    .hero-gradient { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .screenshot-item { transition: transform 0.3s ease, box-shadow 0.3s ease; }
+    .screenshot-item:hover { transform: translateY(-4px); box-shadow: 0 16px 48px rgba(0,0,0,0.4); }
+    pre, code { font-family: 'Courier New', monospace; }
+    .arch-diagram { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 1.5rem; overflow-x: auto; color: #94a3b8; font-size: 0.8rem; line-height: 1.6; }
   </style>
 </head>
-<body>
-  <!-- Hero Section -->
-  <section class="hero">
-    <div class="hero-content">
-      <h1>AgentGUI</h1>
-      <p>Multi-agent GUI for Claude Code, Gemini CLI, OpenCode &amp; more. Real-time streaming, dark mode, voice, and SQLite persistence.</p>
-      
-      <div class="badges">
+<body class="bg-base-1 text-content1">
+
+  <!-- Hero -->
+  <section class="hero-gradient text-white py-24 px-4 text-center">
+    <div class="max-w-3xl mx-auto">
+      <h1 class="text-5xl font-bold mb-4">AgentGUI</h1>
+      <p class="text-xl text-white/80 mb-6">Multi-agent GUI for Claude Code, Gemini CLI, OpenCode &amp; more.<br>Real-time streaming, dark mode, voice, and SQLite persistence.</p>
+      <div class="flex flex-wrap justify-center gap-2 mb-8">
         <img src="https://img.shields.io/npm/v/agentgui?color=brightgreen" alt="npm version">
         <img src="https://img.shields.io/npm/dw/agentgui?color=brightgreen" alt="weekly downloads">
         <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license">
       </div>
-
-      <div class="cta-buttons">
-        <a href="https://github.com/AnEntrypoint/agentgui" class="btn btn-primary">View on GitHub</a>
-        <a href="https://www.npmjs.com/package/agentgui" class="btn btn-secondary">npm Package</a>
+      <div class="flex flex-wrap justify-center gap-3">
+        <a href="https://github.com/AnEntrypoint/agentgui" class="btn btn-primary btn-lg btn-rounded">View on GitHub</a>
+        <a href="https://www.npmjs.com/package/agentgui" class="btn btn-ghost btn-lg btn-rounded border border-white/30">npm Package</a>
       </div>
     </div>
   </section>
 
   <!-- Quick Start -->
-  <section class="section">
-    <div class="container">
-      <h2 class="section-title">Get Started in Seconds</h2>
-      <p class="section-subtitle">No installation required. Run with npx and start coding with AI agents instantly.</p>
-
-      <div class="code-block">
-        <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-        <pre><code>npx agentgui</code></pre>
+  <section class="py-16 px-4 text-center">
+    <div class="max-w-2xl mx-auto">
+      <h2 class="text-3xl font-bold mb-2">Get Started in Seconds</h2>
+      <p class="text-content3 mb-6">No installation required. Run with npx and start coding with AI agents instantly.</p>
+      <div class="relative bg-[#0f172a] rounded-xl p-6 text-left border border-[#1e293b]">
+        <button class="btn btn-sm btn-ghost absolute top-3 right-3 text-content3" onclick="navigator.clipboard.writeText('npx agentgui');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)">Copy</button>
+        <pre class="text-green-400 text-lg">$ npx agentgui</pre>
       </div>
-
-      <p style="text-align: center; color: #6b7280; margin-top: 1rem;">
-        Server starts at <strong>http://localhost:3000/gm/</strong>
-      </p>
+      <p class="text-content3 mt-3 text-sm">Server starts at <code class="text-blue-400">http://localhost:3000/gm/</code></p>
     </div>
   </section>
 
   <!-- Why AgentGUI -->
-  <section class="section">
-    <div class="container">
-      <h2 class="section-title">Why AgentGUI?</h2>
-      <p class="section-subtitle">Stop juggling multiple terminal windows. Work with all your AI agents in one unified interface.</p>
-
-      <div class="features-grid">
-        <div class="feature-card">
-          <h3>📊 Compare Side-by-Side</h3>
-          <p>Test the same prompt across Claude Code, Gemini CLI, OpenCode, and others to find the best approach for your task.</p>
+  <section class="py-16 px-4 bg-base-2">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-2">Why AgentGUI?</h2>
+      <p class="text-content3 text-center mb-10">Stop juggling multiple terminal windows. One interface for all your AI agents.</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">📊 Compare Side-by-Side</h3>
+          <p class="text-content3">Test the same prompt across Claude Code, Gemini CLI, OpenCode, and others to find the best approach.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>💾 Never Lose Context</h3>
-          <p>Every conversation, file change, and terminal output is automatically saved. Resume interrupted work exactly where you left off.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">💾 Never Lose Context</h3>
+          <p class="text-content3">Every conversation, file change, and terminal output is automatically saved. Resume exactly where you left off.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>👁️ See Everything</h3>
-          <p>Watch streaming responses, file changes, and tool calls in real-time instead of parsing raw JSON in your terminal.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">👁️ See Everything</h3>
+          <p class="text-content3">Watch streaming responses, file changes, and tool calls in real-time instead of parsing raw JSON.</p>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Features -->
-  <section class="section" style="background: #f9fafb;">
-    <div class="container">
-      <h2 class="section-title">Features</h2>
-      <p class="section-subtitle">Everything you need to work with multiple AI coding agents in one place.</p>
-
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">🤖</div>
-          <h3>Multi-Agent Support</h3>
-          <p>Auto-discovers 14 AI coding agents including Claude Code, Gemini CLI, OpenCode, Kilo, Goose, Cline, Codex, Kiro, and more.</p>
+  <section class="py-16 px-4">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-2">Features</h2>
+      <p class="text-content3 text-center mb-10">Everything you need to work with multiple AI coding agents in one place.</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="card p-6">
+          <div class="text-4xl mb-3">🤖</div>
+          <h3 class="font-bold text-lg mb-2">Multi-Agent Support</h3>
+          <p class="text-content3">Auto-discovers 14 AI coding agents: Claude Code, Gemini CLI, OpenCode, Kilo, Goose, Cline, Codex, Kiro, and more.</p>
         </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <h3>Real-Time Streaming</h3>
-          <p>WebSocket-based streaming for instant responses. Watch your agent work in real-time with live execution visualization.</p>
+        <div class="card p-6">
+          <div class="text-4xl mb-3">⚡</div>
+          <h3 class="font-bold text-lg mb-2">Real-Time Streaming</h3>
+          <p class="text-content3">WebSocket-based streaming for instant responses. Watch your agent work live with execution visualization.</p>
         </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">💾</div>
-          <h3>Persistent Storage</h3>
-          <p>SQLite database stores all conversations, sessions, and execution history. Resume where you left off.</p>
+        <div class="card p-6">
+          <div class="text-4xl mb-3">💾</div>
+          <h3 class="font-bold text-lg mb-2">Persistent Storage</h3>
+          <p class="text-content3">SQLite WAL mode stores all conversations, sessions, and execution history. Resume where you left off.</p>
         </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">📁</div>
-          <h3>File Management</h3>
-          <p>Integrated file browser with drag-and-drop uploads. Direct file editing and context-aware operations.</p>
+        <div class="card p-6">
+          <div class="text-4xl mb-3">📁</div>
+          <h3 class="font-bold text-lg mb-2">File Management</h3>
+          <p class="text-content3">Integrated file browser with drag-and-drop uploads. Direct file editing and context-aware operations.</p>
         </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">🎤</div>
-          <h3>Speech Capabilities</h3>
-          <p>Built-in speech-to-text and text-to-speech via Hugging Face Whisper. No API keys required.</p>
+        <div class="card p-6">
+          <div class="text-4xl mb-3">🎤</div>
+          <h3 class="font-bold text-lg mb-2">Voice I/O</h3>
+          <p class="text-content3">Built-in speech-to-text and text-to-speech via Hugging Face Whisper. No API keys required.</p>
         </div>
-
-        <div class="feature-card">
-          <div class="feature-icon">🔧</div>
-          <h3>Developer Friendly</h3>
-          <p>Hot reload, REST API, WebSocket endpoints, and extensible plugin system for custom agents.</p>
+        <div class="card p-6">
+          <div class="text-4xl mb-3">🔧</div>
+          <h3 class="font-bold text-lg mb-2">Developer Friendly</h3>
+          <p class="text-content3">Hot reload, REST API, WebSocket endpoints, and extensible plugin system for custom agents.</p>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Screenshots -->
-  <section class="section">
-    <div class="container">
-      <h2 class="section-title">Screenshots</h2>
-      <p class="section-subtitle">See AgentGUI in action</p>
-
-      <div class="screenshot-gallery">
-        <div class="screenshot-item">
-          <img src="screenshot-light.png" alt="Welcome Screen - Light Mode">
-          <div class="screenshot-caption">Welcome Screen · Light Mode</div>
+  <section class="py-16 px-4 bg-base-2">
+    <div class="max-w-6xl mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-2">Screenshots</h2>
+      <p class="text-content3 text-center mb-10">See AgentGUI in action</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="screenshot-item rounded-xl overflow-hidden border border-base-3">
+          <img src="screenshot-light.png" alt="Light Mode" class="w-full">
+          <div class="bg-base-3 text-center py-2 px-3 text-sm font-semibold">Welcome Screen · Light Mode</div>
         </div>
-        <div class="screenshot-item">
-          <img src="screenshot-dark.png" alt="Welcome Screen - Dark Mode">
-          <div class="screenshot-caption">Welcome Screen · Dark Mode</div>
+        <div class="screenshot-item rounded-xl overflow-hidden border border-base-3">
+          <img src="screenshot-dark.png" alt="Dark Mode" class="w-full">
+          <div class="bg-base-3 text-center py-2 px-3 text-sm font-semibold">Welcome Screen · Dark Mode</div>
         </div>
-        <div class="screenshot-item">
-          <img src="screenshot-dark-conversation.png" alt="Live Streaming">
-          <div class="screenshot-caption">Live Agent Streaming</div>
+        <div class="screenshot-item rounded-xl overflow-hidden border border-base-3">
+          <img src="screenshot-dark-conversation.png" alt="Live Streaming" class="w-full">
+          <div class="bg-base-3 text-center py-2 px-3 text-sm font-semibold">Live Agent Streaming</div>
         </div>
       </div>
-      <div class="screenshot-gallery two-col">
-        <div class="screenshot-item">
-          <img src="screenshot-conversation.png" alt="Tool Use & Code Output">
-          <div class="screenshot-caption">Tool Use &amp; Code Output</div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div class="screenshot-item rounded-xl overflow-hidden border border-base-3">
+          <img src="screenshot-conversation.png" alt="Tool Use & Code Output" class="w-full">
+          <div class="bg-base-3 text-center py-2 px-3 text-sm font-semibold">Tool Use &amp; Code Output</div>
         </div>
-        <div class="screenshot-item">
-          <img src="screenshot-tools.png" alt="Tools & Extensions">
-          <div class="screenshot-caption">Tools &amp; Extensions Manager</div>
+        <div class="screenshot-item rounded-xl overflow-hidden border border-base-3">
+          <img src="screenshot-tools.png" alt="Tools & Extensions" class="w-full">
+          <div class="bg-base-3 text-center py-2 px-3 text-sm font-semibold">Tools &amp; Extensions Manager</div>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Use Cases -->
-  <section class="section">
-    <div class="container">
-      <h2 class="section-title">Use Cases</h2>
-      <p class="section-subtitle">Practical scenarios where AgentGUI shines</p>
-
-      <div class="features-grid">
-        <div class="feature-card">
-          <h3>Multi-Agent Comparison</h3>
-          <p>Run the same task through different agents to compare approaches, code quality, and execution speed.</p>
+  <section class="py-16 px-4">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-2">Use Cases</h2>
+      <p class="text-content3 text-center mb-10">Practical scenarios where AgentGUI shines</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">Multi-Agent Comparison</h3>
+          <p class="text-content3">Run the same task through different agents to compare approaches, code quality, and execution speed.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>Long-Running Projects</h3>
-          <p>Build complex features across multiple sessions without losing context or conversation history.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">Long-Running Projects</h3>
+          <p class="text-content3">Build complex features across multiple sessions without losing context or conversation history.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>Team Collaboration</h3>
-          <p>Share conversation URLs and working directories for pair programming with AI agents.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">Team Collaboration</h3>
+          <p class="text-content3">Share conversation URLs and working directories for pair programming with AI agents.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>Agent Development</h3>
-          <p>Test and debug custom agents with full visibility into streaming events and tool calls.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">Agent Development</h3>
+          <p class="text-content3">Test and debug custom agents with full visibility into streaming events and tool calls.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>Offline Speech</h3>
-          <p>Use local speech-to-text and text-to-speech without API costs or internet dependency.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">Offline Speech</h3>
+          <p class="text-content3">Use local speech-to-text and text-to-speech without API costs or internet dependency.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>Code Review Sessions</h3>
-          <p>Review AI-generated changes in a visual diff view with file browser integration.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">Code Review</h3>
+          <p class="text-content3">Review AI-generated changes in a visual view with file browser and conversation history.</p>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Architecture -->
-  <section class="section" style="background: #f9fafb;">
-    <div class="container">
-      <h2 class="section-title">Architecture</h2>
-      <p class="section-subtitle">Built for performance, reliability, and extensibility</p>
-
-      <div class="architecture">
-        <pre><code>┌─────────────────────────────────────────────────────────────────┐
-│                         Browser Client                          │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────────────┐ │
-│  │   UI Layer   │ │   WebSocket  │ │   Streaming Renderer     │ │
-│  │  Components  │ │   Manager    │ │   (Event Processor)      │ │
-│  └──────────────┘ └──────────────┘ └──────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │   HTTP + WS       │
-                    │   Server          │
-                    │  (server.js)      │
-                    └─────────┬─────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-┌───────▼────────┐  ┌─────────▼─────────┐  ┌───────▼────────┐
-│   SQLite DB    │  │  Agent Runner     │  │   Speech       │
-│  (database.js) │  │ (claude-runner.js)│  │  (speech.js)   │
-└────────────────┘  └─────────┬─────────┘  └────────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │  Agent CLI Tools  │
-                    │  (spawned procs)  │
-                    └───────────────────┘</code></pre>
+  <section class="py-16 px-4 bg-base-2">
+    <div class="max-w-5xl mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-2">Architecture</h2>
+      <p class="text-content3 text-center mb-10">Built for performance, reliability, and extensibility</p>
+      <div class="arch-diagram">
+        <pre>┌─────────────────────────────────────────────────────┐
+│                    Browser Client                    │
+│  ┌─────────────┐ ┌──────────────┐ ┌───────────────┐ │
+│  │  UI Layer   │ │  WebSocket   │ │   Streaming   │ │
+│  │ Components  │ │   Manager    │ │   Renderer    │ │
+│  └─────────────┘ └──────────────┘ └───────────────┘ │
+└─────────────────────────┬───────────────────────────┘
+                          │ HTTP + WebSocket
+                 ┌────────▼────────┐
+                 │   server.js     │
+                 │  HTTP + WS API  │
+                 └────────┬────────┘
+        ┌─────────────────┼─────────────────┐
+┌───────▼──────┐ ┌────────▼────────┐ ┌──────▼──────┐
+│  SQLite DB   │ │  Agent Runner   │ │   Speech    │
+│ (WAL mode)   │ │ (claude-runner) │ │ (Whisper)   │
+└──────────────┘ └────────┬────────┘ └─────────────┘
+                          │
+                 ┌────────▼────────┐
+                 │  CLI Processes  │
+                 │ claude / gemini │
+                 └─────────────────┘</pre>
       </div>
-
-      <div class="features-grid" style="margin-top: 3rem;">
-        <div class="feature-card">
-          <h3>REST API</h3>
-          <p>Complete REST API for conversations, messages, agents, tools, and speech operations.</p>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">REST API</h3>
+          <p class="text-content3">Complete REST API for conversations, messages, agents, tools, and speech operations.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>WebSocket Sync</h3>
-          <p>Real-time bidirectional communication with event-based streaming and subscription model.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">WebSocket Sync</h3>
+          <p class="text-content3">Real-time bidirectional communication with event-based streaming and subscription model.</p>
         </div>
-
-        <div class="feature-card">
-          <h3>SQLite WAL Mode</h3>
-          <p>Write-Ahead Logging for concurrent reads and writes without blocking.</p>
+        <div class="card p-6">
+          <h3 class="font-bold text-lg mb-2">SQLite WAL Mode</h3>
+          <p class="text-content3">Write-Ahead Logging for concurrent reads and writes without blocking.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Installation Options -->
-  <section class="section">
-    <div class="container">
-      <h2 class="section-title">Installation Options</h2>
-      
-      <div style="max-width: 800px; margin: 0 auto;">
-        <h3 style="margin: 2rem 0 1rem;">Quick Start (Recommended)</h3>
-        <div class="code-block">
-          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-          <pre><code>npx agentgui</code></pre>
-        </div>
+  <!-- Installation -->
+  <section class="py-16 px-4">
+    <div class="max-w-2xl mx-auto">
+      <h2 class="text-3xl font-bold text-center mb-10">Installation Options</h2>
 
-        <h3 style="margin: 2rem 0 1rem;">Manual Installation</h3>
-        <div class="code-block">
-          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-          <pre><code>git clone https://github.com/AnEntrypoint/agentgui.git
-cd agentgui
-npm install
-npm run dev</code></pre>
-        </div>
+      <h3 class="font-semibold text-lg mb-3">Quick Start (Recommended)</h3>
+      <div class="relative bg-[#0f172a] rounded-xl p-5 border border-[#1e293b] mb-8">
+        <button class="btn btn-sm btn-ghost absolute top-3 right-3 text-content3" onclick="navigator.clipboard.writeText('npx agentgui');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)">Copy</button>
+        <pre class="text-green-400">$ npx agentgui</pre>
+      </div>
 
-        <h3 style="margin: 2rem 0 1rem;">System Requirements</h3>
-        <ul style="list-style: none; padding: 0;">
-          <li style="padding: 0.5rem 0; color: #4b5563;">✓ Node.js 18+ (LTS recommended)</li>
-          <li style="padding: 0.5rem 0; color: #4b5563;">✓ npm or bun package manager</li>
-          <li style="padding: 0.5rem 0; color: #4b5563;">✓ At least one AI coding agent (Claude Code, Gemini CLI, etc.)</li>
-        </ul>
+      <h3 class="font-semibold text-lg mb-3">Manual Installation</h3>
+      <div class="relative bg-[#0f172a] rounded-xl p-5 border border-[#1e293b] mb-8">
+        <button class="btn btn-sm btn-ghost absolute top-3 right-3 text-content3" onclick="navigator.clipboard.writeText('git clone https://github.com/AnEntrypoint/agentgui.git\ncd agentgui\nnpm install\nnpm run dev');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)">Copy</button>
+        <pre class="text-green-400">$ git clone https://github.com/AnEntrypoint/agentgui.git
+$ cd agentgui
+$ npm install
+$ npm run dev</pre>
+      </div>
+
+      <h3 class="font-semibold text-lg mb-3">System Requirements</h3>
+      <div class="card p-5 space-y-2">
+        <div class="flex items-center gap-2"><span class="badge badge-success badge-sm">✓</span> <span class="text-content2">Node.js 18+ (LTS recommended)</span></div>
+        <div class="flex items-center gap-2"><span class="badge badge-success badge-sm">✓</span> <span class="text-content2">npm or bun package manager</span></div>
+        <div class="flex items-center gap-2"><span class="badge badge-success badge-sm">✓</span> <span class="text-content2">At least one AI coding agent (Claude Code, Gemini CLI, etc.)</span></div>
       </div>
     </div>
   </section>
 
   <!-- Footer -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-links">
-        <a href="https://github.com/AnEntrypoint/agentgui">GitHub</a>
-        <a href="https://www.npmjs.com/package/agentgui">npm</a>
-        <a href="https://github.com/AnEntrypoint/agentgui/issues">Issues</a>
-        <a href="https://github.com/AnEntrypoint/agentgui#readme">Documentation</a>
+  <footer class="bg-base-2 border-t border-base-3 py-10 px-4 text-center">
+    <div class="max-w-4xl mx-auto">
+      <div class="flex flex-wrap justify-center gap-6 mb-4">
+        <a href="https://github.com/AnEntrypoint/agentgui" class="text-content2 hover:text-content1 transition-colors">GitHub</a>
+        <a href="https://www.npmjs.com/package/agentgui" class="text-content2 hover:text-content1 transition-colors">npm</a>
+        <a href="https://github.com/AnEntrypoint/agentgui/issues" class="text-content2 hover:text-content1 transition-colors">Issues</a>
+        <a href="https://github.com/AnEntrypoint/agentgui#readme" class="text-content2 hover:text-content1 transition-colors">Documentation</a>
       </div>
-      <p>MIT License © 2025 AnEntrypoint</p>
-      <p style="margin-top: 1rem;">Made with ❤️ by the AgentGUI team</p>
+      <p class="text-content3 text-sm">MIT License © 2025 AnEntrypoint · Made with ❤️ by the AgentGUI team</p>
     </div>
   </footer>
 
-  <script>
-    function copyCode(btn) {
-      const codeBlock = btn.nextElementSibling;
-      const text = codeBlock.textContent;
-      
-      navigator.clipboard.writeText(text).then(() => {
-        const originalText = btn.textContent;
-        btn.textContent = 'Copied!';
-        setTimeout(() => {
-          btn.textContent = originalText;
-        }, 2000);
-      });
-    }
-  </script>
 </body>
 </html>
