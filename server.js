@@ -4652,87 +4652,13 @@ async function resumeInterruptedStreams() {
     for (let i = 0; i < toResume.length; i++) {
       const conv = toResume[i];
       try {
-        // Find previous incomplete sessions to load checkpoint from
         const previousSessions = [...queries.getSessionsByStatus(conv.id, 'active'), ...queries.getSessionsByStatus(conv.id, 'pending')];
         const previousSessionId = previousSessions.length > 0 ? previousSessions[0].id : null;
-
-        // Load checkpoint from previous session
-        const checkpoint = previousSessionId ? checkpointManager.loadCheckpoint(previousSessionId) : null;
-
-        for (const s of previousSessions) {
-          queries.updateSession(s.id, { status: 'interrupted', error: 'Server restarted, resuming', completed_at: Date.now() });
-        }
-
-        const lastMsg = queries.getLastUserMessage(conv.id);
-        const prompt = lastMsg?.content || 'continue';
-        const promptText = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-
-        const session = queries.createSession(conv.id);
-        queries.createEvent('session.created', {
-          sessionId: session.id,
-          resumeReason: 'server_restart',
-          claudeSessionId: conv.claudeSessionId,
-          checkpointFrom: previousSessionId
-        }, conv.id, session.id);
-
-        activeExecutions.set(conv.id, {
-          pid: null,
-          startTime: Date.now(),
-          sessionId: session.id,
-          lastActivity: Date.now()
-        });
-
-        broadcastSync({
-          type: 'streaming_start',
-          sessionId: session.id,
-          conversationId: conv.id,
-          agentId: conv.agentType,
-          resumed: true,
-          checkpointAvailable: !!checkpoint,
-          timestamp: Date.now()
-        });
-
-        // Store checkpoint to inject when client subscribes (not now, since no clients connected yet)
-        if (checkpoint) {
-          checkpointManager.storeCheckpointForDelay(conv.id, checkpoint);
-          checkpointManager.markSessionResumed(previousSessionId);
-          console.log(`[RESUME] Checkpoint stored for ${conv.id}, will inject on next client subscribe`);
-        }
-
-        const messageId = lastMsg?.id || null;
-        console.log(`[RESUME] Resuming conv ${conv.id} (claude session: ${conv.claudeSessionId}) with checkpoint=${!!checkpoint}`);
-
-        try {
-          await processMessageWithStreaming(conv.id, messageId, session.id, promptText, conv.agentType, conv.model, conv.subAgent);
-        } catch (err) {
-          console.error(`[RESUME] Error resuming conv ${conv.id}: ${err.message}`);
-          queries.setIsStreaming(conv.id, false);
-          const activeSessions = queries.getSessionsByStatus(conv.id, 'active');
-          const pendingSessions = queries.getSessionsByStatus(conv.id, 'pending');
-          for (const s of [...activeSessions, ...pendingSessions]) {
-            queries.updateSession(s.id, {
-              status: 'error',
-              error: 'Resume failed: ' + err.message,
-              completed_at: Date.now()
-            });
-          }
-        }
-
-        if (i < toResume.length - 1) {
-          await new Promise(r => setTimeout(r, 200));
-        }
+        await resumeConversation(conv.id, previousSessionId, 'Server restarted, resuming');
+        if (i < toResume.length - 1) await new Promise(r => setTimeout(r, 200));
       } catch (err) {
         console.error(`[RESUME] Failed to resume conv ${conv.id}: ${err.message}`);
         queries.setIsStreaming(conv.id, false);
-        const activeSessions = queries.getSessionsByStatus(conv.id, 'active');
-        const pendingSessions = queries.getSessionsByStatus(conv.id, 'pending');
-        for (const s of [...activeSessions, ...pendingSessions]) {
-          queries.updateSession(s.id, {
-            status: 'error',
-            error: 'Resume failed: ' + err.message,
-            completed_at: Date.now()
-          });
-        }
       }
     }
   } catch (err) {
@@ -4753,14 +4679,29 @@ function isProcessAlive(pid) {
 function markAgentDead(conversationId, entry, reason) {
   if (!activeExecutions.has(conversationId)) return;
   activeExecutions.delete(conversationId);
+
+  const RESUME_WINDOW_MS = 600000; // 10 minutes
+  const sessionAge = entry.startTime ? Date.now() - entry.startTime : Infinity;
+  const shouldRestart = sessionAge < RESUME_WINDOW_MS;
+
   queries.setIsStreaming(conversationId, false);
   if (entry.sessionId) {
     queries.updateSession(entry.sessionId, {
-      status: 'error',
+      status: shouldRestart ? 'interrupted' : 'error',
       error: reason,
       completed_at: Date.now()
     });
   }
+
+  if (shouldRestart) {
+    // Session was recent — restart it automatically
+    resumeConversation(conversationId, entry.sessionId, reason).catch(err => {
+      console.error(`[RESUME] Auto-restart failed for conv ${conversationId}: ${err.message}`);
+      queries.setIsStreaming(conversationId, false);
+    });
+    return;
+  }
+
   broadcastSync({
     type: 'streaming_error',
     sessionId: entry.sessionId,
@@ -4770,6 +4711,61 @@ function markAgentDead(conversationId, entry, reason) {
     timestamp: Date.now()
   });
   drainMessageQueue(conversationId);
+}
+
+// Resume a single conversation after interruption. Used both by markAgentDead and resumeInterruptedStreams.
+async function resumeConversation(conversationId, previousSessionId, reason) {
+  const conv = queries.getConversation(conversationId);
+  if (!conv) throw new Error('Conversation not found');
+
+  const checkpoint = previousSessionId ? checkpointManager.loadCheckpoint(previousSessionId) : null;
+
+  if (previousSessionId) {
+    // Only mark interrupted if not already done
+    const prev = queries.getSession ? queries.getSession(previousSessionId) : null;
+    if (prev && prev.status !== 'interrupted') {
+      queries.updateSession(previousSessionId, { status: 'interrupted', error: reason || 'Restarting', completed_at: Date.now() });
+    }
+    if (checkpoint) {
+      checkpointManager.markSessionResumed(previousSessionId);
+    }
+  }
+
+  const lastMsg = queries.getLastUserMessage(conversationId);
+  const promptText = typeof lastMsg?.content === 'string' ? lastMsg.content : JSON.stringify(lastMsg?.content || 'continue');
+
+  const session = queries.createSession(conversationId);
+  queries.createEvent('session.created', {
+    sessionId: session.id,
+    resumeReason: 'interrupted',
+    claudeSessionId: conv.claudeSessionId,
+    checkpointFrom: previousSessionId || null
+  }, conversationId, session.id);
+
+  activeExecutions.set(conversationId, {
+    pid: null,
+    startTime: Date.now(),
+    sessionId: session.id,
+    lastActivity: Date.now()
+  });
+
+  broadcastSync({
+    type: 'streaming_start',
+    sessionId: session.id,
+    conversationId,
+    agentId: conv.agentType,
+    resumed: true,
+    checkpointAvailable: !!checkpoint,
+    timestamp: Date.now()
+  });
+
+  if (checkpoint) {
+    checkpointManager.storeCheckpointForDelay(conversationId, checkpoint);
+    console.log(`[RESUME] Checkpoint stored for conv ${conversationId}`);
+  }
+
+  console.log(`[RESUME] Restarting conv ${conversationId} (reason: ${reason})`);
+  await processMessageWithStreaming(conversationId, lastMsg?.id || null, session.id, promptText, conv.agentType, conv.model, conv.subAgent);
 }
 
 function performAgentHealthCheck() {
