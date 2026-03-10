@@ -14,12 +14,14 @@
     pre, code { font-family: 'Courier New', monospace; }
     .arch-diagram { background: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 1.5rem; overflow-x: auto; color: #94a3b8; font-size: 0.8rem; line-height: 1.6; }
   nav { position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  [data-theme="dark"] nav { background: rgba(30, 20, 60, 0.85); border-color: rgba(118, 75, 162, 0.3); }
+  [data-theme="light"] nav { background: rgba(240, 235, 255, 0.9); border-color: rgba(102, 126, 234, 0.25); }
   </style>
 </head>
 <body class="bg-base-1 text-content1">
 
   <!-- Nav -->
-  <nav class="bg-base-1/80 border-b border-base-content/10 px-6 py-3 flex items-center justify-between">
+  <nav class="border-b px-6 py-3 flex items-center justify-between">
     <span class="font-bold text-lg">AgentGUI</span>
     <div class="flex items-center gap-3">
       <a href="https://github.com/AnEntrypoint/agentgui" class="btn btn-sm btn-ghost">GitHub</a>
