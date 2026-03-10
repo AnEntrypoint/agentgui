@@ -2303,10 +2303,14 @@ class AgentGUIClient {
           .map(a => `<option value="${a.id}">${a.name.split(/[\s\-]+/)[0]}</option>`)
           .join('');
         this.ui.agentSelector.style.display = 'inline-block';
+        console.log(`[Agent Selector] Loaded ${subAgents.length} sub-agents for ${cliAgentId}`);
         this.loadModelsForAgent(cliAgentId);
+      } else {
+        console.log(`[Agent Selector] No sub-agents found for ${cliAgentId}`);
       }
-    } catch (_) {
+    } catch (err) {
       // No sub-agents available for this CLI tool — keep hidden
+      console.warn(`[Agent Selector] Failed to load sub-agents for ${cliAgentId}:`, err.message);
     }
   }
 
