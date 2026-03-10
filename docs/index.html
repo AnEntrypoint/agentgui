@@ -175,52 +175,6 @@
     </div>
   </section>
 
-  <!-- Architecture -->
-  <section class="py-16 px-4 bg-base-2">
-    <div class="max-w-5xl mx-auto">
-      <h2 class="text-3xl font-bold text-center mb-2">Architecture</h2>
-      <p class="text-content3 text-center mb-10">Built for performance, reliability, and extensibility</p>
-      <div class="arch-diagram">
-        <pre>┌─────────────────────────────────────────────────────┐
-│                    Browser Client                    │
-│  ┌─────────────┐ ┌──────────────┐ ┌───────────────┐ │
-│  │  UI Layer   │ │  WebSocket   │ │   Streaming   │ │
-│  │ Components  │ │   Manager    │ │   Renderer    │ │
-│  └─────────────┘ └──────────────┘ └───────────────┘ │
-└─────────────────────────┬───────────────────────────┘
-                          │ HTTP + WebSocket
-                 ┌────────▼────────┐
-                 │   server.js     │
-                 │  HTTP + WS API  │
-                 └────────┬────────┘
-        ┌─────────────────┼─────────────────┐
-┌───────▼──────┐ ┌────────▼────────┐ ┌──────▼──────┐
-│  SQLite DB   │ │  Agent Runner   │ │   Speech    │
-│ (WAL mode)   │ │ (claude-runner) │ │ (Whisper)   │
-└──────────────┘ └────────┬────────┘ └─────────────┘
-                          │
-                 ┌────────▼────────┐
-                 │  CLI Processes  │
-                 │ claude / gemini │
-                 └─────────────────┘</pre>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-        <div class="card p-6">
-          <h3 class="font-bold text-lg mb-2">REST API</h3>
-          <p class="text-content3">Complete REST API for conversations, messages, agents, tools, and speech operations.</p>
-        </div>
-        <div class="card p-6">
-          <h3 class="font-bold text-lg mb-2">WebSocket Sync</h3>
-          <p class="text-content3">Real-time bidirectional communication with event-based streaming and subscription model.</p>
-        </div>
-        <div class="card p-6">
-          <h3 class="font-bold text-lg mb-2">SQLite WAL Mode</h3>
-          <p class="text-content3">Write-Ahead Logging for concurrent reads and writes without blocking.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <!-- Installation -->
   <section class="py-16 px-4">
     <div class="max-w-2xl mx-auto">
