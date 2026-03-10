@@ -706,10 +706,12 @@ export const queries = {
     return stmt.all();
   },
 
-  getResumableConversations() {
+  getResumableConversations(withinMs = 600000) {
     // Get conversations with incomplete sessions that can be resumed.
     // Only includes sessions with status: active, pending, interrupted.
     // Excludes complete and error sessions - agents that finished should not be resumed.
+    // Only resumes sessions that started within the last withinMs (default 10 minutes).
+    const cutoff = Date.now() - withinMs;
     const stmt = prep(
       `SELECT DISTINCT c.id, c.title, c.claudeSessionId, c.agentId, c.agentType, c.workingDirectory, c.model, c.subAgent
        FROM conversations c
@@ -717,9 +719,10 @@ export const queries = {
          SELECT 1 FROM sessions s
          WHERE s.conversationId = c.id
          AND s.status IN ('active', 'pending', 'interrupted')
+         AND s.started_at > ?
        )`
     );
-    return stmt.all();
+    return stmt.all(cutoff);
   },
 
   clearAllStreamingFlags() {

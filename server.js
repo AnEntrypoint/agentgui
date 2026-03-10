@@ -4575,13 +4575,12 @@ server.on('error', (err) => {
 function recoverStaleSessions() {
   try {
     const now = Date.now();
+    const RESUME_WINDOW_MS = 600000; // 10 minutes
 
     const resumable = new Set();
-    const resumableConvs = queries.getResumableConversations ? queries.getResumableConversations() : [];
+    const resumableConvs = queries.getResumableConversations ? queries.getResumableConversations(RESUME_WINDOW_MS) : [];
     for (const conv of resumableConvs) {
-      if (conv.agentType === 'claude-code') {
-        resumable.add(conv.id);
-      }
+      resumable.add(conv.id); // All agent types are resumable
     }
 
     const staleSessions = queries.getActiveSessions ? queries.getActiveSessions() : [];
@@ -4621,23 +4620,29 @@ function recoverStaleSessions() {
 
 async function resumeInterruptedStreams() {
   try {
+    const RESUME_WINDOW_MS = 600000; // Only resume sessions active within the last 10 minutes
+    const cutoff = Date.now() - RESUME_WINDOW_MS;
+
     // Get conversations marked as streaming in database (isStreaming=1)
     // Fall back to getResumableConversations if isStreaming is not being used
     let toResume = [];
 
     // Primary: Check database isStreaming flag for conversations still marked as active
-    // Exclude conversations whose last session completed - they should not be resumed
+    // Exclude conversations whose last session completed or started more than 10 min ago
     const streamingConvs = queries.getConversations().filter(c => {
       if (c.isStreaming !== 1) return false;
       const lastSession = queries.getLatestSession(c.id);
-      return !lastSession || lastSession.status !== 'complete';
+      if (!lastSession) return false;
+      if (lastSession.status === 'complete') return false;
+      // Only resume if session started within the last 10 minutes
+      return lastSession.started_at > cutoff;
     });
 
     if (streamingConvs.length > 0) {
       toResume = streamingConvs;
     } else {
-      // Fallback: Use session-based resumable conversations
-      toResume = queries.getResumableConversations ? queries.getResumableConversations() : [];
+      // Fallback: Use session-based resumable conversations (already filtered by 10 min)
+      toResume = queries.getResumableConversations ? queries.getResumableConversations(RESUME_WINDOW_MS) : [];
     }
 
     if (toResume.length === 0) return;
