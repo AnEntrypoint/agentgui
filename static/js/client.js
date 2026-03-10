@@ -1151,8 +1151,8 @@ class AgentGUIClient {
     const sessionId = data.sessionId || this.state.currentSession?.id;
     const streamingEl = document.getElementById(`streaming-${sessionId}`);
     if (streamingEl) {
-      const indicator = streamingEl.querySelector('.streaming-indicator');
-      if (indicator) indicator.remove();
+      // Remove ALL streaming indicators (not just the first one)
+      streamingEl.querySelectorAll('.streaming-indicator').forEach(ind => ind.remove());
       streamingEl.classList.remove('streaming-message');
       const prevTextEl = streamingEl.querySelector('.streaming-text-current');
       if (prevTextEl) prevTextEl.classList.remove('streaming-text-current');
