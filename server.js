@@ -1854,7 +1854,7 @@ const server = http.createServer(async (req, res) => {
         // Return immediately with cached data (non-blocking) - skip network version checks
         const tools = await Promise.race([
           toolManager.getAllToolsAsync(true), // skipPublishedVersion=true for fast response
-          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
         ]);
         const result = tools.map((t) => ({
           id: t.id,
@@ -3452,6 +3452,7 @@ function serveFile(filePath, res, req) {
     const baseTag = `<script>window.__BASE_URL='${BASE_URL}';</script>`;
     content = content.replace('<head>', `<head>\n  <base href="${BASE_URL}/">\n  ` + baseTag);
     content = content.replace(/(href|src)="vendor\//g, `$1="${BASE_URL}/vendor/`);
+    content = content.replace(/(src)="\/gm\/js\//g, `$1="${BASE_URL}/js/`);
     if (watch) {
       content += `\n<script>(function(){const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'${BASE_URL}/hot-reload');ws.onmessage=e=>{if(JSON.parse(e.data).type==='reload')location.reload()};})();</script>`;
     }
