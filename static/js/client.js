@@ -62,19 +62,6 @@ class AgentGUIClient {
     this._isLoadingConversation = false;
     this._modelCache = new Map();
 
-    this.chunkPollState = {
-      isPolling: false,
-      lastFetchTimestamp: 0,
-      pollTimer: null,
-      backoffDelay: 100,
-      maxBackoffDelay: 400,
-      abortController: null
-    };
-
-    this._pollIntervalByTier = {
-      excellent: 100, good: 200, fair: 400, poor: 800, bad: 1500, unknown: 200
-    };
-
     this._renderedSeqs = new Map();
     this._inflightRequests = new Map();
     this._previousConvAbort = null;
@@ -83,15 +70,9 @@ class AgentGUIClient {
     this._loadInProgress = {}; // { [conversationId]: { requestId, abortController, timestamp, prevConversationId } }
     this._currentRequestId = 0; // Auto-incrementing request counter
 
-    this._scrollKalman = typeof KalmanFilter !== 'undefined' ? new KalmanFilter({ processNoise: 50, measurementNoise: 100 }) : null;
     this._scrollTarget = 0;
     this._scrollAnimating = false;
     this._scrollLerpFactor = config.scrollAnimationSpeed || 0.15;
-
-    this._chunkTimingKalman = typeof KalmanFilter !== 'undefined' ? new KalmanFilter({ processNoise: 10, measurementNoise: 200 }) : null;
-    this._lastChunkArrival = 0;
-    this._chunkTimingUpdateCount = 0;
-    this._chunkMissedPredictions = 0;
 
     this._consolidator = typeof EventConsolidator !== 'undefined' ? new EventConsolidator() : null;
 
@@ -603,7 +584,6 @@ class AgentGUIClient {
       this.state.currentConversation = null;
       this.state.currentSession = null;
       this.updateUrlForConversation(null);
-      this.stopChunkPolling();
       this.enableControls();
       this._showWelcomeScreen();
       if (this.ui.messageInput) {
@@ -936,26 +916,9 @@ class AgentGUIClient {
       this.scrollToBottom(true);
     }
 
-    // Immediately fetch any existing chunks for this session and start polling
-    // This ensures real-time feedback appears immediately
-    try {
-      const initialChunks = await this.fetchChunks(data.conversationId, 0);
-      // Filter to only chunks from the current session
-      const sessionChunks = initialChunks.filter(c => c.sessionId === data.sessionId && c.block && c.block.type);
-      if (sessionChunks.length > 0) {
-        this.renderChunkBatch(sessionChunks);
-        // Update lastFetchTimestamp so polling doesn't duplicate these chunks
-        const lastChunk = sessionChunks[sessionChunks.length - 1];
-        if (lastChunk && lastChunk.created_at) {
-          this.chunkPollState.lastFetchTimestamp = lastChunk.created_at;
-        }
-      }
-    } catch (e) {
-      console.warn('Initial chunk fetch failed:', e.message);
-    }
-
-    // Start polling for chunks from database
-    this.startChunkPolling(data.conversationId);
+    // Reset rendered block seq tracker for this session
+    this._renderedSeqs = this._renderedSeqs || {};
+    this._renderedSeqs[data.sessionId] = new Set();
 
     // Show queue/steer UI when streaming starts (for busy prompt)
     this.showStreamingPromptButtons();
@@ -978,30 +941,33 @@ class AgentGUIClient {
   }
 
   handleStreamingProgress(data) {
-    // NOTE: With chunk-based architecture, blocks are rendered from polling
-    // This handler is kept for backward compatibility and to trigger polling updates
-    // But actual rendering happens in renderChunk() via polling
+    if (!data.block || !data.sessionId) return;
 
-    if (!data.block) return;
+    // Deduplicate by seq number to guarantee exactly-once rendering
+    this._renderedSeqs = this._renderedSeqs || {};
+    const seen = this._renderedSeqs[data.sessionId] || (this._renderedSeqs[data.sessionId] = new Set());
+    if (data.seq !== undefined) {
+      if (seen.has(data.seq)) return;
+      seen.add(data.seq);
+    }
 
     const block = data.block;
     if (!this.state.streamingBlocks) this.state.streamingBlocks = [];
     this.state.streamingBlocks.push(block);
 
-    // Thinking blocks are transient and not stored in DB, so render immediately
-    if (block.type === 'thinking' && this.state.currentSession?.id === data.sessionId) {
-      const streamingEl = document.getElementById(`streaming-${data.sessionId}`);
-      if (streamingEl) {
-        const blocksEl = streamingEl.querySelector('.streaming-blocks');
-        if (blocksEl) {
-          const el = this.renderer.renderBlock(block, data, blocksEl);
-          if (el) blocksEl.appendChild(el);
-        }
-      }
-    }
+    // Only render for the currently-visible session
+    if (this.state.currentSession?.id !== data.sessionId) return;
 
-    // WebSocket is now just a notification trigger, not data source
-    // Actual blocks come from database polling in startChunkPolling()
+    const streamingEl = document.getElementById(`streaming-${data.sessionId}`);
+    if (!streamingEl) return;
+    const blocksEl = streamingEl.querySelector('.streaming-blocks');
+    if (!blocksEl) return;
+
+    const el = this.renderer.renderBlock(block, data, blocksEl);
+    if (el) {
+      blocksEl.appendChild(el);
+      this.scrollToBottom();
+    }
   }
 
   renderBlockContent(block) {
@@ -1102,9 +1068,6 @@ class AgentGUIClient {
     this.state.streamingConversations.delete(conversationId);
     this.updateBusyPromptArea(conversationId);
 
-    // Stop polling for chunks
-    this.stopChunkPolling();
-
     // Clear queue indicator on error
     const queueEl = document.querySelector('.queue-indicator');
     if (queueEl) queueEl.remove();
@@ -1154,7 +1117,7 @@ class AgentGUIClient {
     this.state.streamingConversations.delete(conversationId);
     this.updateBusyPromptArea(conversationId);
 
-    this.stopChunkPolling();
+
 
     // Clear queue indicator when streaming completes
     const queueEl = document.querySelector('.queue-indicator');
@@ -1182,13 +1145,10 @@ class AgentGUIClient {
       this.saveScrollPosition(conversationId);
     }
 
-    // Fetch any final chunks that may have been missed during polling
-    // This ensures all output is visible without requiring a page refresh
-    if (conversationId && sessionId) {
-      this.fetchRemainingChunks(conversationId, sessionId).catch(err => {
-        console.warn('Final chunk fetch failed:', err.message);
-      });
-    }
+    // Recover any blocks missed during streaming (e.g. WS reconnects)
+    this._recoverMissedChunks().catch(err => {
+      console.warn('Chunk recovery failed:', err.message);
+    });
 
     this.enableControls();
     this.emit('streaming:complete', data);
@@ -1368,7 +1328,7 @@ class AgentGUIClient {
   handleRateLimitHit(data) {
     if (data.conversationId !== this.state.currentConversation?.id) return;
     this.state.streamingConversations.delete(data.conversationId);
-    this.stopChunkPolling();
+
     this.enableControls();
 
     const cooldownMs = data.retryAfterMs || 60000;
@@ -1728,13 +1688,11 @@ class AgentGUIClient {
         block: typeof c.data === 'string' ? JSON.parse(c.data) : c.data
       })).filter(c => c.block && c.block.type);
 
-      const dedupedChunks = chunks.filter(c => {
-        const seqSet = this._renderedSeqs.get(sessionId);
-        return !seqSet || !seqSet.has(c.sequence);
-      });
+      const seenSeqs = (this._renderedSeqs || {})[sessionId];
+      const dedupedChunks = chunks.filter(c => !seenSeqs || !seenSeqs.has(c.sequence));
 
       if (dedupedChunks.length > 0) {
-        this.renderChunkBatch(dedupedChunks);
+        for (const chunk of dedupedChunks) this.renderChunk(chunk);
       }
     } catch (e) {
       console.warn('Chunk recovery failed:', e.message);
@@ -1750,46 +1708,6 @@ class AgentGUIClient {
     });
     this._inflightRequests.set(key, promise);
     return promise;
-  }
-
-  _getAdaptivePollInterval() {
-    const quality = this.wsManager?.latency?.quality || 'unknown';
-    const base = this._pollIntervalByTier[quality] || 200;
-    const trend = this.wsManager?.latency?.trend;
-    if (!trend || trend === 'stable') return base;
-    const tiers = ['excellent', 'good', 'fair', 'poor', 'bad'];
-    const idx = tiers.indexOf(quality);
-    if (trend === 'rising' && idx < tiers.length - 1) return this._pollIntervalByTier[tiers[idx + 1]];
-    if (trend === 'falling' && idx > 0) return this._pollIntervalByTier[tiers[idx - 1]];
-    return base;
-  }
-
-  _chunkArrivalConfidence() {
-    if (this._chunkTimingUpdateCount < 2) return 0;
-    const base = Math.min(1, this._chunkTimingUpdateCount / 8);
-    const penalty = Math.min(1, this._chunkMissedPredictions * 0.33);
-    return Math.max(0, base - penalty);
-  }
-
-  _predictedNextChunkArrival() {
-    if (!this._chunkTimingKalman || this._chunkTimingUpdateCount < 2) return 0;
-    return this._lastChunkArrival + Math.min(this._chunkTimingKalman.predict(), 5000);
-  }
-
-  _schedulePreAllocation(sessionId) {
-    if (this._placeholderTimer) clearTimeout(this._placeholderTimer);
-    if (this._chunkArrivalConfidence() < 0.5) return;
-    const scrollContainer = document.getElementById('output-scroll');
-    if (!scrollContainer) return;
-    const distFromBottom = scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight;
-    if (distFromBottom > 150) return;
-    const nextArrival = this._predictedNextChunkArrival();
-    if (!nextArrival) return;
-    const delay = Math.max(0, nextArrival - performance.now() - 100);
-    this._placeholderTimer = setTimeout(() => {
-      this._placeholderTimer = null;
-      this._insertPlaceholder(sessionId);
-    }, delay);
   }
 
   _insertPlaceholder(sessionId) {
@@ -1857,27 +1775,14 @@ class AgentGUIClient {
 
   _setupDebugHooks() {
     if (typeof window === 'undefined') return;
-    const kalmanHistory = { latency: [], scroll: [], chunkTiming: [] };
     const self = this;
-    window.__kalman = {
-      latency: this.wsManager?._latencyKalman || null,
-      scroll: this._scrollKalman || null,
-      chunkTiming: this._chunkTimingKalman || null,
-      history: kalmanHistory,
+    window.__debug = {
       getState: () => ({
-        latency: self.wsManager?._latencyKalman?.getState() || null,
-        scroll: self._scrollKalman?.getState() || null,
-        chunkTiming: self._chunkTimingKalman?.getState() || null,
+        latencyEma: self.wsManager?._latencyEma || null,
         serverProcessingEstimate: self._serverProcessingEstimate,
-        chunkConfidence: self._chunkArrivalConfidence(),
         latencyTrend: self.wsManager?.latency?.trend || null
       })
     };
-
-    this.wsManager.on('latency_prediction', (data) => {
-      kalmanHistory.latency.push({ time: Date.now(), ...data });
-      if (kalmanHistory.latency.length > 100) kalmanHistory.latency.shift();
-    });
   }
 
   /**
@@ -2007,174 +1912,6 @@ class AgentGUIClient {
   }
 
   /**
-   * Fetch chunks from database for a conversation
-   * Supports incremental updates with since parameter
-   */
-  async fetchChunks(conversationId, since = 0) {
-    if (!conversationId) return [];
-
-    try {
-      const data = await window.wsClient.rpc('conv.chunks', { id: conversationId, since: since > 0 ? since : 0 });
-      if (!data.ok || !Array.isArray(data.chunks)) {
-        throw new Error('Invalid chunks response');
-      }
-
-      const chunks = data.chunks.map(chunk => ({
-        ...chunk,
-        block: typeof chunk.data === 'string' ? JSON.parse(chunk.data) : chunk.data
-      }));
-
-      return chunks;
-    } catch (error) {
-      if (error.name === 'AbortError') return [];
-      console.error('Error fetching chunks:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Poll for new chunks at regular intervals
-   * Uses exponential backoff on errors
-   * Also checks session status to detect completion
-   */
-  async startChunkPolling(conversationId) {
-    if (!conversationId) return;
-
-    const pollState = this.chunkPollState;
-    if (pollState.isPolling) return;
-
-    pollState.isPolling = true;
-    // Only reset lastFetchTimestamp if it wasn't already set by initial fetch
-    if (pollState.lastFetchTimestamp === 0) {
-      pollState.lastFetchTimestamp = Date.now();
-    }
-    pollState.backoffDelay = this._getAdaptivePollInterval();
-    pollState.sessionCheckCounter = 0;
-    pollState.emptyPollCount = 0;
-
-    const checkSessionStatus = async () => {
-      if (!this.state.currentSession?.id) return false;
-      let session;
-      try { ({ session } = await window.wsClient.rpc('sess.get', { id: this.state.currentSession.id })); } catch { return false; }
-      if (session && (session.status === 'complete' || session.status === 'error')) {
-        if (session.status === 'complete') {
-          this.handleStreamingComplete({ sessionId: session.id, conversationId, timestamp: Date.now() });
-        } else {
-          this.handleStreamingError({ sessionId: session.id, conversationId, error: session.error || 'Unknown error', timestamp: Date.now() });
-        }
-        return true;
-      }
-      return false;
-    };
-
-    const pollOnce = async () => {
-      if (!pollState.isPolling) return;
-
-      try {
-        pollState.sessionCheckCounter++;
-        const shouldCheckSession = pollState.sessionCheckCounter % 3 === 0 || pollState.emptyPollCount >= 3;
-        if (shouldCheckSession) {
-          const done = await checkSessionStatus();
-          if (done) return;
-          if (pollState.emptyPollCount >= 3) pollState.emptyPollCount = 0;
-        }
-
-        const chunks = await this.fetchChunks(conversationId, pollState.lastFetchTimestamp);
-
-        if (chunks.length > 0) {
-          pollState.backoffDelay = this._getAdaptivePollInterval();
-          pollState.emptyPollCount = 0;
-          const lastChunk = chunks[chunks.length - 1];
-          pollState.lastFetchTimestamp = lastChunk.created_at;
-
-          const now = performance.now();
-          if (this._lastChunkArrival > 0 && this._chunkTimingKalman) {
-            const delta = now - this._lastChunkArrival;
-            this._chunkTimingKalman.update(delta);
-            this._chunkTimingUpdateCount++;
-            this._chunkMissedPredictions = 0;
-          }
-          this._lastChunkArrival = now;
-
-          this.renderChunkBatch(chunks.filter(c => c.block && c.block.type));
-          if (this.state.currentSession?.id) this._schedulePreAllocation(this.state.currentSession.id);
-        } else {
-          pollState.emptyPollCount++;
-          if (this._chunkTimingUpdateCount > 0) this._chunkMissedPredictions++;
-          pollState.backoffDelay = Math.min(pollState.backoffDelay + 50, 500);
-        }
-
-        if (pollState.isPolling) {
-          let nextDelay = pollState.backoffDelay;
-          if (this._chunkArrivalConfidence() >= 0.3 && this._chunkTimingKalman) {
-            const predicted = this._chunkTimingKalman.predict();
-            const elapsed = performance.now() - this._lastChunkArrival;
-            const untilNext = predicted - elapsed - 20;
-            nextDelay = Math.max(50, Math.min(2000, untilNext));
-            if (this._chunkMissedPredictions >= 3) {
-              this._chunkTimingKalman.setProcessNoise(20);
-            } else {
-              this._chunkTimingKalman.setProcessNoise(10);
-            }
-          }
-          pollState.pollTimer = setTimeout(pollOnce, nextDelay);
-        }
-      } catch (error) {
-        console.warn('Chunk poll error:', error.message);
-        pollState.backoffDelay = Math.min(pollState.backoffDelay * 2, pollState.maxBackoffDelay);
-        if (pollState.isPolling) {
-          pollState.pollTimer = setTimeout(pollOnce, pollState.backoffDelay);
-        }
-      }
-    };
-
-    pollOnce();
-  }
-
-  /**
-   * Stop polling for chunks
-   */
-  stopChunkPolling() {
-    const pollState = this.chunkPollState;
-
-    if (pollState.pollTimer) {
-      clearTimeout(pollState.pollTimer);
-      pollState.pollTimer = null;
-    }
-
-    if (pollState.abortController) {
-      pollState.abortController.abort();
-      pollState.abortController = null;
-    }
-
-    pollState.isPolling = false;
-    this._scrollAnimating = false;
-    if (this._scrollKalman) this._scrollKalman.reset();
-    if (this._chunkTimingKalman) this._chunkTimingKalman.reset();
-    this._chunkTimingUpdateCount = 0;
-    this._chunkMissedPredictions = 0;
-    this._lastChunkArrival = 0;
-    if (this._placeholderTimer) { clearTimeout(this._placeholderTimer); this._placeholderTimer = null; }
-  }
-
-  /**
-   * Fetch any remaining chunks after streaming completes
-   * Ensures all output is visible without requiring a page refresh
-   */
-  async fetchRemainingChunks(conversationId, sessionId) {
-    try {
-      const lastTimestamp = this.chunkPollState.lastFetchTimestamp || 0;
-      const chunks = await this.fetchChunks(conversationId, lastTimestamp);
-      const sessionChunks = chunks.filter(c => c.sessionId === sessionId && c.block && c.block.type);
-      if (sessionChunks.length > 0) {
-        this.renderChunkBatch(sessionChunks);
-      }
-    } catch (err) {
-      console.error('Failed to fetch remaining chunks:', err);
-    }
-  }
-
-  /**
    * Render a single chunk to the output
    */
   renderChunk(chunk) {
@@ -2201,71 +1938,6 @@ class AgentGUIClient {
     if (!element) { this.scrollToBottom(); return; }
     blocksEl.appendChild(element);
     this.scrollToBottom();
-  }
-
-  renderChunkBatch(chunks) {
-    if (!chunks.length) return;
-    const deduped = [];
-    for (const chunk of chunks) {
-      const sid = chunk.sessionId;
-      if (!this._renderedSeqs.has(sid)) this._renderedSeqs.set(sid, new Set());
-      const seqSet = this._renderedSeqs.get(sid);
-      if (chunk.sequence !== undefined && seqSet.has(chunk.sequence)) continue;
-      if (chunk.sequence !== undefined) seqSet.add(chunk.sequence);
-      deduped.push(chunk);
-    }
-    if (!deduped.length) return;
-
-    let toRender = deduped;
-    if (this._consolidator) {
-      const { consolidated, stats } = this._consolidator.consolidate(deduped);
-      toRender = consolidated;
-      for (const c of consolidated) {
-        if (c._mergedSequences) {
-          const seqSet = this._renderedSeqs.get(c.sessionId);
-          if (seqSet) c._mergedSequences.forEach(s => seqSet.add(s));
-        }
-      }
-      if (stats.textMerged || stats.toolsCollapsed || stats.systemSuperseded) {
-        console.log('Consolidation:', stats);
-      }
-    }
-
-    this._removePlaceholder();
-    const groups = {};
-    for (const chunk of toRender) {
-      const sid = chunk.sessionId;
-      if (!groups[sid]) groups[sid] = [];
-      groups[sid].push(chunk);
-    }
-    let appended = false;
-    for (const sid of Object.keys(groups)) {
-      const streamingEl = document.getElementById(`streaming-${sid}`);
-      if (!streamingEl) continue;
-      const blocksEl = streamingEl.querySelector('.streaming-blocks');
-      if (!blocksEl) continue;
-      for (const chunk of groups[sid]) {
-        if (chunk.block.type === 'tool_result') {
-          const matchById = chunk.block.tool_use_id && blocksEl.querySelector(`.block-tool-use[data-tool-use-id="${chunk.block.tool_use_id}"]`);
-          const lastEl = blocksEl.lastElementChild;
-          const toolUseEl = matchById || (lastEl?.classList?.contains('block-tool-use') ? lastEl : null);
-          if (toolUseEl) {
-            toolUseEl.classList.remove('has-success', 'has-error');
-            toolUseEl.classList.add(chunk.block.is_error ? 'has-error' : 'has-success');
-            const parentIsOpen = toolUseEl.hasAttribute('open');
-            const contextWithParent = { ...chunk, parentIsOpen };
-            const el = this.renderer.renderBlock(chunk.block, contextWithParent, blocksEl);
-            if (el) { toolUseEl.appendChild(el); appended = true; }
-            continue;
-          }
-        }
-        const el = this.renderer.renderBlock(chunk.block, chunk, blocksEl);
-        if (!el) { appended = true; continue; }
-        blocksEl.appendChild(el);
-        appended = true;
-      }
-    }
-    if (appended) this.scrollToBottom();
   }
 
   /**
@@ -2744,7 +2416,7 @@ class AgentGUIClient {
       const prevConversationId = this.state.currentConversation?.id;
       const availableFallback = this.state.conversations?.find(c => c.id !== conversationId) || null;
       this.cacheCurrentConversation();
-      this.stopChunkPolling();
+  
       this.removeScrollUpDetection();
       if (this.renderer.resetScrollState) this.renderer.resetScrollState();
       this._userScrolledUp = false;
@@ -3031,12 +2703,6 @@ class AgentGUIClient {
 
           this.updateUrlForConversation(conversationId, latestSession.id);
 
-          const lastChunkTime = chunks.length > 0
-            ? chunks[chunks.length - 1].created_at
-            : 0;
-
-          this.chunkPollState.lastFetchTimestamp = lastChunkTime;
-          this.startChunkPolling(conversationId);
           // IMMUTABLE: Prompt remains enabled - syncPromptState will set correct state
           this.syncPromptState(conversationId);
         } else {
@@ -3421,7 +3087,7 @@ class AgentGUIClient {
    * Cleanup resources
    */
   destroy() {
-    this.stopChunkPolling();
+
     this.renderer.destroy();
     this.wsManager.destroy();
     this.eventHandlers = {};

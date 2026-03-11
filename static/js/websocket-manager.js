@@ -40,7 +40,7 @@ class WebSocketManager {
       pingCounter: 0
     };
 
-    this._latencyKalman = typeof KalmanFilter !== 'undefined' ? new KalmanFilter({ processNoise: 1, measurementNoise: 10 }) : null;
+    this._latencyEma = null; // exponential moving average for latency
     this._trendHistory = [];
     this._trendCount = 0;
     this._reconnectedAt = 0;
@@ -84,6 +84,7 @@ class WebSocketManager {
 
     try {
       this.ws = new WebSocket(this.config.url);
+      this.ws.binaryType = 'arraybuffer';
       this.ws.onopen = () => this.onOpen();
       this.ws.onmessage = (event) => this.onMessage(event);
       this.ws.onerror = (error) => this.onError(error);
@@ -129,9 +130,19 @@ class WebSocketManager {
     this.emit('connected', { timestamp: Date.now() });
   }
 
-  onMessage(event) {
+  async onMessage(event) {
     try {
-      const parsed = JSON.parse(event.data);
+      let parsed;
+      if (event.data instanceof Blob || event.data instanceof ArrayBuffer) {
+        // Binary frame: msgpackr-encoded (perMessageDeflate decompressed by browser)
+        const buf = event.data instanceof Blob
+          ? await event.data.arrayBuffer()
+          : event.data;
+        parsed = msgpackr.unpack(new Uint8Array(buf));
+      } else {
+        // Fallback: plain JSON (ping/pong control frames, legacy)
+        parsed = JSON.parse(event.data);
+      }
       const messages = Array.isArray(parsed) ? parsed : [parsed];
       this.stats.totalMessagesReceived += messages.length;
 
@@ -154,6 +165,11 @@ class WebSocketManager {
           );
         }
 
+        // RPC reply envelopes — emit for WsClient to intercept, then skip broadcast
+        if (data.r !== undefined && !data.type) {
+          this.emit('message', data);
+          continue;
+        }
         this.emit('message', data);
         if (data.type) this.emit('message:' + data.type, data);
       }
@@ -181,21 +197,12 @@ class WebSocketManager {
 
     this.latency.current = rtt;
 
-    if (this._latencyKalman && samples.length > 3) {
-      if (this._reconnectedAt && Date.now() - this._reconnectedAt < 5000) {
-        this._latencyKalman.setMeasurementNoise(50);
-      } else {
-        this._latencyKalman.setMeasurementNoise(10);
-      }
-      const result = this._latencyKalman.update(rtt);
-      this.latency.predicted = result.estimate;
-      this.latency.predictedNext = this._latencyKalman.predict();
-      this.latency.avg = result.estimate;
-    } else {
-      this.latency.avg = samples.reduce((a, b) => a + b, 0) / samples.length;
-      this.latency.predicted = this.latency.avg;
-      this.latency.predictedNext = this.latency.avg;
-    }
+    // EMA smoothing (α=0.2 → slow adaptation, less noise)
+    const alpha = 0.2;
+    this._latencyEma = this._latencyEma === null ? rtt : alpha * rtt + (1 - alpha) * this._latencyEma;
+    this.latency.avg = this._latencyEma;
+    this.latency.predicted = this._latencyEma;
+    this.latency.predictedNext = this._latencyEma;
 
     if (samples.length > 1) {
       const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
@@ -233,7 +240,7 @@ class WebSocketManager {
       predicted: this.latency.predicted,
       predictedNext: this.latency.predictedNext,
       trend: this.latency.trend,
-      gain: this._latencyKalman ? this._latencyKalman.getState().gain : 0
+      gain: 0
     });
 
     this._checkDegradation();
@@ -370,8 +377,8 @@ class WebSocketManager {
       this._hiddenAt = Date.now();
       return;
     }
-    if (this._hiddenAt && this._latencyKalman && Date.now() - this._hiddenAt > 30000) {
-      this._latencyKalman.reset();
+    if (this._hiddenAt && Date.now() - this._hiddenAt > 30000) {
+      this._latencyEma = null;
       this._trendHistory = [];
       this.latency.trend = 'stable';
     }
@@ -436,7 +443,7 @@ class WebSocketManager {
     }
 
     try {
-      this.ws.send(JSON.stringify(data));
+      this.ws.send(msgpackr.pack(data));
       this.stats.totalMessagesSent++;
       return true;
     } catch (error) {
@@ -460,7 +467,7 @@ class WebSocketManager {
     this.messageBuffer = [];
     for (const message of messages) {
       try {
-        this.ws.send(JSON.stringify(message));
+        this.ws.send(msgpackr.pack(message));
         this.stats.totalMessagesSent++;
       } catch (error) {
         this.bufferMessage(message);
@@ -484,7 +491,7 @@ class WebSocketManager {
       if (type === 'session') msg.sessionId = id;
       else msg.conversationId = id;
       try {
-        this.ws.send(JSON.stringify(msg));
+        this.ws.send(msgpackr.pack(msg));
         this.stats.totalMessagesSent++;
       } catch (_) {}
     }

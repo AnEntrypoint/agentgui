@@ -10,36 +10,21 @@ class WsClient {
   _install() {
     if (this._installed) return;
     this._installed = true;
-    const origOnMessage = this._ws.onMessage.bind(this._ws);
-    this._ws.onMessage = (event) => {
-      try {
-        const parsed = JSON.parse(event.data);
-        const messages = Array.isArray(parsed) ? parsed : [parsed];
-        const passthrough = [];
-        for (const msg of messages) {
-          if (msg.r && this._pending.has(msg.r)) {
-            const p = this._pending.get(msg.r);
-            this._pending.delete(msg.r);
-            clearTimeout(p.timer);
-            if (msg.e) {
-              p.reject(Object.assign(new Error(msg.e.m || 'RPC error'), { code: msg.e.c }));
-            } else {
-              p.resolve(msg.d);
-            }
-          } else {
-            passthrough.push(msg);
-          }
+    // Listen on decoded message objects — websocket-manager emits 'message' with decoded obj
+    this._ws.on('message', (data) => {
+      if (data.r && this._pending.has(data.r)) {
+        const p = this._pending.get(data.r);
+        this._pending.delete(data.r);
+        clearTimeout(p.timer);
+        if (data.e) {
+          p.reject(Object.assign(new Error(data.e.m || 'RPC error'), { code: data.e.c }));
+        } else {
+          p.resolve(data.d);
         }
-        if (passthrough.length > 0) {
-          const rebuilt = passthrough.length === 1
-            ? JSON.stringify(passthrough[0])
-            : JSON.stringify(passthrough);
-          origOnMessage({ data: rebuilt });
-        }
-      } catch (_) {
-        origOnMessage(event);
+        return; // consumed — don't re-emit
       }
-    };
+      // Non-RPC messages are already emitted by websocket-manager; nothing to do
+    });
     this._ws.on('disconnected', () => this.cancelAll());
   }
 
@@ -79,7 +64,7 @@ class WsClient {
   }
 
   cancelAll() {
-    for (const [id, p] of this._pending) {
+    for (const [, p] of this._pending) {
       clearTimeout(p.timer);
       p.reject(new Error('Connection lost'));
     }
