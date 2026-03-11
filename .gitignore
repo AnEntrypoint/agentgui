@@ -18,6 +18,8 @@ test-results/
 .prd
 data/
 voices/
+loggedin/
+*.pma
 
 dogfood-output/
 .gm-stop-verified
