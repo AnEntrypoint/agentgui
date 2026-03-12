@@ -800,7 +800,6 @@ class AgentGUIClient {
       startTime: Date.now()
     };
     this.state.sessionEvents = [];
-    this.state.streamingBlocks = [];
 
     // Update URL with session ID during streaming
     this.updateUrlForConversation(data.conversationId, data.sessionId);
@@ -963,8 +962,6 @@ class AgentGUIClient {
     }
 
     const block = data.block;
-    if (!this.state.streamingBlocks) this.state.streamingBlocks = [];
-    this.state.streamingBlocks.push(block);
 
     // Cache block for background conversations (all 50 cached convs, not just active)
     const convId = data.conversationId;
@@ -1742,7 +1739,8 @@ class AgentGUIClient {
 
   async _recoverMissedChunks() {
     if (!this.state.currentSession?.id) return;
-    if (!this.state.streamingConversations.has(this.state.currentConversation?.id)) return;
+    // Note: do NOT gate on streamingConversations - this is called from handleStreamingComplete
+    // where we've already removed the conversation from the set. Allow recovery always.
 
     const sessionId = this.state.currentSession.id;
     const lastSeq = this.wsManager.getLastSeq(sessionId);
@@ -2009,6 +2007,13 @@ class AgentGUIClient {
    */
   renderChunk(chunk) {
     if (!chunk || !chunk.block) return;
+    // Deduplicate: skip if already rendered via WebSocket streaming_progress
+    const seq = chunk.sequence;
+    if (seq !== undefined) {
+      const seen = (this._renderedSeqs = this._renderedSeqs || {})[chunk.sessionId] || (this._renderedSeqs[chunk.sessionId] = new Set());
+      if (seen.has(seq)) return;
+      seen.add(seq);
+    }
     const streamingEl = document.getElementById(`streaming-${chunk.sessionId}`);
     if (!streamingEl) return;
     const blocksEl = streamingEl.querySelector('.streaming-blocks');
