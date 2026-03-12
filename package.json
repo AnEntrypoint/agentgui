@@ -1,6 +1,6 @@
 {
   "name": "agentgui",
-  "version": "1.0.668",
+  "version": "1.0.669",
   "description": "Multi-agent ACP client with real-time communication",
   "type": "module",
   "main": "server.js",
@@ -35,13 +35,15 @@
     "google-auth-library": "^10.5.0",
     "gpt-tokenizer": "^3.4.0",
     "msgpackr": "^1.11.8",
-    "node-pty": "^1.0.0",
     "onnxruntime-node": "1.21.0",
     "opencode-ai": "^1.2.15",
     "pm2": "^5.4.3",
     "puppeteer-core": "^24.37.5",
     "webtalk": "^1.0.31",
     "ws": "^8.14.2"
+  },
+  "optionalDependencies": {
+    "node-pty": "^1.0.0"
   },
   "overrides": {
     "onnxruntime-web": "npm:empty-npm-package@1.0.0",
