@@ -1605,7 +1605,12 @@ class AgentGUIClient {
     }
 
     const pendingId = 'pending-' + Date.now() + '-' + Math.random().toString(36).substr(2, 6);
-    this._showOptimisticMessage(pendingId, savedPrompt);
+
+    // Check if streaming - only show optimistic message if NOT queuing
+    const isStreaming = this.state.currentConversation && this.state.streamingConversations.has(this.state.currentConversation.id);
+    if (!isStreaming) {
+      this._showOptimisticMessage(pendingId, savedPrompt);
+    }
 
     try {
       let conv = this.state.currentConversation;
@@ -1631,7 +1636,10 @@ class AgentGUIClient {
         this.lockAgentAndModel(agentId, model);
         await this.streamToConversation(conv.id, savedPrompt, agentId, model, subAgent);
         this.clearDraft(conv.id);
-        this._confirmOptimisticMessage(pendingId);
+        // Only confirm optimistic message if it was shown (not queued)
+        if (!isStreaming) {
+          this._confirmOptimisticMessage(pendingId);
+        }
       } else {
         const agentId = this.getCurrentAgent();
         const subAgent = this.getEffectiveSubAgent() || null;
@@ -1656,7 +1664,10 @@ class AgentGUIClient {
       }
     } catch (error) {
       console.error('Execution error:', error);
-      this._failOptimisticMessage(pendingId, savedPrompt, error.message);
+      // Only fail optimistic message if it was shown
+      if (!isStreaming) {
+        this._failOptimisticMessage(pendingId, savedPrompt, error.message);
+      }
       this.enableControls();
     }
   }
