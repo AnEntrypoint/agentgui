@@ -1111,6 +1111,7 @@ export const queries = {
         prep('DELETE FROM stream_updates');
         prep('DELETE FROM chunks');
         prep('DELETE FROM events');
+        prep('DELETE FROM voice_cache');
         prep('DELETE FROM sessions');
         prep('DELETE FROM messages');
         prep('DELETE FROM conversations');
