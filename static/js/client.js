@@ -714,6 +714,9 @@ class AgentGUIClient {
         case 'message_created':
           this.handleMessageCreated(data);
           break;
+        case 'conversation_updated':
+          this.handleConversationUpdated(data);
+          break;
         case 'queue_status':
           this.handleQueueStatus(data);
           break;
@@ -1148,13 +1151,21 @@ class AgentGUIClient {
     this.state.streamingConversations.delete(conversationId);
     this.updateBusyPromptArea(conversationId);
 
+    const sessionId = data.sessionId || this.state.currentSession?.id;
 
+    // Unsubscribe from session to prevent subscription leak
+    if (sessionId && this.wsManager) {
+      try {
+        this.wsManager.unsubscribeFromSession(sessionId);
+      } catch (e) {
+        // Session may not exist, ignore
+      }
+    }
 
     // Clear queue indicator when streaming completes
     const queueEl = document.querySelector('.queue-indicator');
     if (queueEl) queueEl.remove();
 
-    const sessionId = data.sessionId || this.state.currentSession?.id;
     // Remove ALL streaming indicators from the entire messages container
     const outputEl2 = document.getElementById('output');
     if (outputEl2) {
@@ -1220,6 +1231,11 @@ class AgentGUIClient {
       return;
     }
 
+    // Update messageCount in current conversation state for user messages
+    if (data.message.role === 'user' && this.state.currentConversation) {
+      this.state.currentConversation.messageCount = (this.state.currentConversation.messageCount || 0) + 1;
+    }
+
     if (data.message.role === 'assistant' && this.state.streamingConversations.has(data.conversationId)) {
       this.emit('message:created', data);
       return;
@@ -1277,6 +1293,15 @@ class AgentGUIClient {
     outputEl.insertAdjacentHTML('beforeend', messageHtml);
     this.scrollToBottom();
     this.emit('message:created', data);
+  }
+
+  handleConversationUpdated(data) {
+    // Update current conversation metadata if this is the active conversation
+    if (data.conversation && data.conversation.id === this.state.currentConversation?.id) {
+      this.state.currentConversation = data.conversation;
+    }
+    // Emit event for sidebar/other listeners
+    this.emit('conversation:updated', data);
   }
 
   handleQueueStatus(data) {
