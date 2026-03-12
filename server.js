@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
 import { execSync, spawn } from 'child_process';
 import { createRequire } from 'module';
+const PKG_VERSION = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
 import { OAuth2Client } from 'google-auth-library';
 import express from 'express';
 import Busboy from 'busboy';
@@ -2898,6 +2899,11 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (pathOnly === '/api/version' && req.method === 'GET') {
+      sendJSON(req, res, 200, { version: PKG_VERSION });
+      return;
+    }
+
     if (pathOnly === '/api/stt' && req.method === 'POST') {
       try {
         const chunks = [];
@@ -3536,7 +3542,7 @@ function serveFile(filePath, res, req) {
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(500); res.end('Server error'); return; }
     let content = data.toString();
-    const baseTag = `<script>window.__BASE_URL='${BASE_URL}';</script>`;
+    const baseTag = `<script>window.__BASE_URL='${BASE_URL}';window.__SERVER_VERSION='${PKG_VERSION}';</script>`;
     content = content.replace('<head>', `<head>\n  <base href="${BASE_URL}/">\n  ` + baseTag);
     content = content.replace(/(href|src)="vendor\//g, `$1="${BASE_URL}/vendor/`);
     content = content.replace(/(src)="\/gm\/js\//g, `$1="${BASE_URL}/js/`);

@@ -159,6 +159,15 @@ class AgentGUIClient {
       this.updateSendButtonState();
       this.enablePromptArea();
       this.emit('ws:connected');
+      // Check if server was updated while client was loaded - reload if version changed
+      if (window.__SERVER_VERSION) {
+        fetch((window.__BASE_URL || '') + '/api/version').then(r => r.json()).then(d => {
+          if (d.version && d.version !== window.__SERVER_VERSION) {
+            console.log(`Server updated ${window.__SERVER_VERSION} → ${d.version}, reloading`);
+            window.location.reload();
+          }
+        }).catch(() => {});
+      }
     });
 
     this.wsManager.on('disconnected', () => {
