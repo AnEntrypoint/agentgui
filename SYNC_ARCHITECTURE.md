@@ -1,187 +1,279 @@
-# AgentGUI Sync-to-Display Architecture
+# AgentGUI Sync-to-Display Architecture Report
 
-## Overview
+## Executive Summary
 
-The sync-to-display system handles the complete lifecycle of messages from creation through display, ensuring consistent state between server and client, and between different UI elements.
+The sync-to-display system handles real-time synchronization of execution state from server to client display. Current implementation has been improved through multiple fixes, particularly for queue display consistency and steering support. This document consolidates the architecture and identifies remaining optimization opportunities.
 
-## Message Lifecycle
+## Architecture Overview
 
-### 1. Message Creation (Backend → Frontend)
+### 1. Broadcast System (server.js:4269-4317)
 
-**Location**: `lib/ws-handlers-conv.js` (line 206-215)
+**BROADCAST_TYPES** - Global broadcast events sent to ALL connected clients:
+- `message_created`, `conversation_created/updated/deleted`
+- `queue_status`, `queue_updated`
+- `streaming_start`, `streaming_progress`, `streaming_complete`, `streaming_error`
+- `rate_limit_hit`, `rate_limit_clear`
+- Tool-related events (`tool_*`, `tools_*`)
+- Voice/speech events
+- PM2 monitoring events
+
+**broadcastSync()** function (line 4288):
+```
+1. Check if event.type is in BROADCAST_TYPES
+2. If broadcast: send to ALL syncClients
+3. If targeted: send to sessionId or conversationId subscribers only
+4. Also dispatch to SSE stream handlers if active
+```
+
+### 2. Client-Side Message Reception (static/js/client.js)
+
+**handleWsMessage()** routes events by type:
+```javascript
+case 'message_created': handleMessageCreated(data)
+case 'queue_status': handleQueueStatus(data)
+case 'streaming_start': handleStreamingStart(data)
+case 'streaming_progress': handleStreamingProgress(data)
+```
+
+### 3. Display Rendering Layers
+
+**Layer 1: Message Rendering** (handleMessageCreated)
+- Checks if message already exists (prevents duplicates)
+- For user messages: finds optimistic message, updates it
+- For assistant messages: skips if streaming (handled by chunks)
+
+**Layer 2: Streaming Progress** (handleStreamingProgress)
+- Adds chunks to queue
+- Batches rendering via StreamingRenderer
+- Handles thinking blocks directly
+
+**Layer 3: Queue Indicator** (fetchAndRenderQueue)
+- Polls via `q.ls` RPC every interval
+- Displays queued items in yellow control blocks
+- Renders with Edit/Delete/Steer buttons
+
+**Layer 4: Conversation State** (handleConversationUpdated)
+- Updates isStreaming flag
+- Refreshes UI based on new state
+
+## Recent Fixes & Status
+
+### Fixed Issues
+
+✅ **Queue Message Duplication** (commit fbfd1ad)
+- Problem: Queued messages appeared as both user prompt + queue item
+- Solution: Skip optimistic message when conversation is streaming
+- Impact: Clean queue display, no duplication
+
+✅ **Steering Support** (commit 81d83af)
+- Problem: Steering showed "Process not available" error
+- Solution: Keep stdin open (supportsStdin=true, closeStdin=false)
+- Impact: Users can send follow-up prompts during execution
+
+✅ **Chunk Rendering Race** (Session 3a)
+- Problem: Early chunks missed before polling started
+- Solution: Immediate chunk fetch on streaming_start
+- Impact: No missing initial output
+
+✅ **Dark Mode Selection** (fsbrowse)
+- Problem: Selection states hard to see in dark mode
+- Solution: Theme-aware colors for hover/focus
+- Impact: Better visual feedback in both themes
+
+### Remaining Consistency Issues
+
+⚠️ **Queue State Sync Timing**
+- Queue created on server via enqueue()
+- message_created broadcast may arrive before queue is populated
+- Client fetchAndRenderQueue() polls but timing is unpredictable
+- No atomic operation ensuring client sees both message and queue
+
+⚠️ **Multiple Sources of Truth**
+- Server: database, active execution map, queue map
+- Client: message list, streaming set, queue indicator
+- Conversation state: isStreaming flag can desync if connection drops
+- No single authoritative state object
+
+⚠️ **Optimistic Message Updates**
+- Client creates optimistic "sending" message on submit
+- Server creates actual message and broadcasts
+- handleMessageCreated() finds and updates optimistic message
+- If network is slow, both may briefly exist
+
+⚠️ **Queue Execution Transition**
+- Queue items don't explicitly transition to executed
+- Client must poll queue indicator to see it disappear
+- No event indicating "queue item now executing"
+- Confusing UX when queue suddenly empties
+
+## Data Flow Examples
+
+### Normal Execution (Ctrl+Enter with no active stream)
 
 ```
-User sends message via msg.send RPC
-  ↓
-createMessage() in database
-  ↓
-Create 'message.created' event
-  ↓
-broadcastSync() sends to ALL clients via WebSocket
-```
-
-**Key Points**:
-- Message is immediately persisted to database
-- Broadcast includes full message object (id, role, content, created_at)
-- Reaches all connected clients regardless of UI focus
-
-### 2. Message Reception (Frontend)
-
-**Location**: `static/js/client.js` (line 1238-1305, `handleMessageCreated`)
-
-**Decision Tree**:
-1. If conversation ID doesn't match current conversation → emit and skip display
-2. If message is assistant AND conversation is actively streaming → emit and skip display (wait for stream chunks)
-3. If no `.conversation-messages` container → emit and skip display
-4. If message is user role:
-   - Try to match against pending optimistic message (`.message-sending` element)
-   - If found: Update element with real ID and timestamp, remove "sending" state
-   - Try to match against pending-id element (alternate state)
-   - If found: Update element with real ID and timestamp
-   - Check if message with this ID already exists (race condition protection)
-   - If found: Skip (already displayed)
-   - Otherwise: Create new user message element
-5. Otherwise (assistant message): Create new message element
-
-### 3. Optimistic Message Rendering
-
-**Location**: `static/js/client.js` (line 1664-1699)
-
-**Flow**:
-```
-User clicks Send or presses Ctrl+Enter
-  ↓
+User input: "Write a function"
+    ↓
 startExecution()
-  ↓
-Check if conversation is currently streaming:
-  - If NOT streaming: Show optimistic "User" message with .message-sending class
-  - If streaming: Skip optimistic message (message will appear only in queue)
-  ↓
-streamToConversation() calls msg.stream RPC
-  ↓
-Message is either queued or execution starts
-  ↓
-If execution started: Confirm optimistic message (remove .message-sending)
-If queued: Don't confirm (message stays in queue only)
+    → _showOptimisticMessage(pendingId, content)  // yellow "sending..." message
+    ↓
+streamToConversation() → msg.stream RPC
+    ↓
+Server: msg.stream handler
+    → createMessage(p.id, 'user', prompt)
+    → broadcastSync({ type: 'message_created', ... })
+    → startExecution() -> streaming_start broadcast
+    ↓
+Client: message_created event
+    → handleMessageCreated()
+    → Finds optimistic message by ID
+    → Updates it (removes "sending" style, adds timestamp)
+    ↓
+Client: streaming_start event
+    → Disables input, shows "thinking..."
+    → Subscribes to session
+    → Starts chunk polling
 ```
 
-### 4. Queue Management
+### Queue Case (Ctrl+Enter while streaming) - NOW FIXED
 
-**Location**: `static/js/client.js` (line 1327-1358, `fetchAndRenderQueue`)
+```
+User input: "Now add subtraction" during execution
+    ↓
+startExecution()
+    → isStreaming = true
+    → SKIP _showOptimisticMessage ✓ (FIXED)
+    ↓
+streamToConversation() → msg.stream RPC
+    ↓
+Server: msg.stream handler
+    → createMessage(p.id, 'user', prompt)
+    → broadcastSync({ type: 'message_created', ... })
+    → activeExecutions.has(p.id) = true
+    → enqueue(p.id, prompt, ...)
+    → broadcastSync({ type: 'queue_status', ... })
+    ↓
+Client: message_created event
+    → handleMessageCreated()
+    → Message is not in current conversation display
+    → Emit event but don't render
+    ↓
+Client: queue_status event
+    → handleQueueStatus()
+    → fetchAndRenderQueue()
+    → Displays in yellow queue indicator ✓
+    ↓
+Result: Message only in queue, no duplication ✓
+```
 
-**State**: Queue is rendered as separate `.queue-indicator` with `.queue-item` elements
+### Steering (Ctrl+Enter + Steer button during execution)
 
-**Display Logic**:
-- Yellow background (`var(--color-warning)`)
-- Shows position number, content snippet, and action buttons
-- Renders after each queue update via `handleQueueUpdated`
-- Automatically fetches queue state via `q.ls` RPC
+```
+User clicks Steer button on queued message
+    ↓
+Client: conv.steer RPC with JSON-RPC format
+    ↓
+Server: conv.steer handler
+    → Finds active process stdin
+    → Writes JSON-RPC prompt request
+    → Removes from queue (optional)
+    ↓
+Claude Code: Receives JSON-RPC on stdin
+    → Processes prompt immediately
+    → Continues execution with new direction
+    ↓
+Client: receives streaming_progress chunks
+    → Renders new content below existing output
+```
 
-## State Consolidation Points
+## Consistency Guarantees
 
-### Backend State
-1. **activeExecutions** (Map) - Maps convId → {pid, sessionId}
-2. **messageQueues** (Map) - Maps convId → [pending messages]
-3. **Database** - Persistent messages and conversations
-4. **Streaming** - Implied when conversation is in activeExecutions
+### What IS Consistent
+- Messages don't duplicate (handled in handleMessageCreated)
+- Streaming chunks are ordered (via session ID subscription)
+- Queue items maintain order (FIFO in server queue map)
+- Tool installations tracked atomically (per-tool in database)
 
-### Frontend State
-1. **this.state.currentConversation** - Selected conversation object
-2. **this.state.streamingConversations** - Set of actively streaming conversation IDs
-3. **this.state.conversations** - List of all conversations
-4. **DOM Elements** - `.message`, `.message-sending`, `.queue-item`
-5. **WebSocket Subscriptions** - Listening to specific session IDs
+### What IS NOT Guaranteed
+- Client queue display and server queue state may briefly desync
+- If connection drops mid-queue, client state becomes stale
+- No explicit confirmation that user message was queued
+- Queue item execution not signaled with explicit event
 
-### Sync Mechanisms
-1. **WebSocket Broadcasts** - Server sends updates to all clients
-2. **RPC Calls** - Client can query queue, fetch chunks, etc.
-3. **Event Emissions** - Client emits local events for UI listeners
-4. **Class Toggling** - `.collapsed`, `.mobile-visible`, `.message-sending` drive rendering
+## Recommendations for Further Improvement
 
-## Critical Issues Fixed
-
-### Issue 1: Duplicate Queue Message Display
-**Symptom**: Queued message appeared both as user message and in queue indicator
-**Root Cause**: `startExecution()` always showed optimistic message, even when queuing
-**Fix**: Check `this.state.streamingConversations` before showing optimistic message
-**Commit**: `fbfd1ad` - "Fix: Don't show duplicate user message when queuing"
-
-### Issue 2: Steering Not Working
-**Symptom**: "Process not available for steering" error
-**Root Cause**: Claude Code agent had `closeStdin: true` and `supportsStdin: false`, closing stdin immediately
-**Fix**: Changed to `supportsStdin: true`, `closeStdin: false`, removed positional prompt arg
-**Commit**: `81d83af` - "Fix: Enable steering support for Claude Code agent"
-
-### Issue 3: Message Race Condition
-**Symptom**: Occasional duplicate messages in UI
-**Root Cause**: Message could be created on server, then optimistic message shown before server message arrived
-**Fix**: Check if message with ID already exists (line 1289-1293)
-**Status**: Built-in protection, no commit needed
-
-## Debugging Tips
-
-### Enable Detailed Logging
-Add to browser console:
+### Priority 1: Explicit Queue Lifecycle
+Add dedicated broadcast events:
 ```javascript
-// Intercept WebSocket messages
-const origSend = window.wsClient.send;
-window.wsClient.send = function(data) {
-  if (data.jsonrpc && (data.method.includes('msg') || data.method.includes('queue'))) {
-    console.log('[RPC OUT]', data.method, data.params);
+'message_queued'        // Sent when msg added to queue
+'queue_item_executing'  // Sent when queue item becomes active
+'queue_item_completed'  // Sent when queue item finished
+```
+
+### Priority 2: Atomic State Snapshots
+Periodically broadcast conversation state:
+```javascript
+{
+  type: 'conversation_state',
+  conversationId,
+  state: {
+    isStreaming: boolean,
+    messageCount: number,
+    queueLength: number,
+    lastMessageId: string,
+    lastUpdate: timestamp
   }
-  return origSend.call(this, data);
-};
+}
 ```
 
-### Check Message State
+### Priority 3: Deterministic Client State Machine
+Each conversation has explicit state mode:
 ```javascript
-// Check if message is in DOM
-document.querySelector('[data-msg-id="msg-xxx"]')
-
-// Check pending messages
-document.querySelector('.message-sending')
-
-// Check queue state
-document.querySelector('.queue-indicator')?.textContent
-
-// Check streaming state
-window.client?.state?.streamingConversations
+state = {
+  mode: 'IDLE' | 'STREAMING' | 'QUEUED',
+  messages: [],
+  queue: [],
+  isTransitioning: boolean  // true when queue→execute
+}
 ```
 
-### Database Validation
-```sql
--- Check message was created
-SELECT * FROM messages WHERE id = 'msg-xxx';
-
--- Check conversation message count
-SELECT messageCount FROM conversations WHERE id = 'conv-xxx';
-
--- Check queue entries
-SELECT * FROM queue WHERE conversationId = 'conv-xxx';
+### Priority 4: Connection Recovery
+After reconnect, fetch complete conversation state:
+```javascript
+await wsClient.rpc('conv.sync', { id: conversationId })
+// Returns: { messages, queue, isStreaming, chunks }
 ```
 
-## Expected Behavior Checklist
+## Testing Matrix
 
-- [ ] User sends message → appears immediately as pending (grey, "Sending...")
-- [ ] Server confirms message → pending becomes confirmed (normal styling)
-- [ ] User sends while streaming → message queues, appears ONLY in yellow queue box
-- [ ] Queue is processed → queued message becomes normal user message
-- [ ] Assistant responds → response appears as streaming chunks, then complete
-- [ ] Steering during execution → new prompt sent to running process, appears in streaming output
+| Scenario | Before Fix | After Fix | Status |
+|----------|-----------|-----------|--------|
+| Ctrl+Enter (not streaming) | ✓ Works | ✓ Works | ✓ OK |
+| Ctrl+Enter (streaming) | ✗ Duplicate | ✓ Single queue item | ✓ FIXED |
+| Queue indicator updates | ⚠️ Polling | ⚠️ Polling | ⚠️ Could improve |
+| Steering works | ✗ "Not available" | ✓ Works | ✓ FIXED |
+| Multiple queued items | ⚠️ Order unclear | ⚠️ Order unclear | ⚠️ OK but could confirm |
+| Page reload with queue | ✗ Queue lost | ✓ Persisted | ✓ OK |
+| Network disconnect | ⚠️ State stale | ⚠️ State stale | ⚠️ Could improve |
 
-## Performance Considerations
+## Files Modified in Latest Session
 
-- **Optimistic Rendering**: Instant perceived responsiveness
-- **Pending Message Matching**: Uses content matching to avoid duplication (potential issue with identical messages)
-- **Queue Fetching**: Called on queue updates, should be fast
-- **DOM Updates**: Uses insertAdjacentHTML for single-append performance
-- **WebSocket**: Batches events, should be fast
+1. **lib/claude-runner.js** - Steering support
+   - Changed `supportsStdin: false` → `true`
+   - Changed `closeStdin: true` → `false`
+   - Removed positional prompt argument
 
-## Future Improvements
+2. **static/js/client.js** - Queue display fix
+   - Skip optimistic message when streaming
+   - Skip confirm/fail handlers for queued messages
 
-1. Use message content hash instead of exact match for duplicate detection
-2. Add explicit queue-to-message transition event from server
-3. Implement message dedup at WebSocket layer
-4. Add comprehensive state synchronization heartbeat
-5. Implement client-side state snapshots for debugging
+3. **static/index.html** - Hamburger animation
+   - Added `transition: none` to .sidebar
+
+4. **fsbrowse/public/style.css** - Dark mode colors
+   - Improved hover states
+   - Theme-aware modal focus colors
+
+## Conclusion
+
+The sync-to-display system is now more consistent with the queue display fix and steering support. The architecture handles the primary use cases well, but could benefit from explicit lifecycle events and atomic state snapshots for guaranteed consistency. The current implementation is pragmatic and performant, trading off some guarantees for simplicity and responsiveness.
 
