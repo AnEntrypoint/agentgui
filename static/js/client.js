@@ -442,10 +442,10 @@ class AgentGUIClient {
 
     if (this.ui.agentSelector) {
       this.ui.agentSelector.addEventListener('change', () => {
-        // Load models for the selected sub-agent
-        const selectedSubAgentId = this.ui.agentSelector.value;
-        if (selectedSubAgentId) {
-          this.loadModelsForAgent(selectedSubAgentId);
+        // Load models for parent CLI agent when sub-agent changes
+        const parentAgentId = this.ui.cliSelector?.value;
+        if (parentAgentId) {
+          this.loadModelsForAgent(parentAgentId);
         }
         if (!this._agentLocked) {
           this.saveAgentAndModelToConversation();
@@ -2076,7 +2076,7 @@ class AgentGUIClient {
         // Auto-select first sub-agent and load its models
         const firstSubAgentId = subAgents[0].id;
         this.ui.agentSelector.value = firstSubAgentId;
-        this.loadModelsForAgent(firstSubAgentId);
+        this.loadModelsForAgent(cliAgentId); // models keyed to parent agent
       } else {
         console.log(`[Agent Selector] No sub-agents found for ${cliAgentId}`);
         // Load models for the CLI agent itself (fallback for agents without sub-agents)

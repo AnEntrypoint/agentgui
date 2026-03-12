@@ -534,9 +534,12 @@ function discoverAgents() {
       console.log(`[discoverAgents] Skipping CLI wrapper ${wrapper.id} (ACP agent ${wrapper.acpId} not found)`);
     }
   }
-  console.log('[discoverAgents] Final agent count:', agents.length, 'Agent IDs:', agents.map(a => a.id).join(', '));
+  // Remove raw ACP agents that have a cli-wrapper (avoid duplicates in UI)
+  const wrappedAcpIds = new Set(cliWrappers.filter(w => agents.some(a => a.id === w.acpId)).map(w => w.acpId));
+  const filtered = agents.filter(a => !wrappedAcpIds.has(a.id));
+  console.log('[discoverAgents] Final agent count:', filtered.length, 'Agent IDs:', filtered.map(a => a.id).join(', '));
 
-  return agents;
+  return filtered;
 }
 
 // Function to discover agents from external ACP servers
