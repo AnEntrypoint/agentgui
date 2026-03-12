@@ -302,7 +302,6 @@ const rateLimitState = new Map();
 const activeProcessesByRunId = new Map();
 const activeProcessesByConvId = new Map(); // Store process handles by conversationId for steering
 const steeringTimeouts = new Map(); // Track timeout handles for process cleanup
-const acpQueries = queries;
 const checkpointManager = new CheckpointManager(queries);
 const STUCK_AGENT_THRESHOLD_MS = 600000;
 const NO_PID_GRACE_PERIOD_MS = 60000;
@@ -1589,115 +1588,6 @@ const server = http.createServer(async (req, res) => {
             .catch((err) => { queries.updateRunStatus(run.run_id, 'error'); activeProcessesByRunId.delete(run.run_id); sseManager.sendError(err.message); sseManager.cleanup(); });
         }
       }
-      return;
-    }
-
-    const oldRunByIdMatch = pathOnly.match(/^\/api\/runs\/([^/]+)$/);
-    if (oldRunByIdMatch) {
-    const runId = oldRunByIdMatch[1];
-      const session = queries.getSession(runId);
-      
-      if (!session) {
-        sendJSON(req, res, 404, { error: 'Run not found' });
-        return;
-      }
-
-      if (req.method === 'GET') {
-        sendJSON(req, res, 200, {
-          id: session.id,
-          status: session.status,
-          started_at: session.started_at,
-          completed_at: session.completed_at,
-          agentId: session.agentId,
-          input: null,
-          output: null
-        });
-        return;
-      }
-
-      if (req.method === 'DELETE') {
-        queries.deleteSession(runId);
-        sendJSON(req, res, 204, {});
-        return;
-      }
-
-      if (req.method === 'POST') {
-        if (session.status !== 'interrupted') {
-          sendJSON(req, res, 409, { error: 'Can only resume interrupted runs' });
-          return;
-        }
-
-        let body = '';
-        for await (const chunk of req) { body += chunk; }
-        let parsed = {};
-        try { parsed = body ? JSON.parse(body) : {}; } catch {}
-
-        const { input } = parsed;
-        if (!input) {
-          sendJSON(req, res, 400, { error: 'Missing input in request body' });
-          return;
-        }
-
-        const conv = queries.getConversation(session.conversationId);
-        const resolvedAgentId = session.agentId || conv?.agentId || 'claude-code';
-        const resolvedModel = conv?.model || null;
-        const cwd = conv?.workingDirectory || STARTUP_CWD;
-
-        queries.updateSession(runId, { status: 'pending' });
-        
-        const message = queries.createMessage(session.conversationId, 'user', typeof input === 'string' ? input : JSON.stringify(input));
-
-        processMessageWithStreaming(session.conversationId, message.id, runId, typeof input === 'string' ? input : JSON.stringify(input), resolvedAgentId, resolvedModel);
-
-        sendJSON(req, res, 200, {
-          id: session.id,
-          status: 'pending',
-          started_at: session.started_at,
-          agentId: resolvedAgentId
-        });
-        return;
-      }
-    }
-
-    const oldRunCancelMatch = pathOnly.match(/^\/api\/runs\/([^/]+)\/cancel$/);
-    if (oldRunCancelMatch && req.method === 'POST') {
-      const runId = oldRunCancelMatch[1];
-      const session = queries.getSession(runId);
-      
-      if (!session) {
-        sendJSON(req, res, 404, { error: 'Run not found' });
-        return;
-      }
-
-      const conversationId = session.conversationId;
-      const entry = activeExecutions.get(conversationId);
-      
-      if (entry && entry.sessionId === runId) {
-        const { pid } = entry;
-        if (pid) {
-          try {
-            process.kill(-pid, 'SIGKILL');
-          } catch {
-            try {
-              process.kill(pid, 'SIGKILL');
-            } catch (e) {}
-          }
-        }
-      }
-
-      queries.updateSession(runId, { status: 'interrupted', completed_at: Date.now() });
-      queries.setIsStreaming(conversationId, false);
-      activeExecutions.delete(conversationId);
-
-      broadcastSync({
-        type: 'streaming_complete',
-        sessionId: runId,
-        conversationId,
-        interrupted: true,
-        timestamp: Date.now()
-      });
-
-      sendJSON(req, res, 204, {});
       return;
     }
 
@@ -3597,6 +3487,21 @@ function createChunkBatcher() {
   return { add, drain };
 }
 
+function parseRateLimitResetTime(text) {
+  const match = text.match(/resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?(UTC|[A-Z]{2,4})\)?/i);
+  if (!match) return 300;
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2] ? parseInt(match[2], 10) : 0;
+  const period = match[3]?.toLowerCase();
+  if (period === 'pm' && hours !== 12) hours += 12;
+  if (period === 'am' && hours === 12) hours = 0;
+  const now = new Date();
+  const resetTime = new Date(now);
+  resetTime.setUTCHours(hours, minutes, 0, 0);
+  if (resetTime <= now) resetTime.setUTCDate(resetTime.getUTCDate() + 1);
+  return Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
+}
+
 async function processMessageWithStreaming(conversationId, messageId, sessionId, content, agentId, model, subAgent) {
   const startTime = Date.now();
   touchACP(agentId);
@@ -3700,28 +3605,8 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
             if (rateLimitTextMatch) {
               debugLog(`[rate-limit] Detected rate limit message in stream for conv ${conversationId}`);
               
-              // Extract reset time from message
-              let retryAfterSec = 300; // default 5 minutes
-              const resetTimeMatch = block.text.match(/resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?(UTC|[A-Z]{2,4})\)?/i);
-              if (resetTimeMatch) {
-                let hours = parseInt(resetTimeMatch[1], 10);
-                const minutes = resetTimeMatch[2] ? parseInt(resetTimeMatch[2], 10) : 0;
-                const period = resetTimeMatch[3]?.toLowerCase();
-                
-                if (period === 'pm' && hours !== 12) hours += 12;
-                if (period === 'am' && hours === 12) hours = 0;
-                
-                const now = new Date();
-                const resetTime = new Date(now);
-                resetTime.setUTCHours(hours, minutes, 0, 0);
-                
-                if (resetTime <= now) {
-                  resetTime.setUTCDate(resetTime.getUTCDate() + 1);
-                }
-                
-                retryAfterSec = Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
-                debugLog(`[rate-limit] Parsed reset time: ${resetTime.toISOString()}, retry in ${retryAfterSec}s`);
-              }
+              const retryAfterSec = parseRateLimitResetTime(block.text);
+              debugLog(`[rate-limit] Parsed reset time, retry in ${retryAfterSec}s`);
               
               // Kill the running process
               const entry = activeExecutions.get(conversationId);
@@ -3833,26 +3718,7 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
           if (rateLimitResultMatch) {
             debugLog(`[rate-limit] Detected rate limit in result for conv ${conversationId}`);
             
-            let retryAfterSec = 300;
-            const resetTimeMatch = resultText.match(/resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?(UTC|[A-Z]{2,4})\)?/i);
-            if (resetTimeMatch) {
-              let hours = parseInt(resetTimeMatch[1], 10);
-              const minutes = resetTimeMatch[2] ? parseInt(resetTimeMatch[2], 10) : 0;
-              const period = resetTimeMatch[3]?.toLowerCase();
-              
-              if (period === 'pm' && hours !== 12) hours += 12;
-              if (period === 'am' && hours === 12) hours = 0;
-              
-              const now = new Date();
-              const resetTime = new Date(now);
-              resetTime.setUTCHours(hours, minutes, 0, 0);
-              
-              if (resetTime <= now) {
-                resetTime.setUTCDate(resetTime.getUTCDate() + 1);
-              }
-              
-              retryAfterSec = Math.max(60, Math.ceil((resetTime.getTime() - now.getTime()) / 1000));
-            }
+            const retryAfterSec = parseRateLimitResetTime(resultText);
             
             const entry = activeExecutions.get(conversationId);
             if (entry && entry.pid) {
