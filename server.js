@@ -279,10 +279,8 @@ function pushTTSAudio(cacheKey, wav, conversationId, sessionId, voiceId) {
 }
 
 
-const VOICE_INSTRUCTIONS = `Plain text. Spoken aloud. Conversational. No markdown, formatting, bullets, or lists. Short sentences. Technical facts only.`;
-
 function buildSystemPrompt(agentId, model, subAgent) {
-  const parts = [VOICE_INSTRUCTIONS];
+  const parts = [];
   if (agentId && agentId !== 'claude-code') {
     const displayAgentId = agentId.split('-·-')[0];
     parts.push(`Use ${displayAgentId} subagent for all tasks.`);

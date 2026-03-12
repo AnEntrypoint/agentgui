@@ -80,7 +80,6 @@ class AgentGUIClient {
     this._scrollAnimating = false;
     this._scrollLerpFactor = config.scrollAnimationSpeed || 0.15;
 
-    this._consolidator = typeof EventConsolidator !== 'undefined' ? new EventConsolidator() : null;
 
     this._serverProcessingEstimate = 2000;
     this._lastSendTime = 0;
