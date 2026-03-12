@@ -4179,7 +4179,16 @@ function drainMessageQueue(conversationId) {
   const next = queue.shift();
   if (queue.length === 0) messageQueues.delete(conversationId);
 
-  debugLog(`[queue] Draining next message for ${conversationId}`);
+  debugLog(`[queue] Draining next message for ${conversationId}, messageId=${next.messageId}`);
+
+  // Broadcast queue_item_dequeued so client can update UI immediately
+  broadcastSync({
+    type: 'queue_item_dequeued',
+    conversationId,
+    messageId: next.messageId,
+    queueLength: queue?.length || 0,
+    timestamp: Date.now()
+  });
 
   const session = queries.createSession(conversationId);
   queries.createEvent('session.created', { messageId: next.messageId, sessionId: session.id }, conversationId, session.id);
