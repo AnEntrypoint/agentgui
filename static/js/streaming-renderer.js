@@ -4,15 +4,6 @@
  * for Claude Code streaming execution display
  */
 
-function pathSplit(p) {
-  return p.split(/[\/\\]/).filter(Boolean);
-}
-
-function pathBasename(p) {
-  const parts = pathSplit(p);
-  return parts.length ? parts.pop() : '';
-}
-
 class StreamingRenderer {
   constructor(config = {}) {
     // Configuration
