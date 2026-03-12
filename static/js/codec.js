@@ -8,11 +8,11 @@ const THRESHOLD = 200;
 const COMPRESSIBLE = new Set(['content', 'text', 'output', 'response', 'prompt', 'input', 'data']);
 
 function compressText(str) {
-  return { __tok: true, d: new Uint32Array(tokEncode(str)) };
+  return { __tok: true, d: tokEncode(str) };
 }
 
 function decompressText(val) {
-  return tokDecode(Array.from(val.d));
+  return tokDecode(val.d);
 }
 
 function encodeObj(obj) {
