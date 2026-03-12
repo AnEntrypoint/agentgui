@@ -155,7 +155,8 @@ class ConversationManager {
 
   async fetchHomePath() {
     try {
-      const data = await window.wsClient.rpc('home');
+      const res = await fetch(`${window.BASE_URL || '/gm'}/api/home`);
+      const data = await res.json();
       this.folderBrowser.homePath = data.home || '~';
       this.folderBrowser.cwdPath = data.cwd || null;
     } catch (e) {
