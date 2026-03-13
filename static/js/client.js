@@ -165,6 +165,11 @@ class AgentGUIClient {
       console.log('WebSocket connected');
       this.updateConnectionStatus('connected');
       this._subscribeToConversationUpdates();
+      // On reconnect (not initial connect), invalidate current conversation's DOM
+      // cache so we fetch fresh chunks rather than serving potentially stale DOM.
+      if (this.wsManager.stats.totalReconnects > 0 && this.state.currentConversation?.id) {
+        this.invalidateCache(this.state.currentConversation.id);
+      }
       this._recoverMissedChunks();
       this.updateSendButtonState();
       this.enablePromptArea();
@@ -1009,16 +1014,17 @@ class AgentGUIClient {
           const oldestKey = this._bgCache.keys().next().value;
           this._bgCache.delete(oldestKey);
         }
-        entry = { packed: [], seqSet: new Set(), sessionId: data.sessionId };
+        entry = { items: [], seqSet: new Set(), sessionId: data.sessionId };
         this._bgCache.set(convId, entry);
       }
       if (data.seq === undefined || !entry.seqSet.has(data.seq)) {
         if (data.seq !== undefined) entry.seqSet.add(data.seq);
         entry.sessionId = data.sessionId;
-        // Pack with msgpackr if available, else store raw
+        // Store seq alongside packed data so _flushBgCache can dedup against _renderedSeqs
         try {
-          entry.packed.push(typeof msgpackr !== 'undefined' ? msgpackr.pack(block) : block);
-        } catch (_) { entry.packed.push(block); }
+          const packed = typeof msgpackr !== 'undefined' ? msgpackr.pack(block) : block;
+          entry.items.push({ seq: data.seq, packed });
+        } catch (_) { entry.items.push({ seq: data.seq, packed: block }); }
       }
     }
 
@@ -1811,7 +1817,7 @@ class AgentGUIClient {
   // Flush background-cached blocks into the active streaming container
   _flushBgCache(conversationId, sessionId) {
     const entry = this._bgCache.get(conversationId);
-    if (!entry || entry.packed.length === 0) return;
+    if (!entry || entry.items.length === 0) return;
     if (entry.sessionId !== sessionId) { this._bgCache.delete(conversationId); return; }
 
     const streamingEl = document.getElementById(`streaming-${sessionId}`);
@@ -1819,13 +1825,19 @@ class AgentGUIClient {
     const blocksEl = streamingEl.querySelector('.streaming-blocks');
     if (!blocksEl) return;
 
-    const seenSeqs = (this._renderedSeqs || {})[sessionId] || new Set();
-    for (const packed of entry.packed) {
+    if (!this._renderedSeqs) this._renderedSeqs = {};
+    const seenSeqs = this._renderedSeqs[sessionId] || (this._renderedSeqs[sessionId] = new Set());
+    for (const item of entry.items) {
+      // Skip blocks already rendered (dedup by seq)
+      if (item.seq !== undefined && seenSeqs.has(item.seq)) continue;
       try {
-        const block = (typeof msgpackr !== 'undefined' && packed instanceof Uint8Array)
-          ? msgpackr.unpack(packed) : packed;
+        const block = (typeof msgpackr !== 'undefined' && item.packed instanceof Uint8Array)
+          ? msgpackr.unpack(item.packed) : item.packed;
         const el = this.renderer.renderBlock(block, { sessionId }, blocksEl);
-        if (el) blocksEl.appendChild(el);
+        if (el) {
+          if (item.seq !== undefined) seenSeqs.add(item.seq);
+          blocksEl.appendChild(el);
+        }
       } catch (_) {}
     }
     this._bgCache.delete(conversationId);
@@ -1838,8 +1850,10 @@ class AgentGUIClient {
     // where we've already removed the conversation from the set. Allow recovery always.
 
     const sessionId = this.state.currentSession.id;
+    // Use lastSeq=-1 when no WS messages received yet (fresh load/full disconnect).
+    // Server query is `sequence > sinceSeq`, so -1 returns all chunks from seq 0.
+    // _renderedSeqs dedup prevents double-rendering anything already shown.
     const lastSeq = this.wsManager.getLastSeq(sessionId);
-    if (lastSeq < 0) return;
 
     try {
       const { chunks: rawChunks } = await window.wsClient.rpc('sess.chunks', { id: sessionId, sinceSeq: lastSeq });
