@@ -434,7 +434,20 @@ class ConversationManager {
       // Never clear conversations on poll if the list is empty — preserve existing state
       // Empty list likely indicates a server error, not actually empty conversations
       if (convList.length > 0) {
-        this._updateConversations(convList, 'poll');
+        // If poll returns fewer conversations than cached, merge to avoid dropping items
+        // due to transient server errors or partial responses
+        if (convList.length < this.conversations.length) {
+          const polledIds = new Set(convList.map(c => c.id));
+          const kept = this.conversations.filter(c => !polledIds.has(c.id));
+          // Update polled items in place, append any cached items not in poll result
+          const merged = convList.map(pc => {
+            const cached = this.conversations.find(c => c.id === pc.id);
+            return cached ? Object.assign({}, cached, pc) : pc;
+          }).concat(kept);
+          this._updateConversations(merged, 'poll_merge');
+        } else {
+          this._updateConversations(convList, 'poll');
+        }
       } else if (this.conversations.length === 0) {
         // First load and empty - show empty state, but don't clear on subsequent polls
         this._updateConversations(convList, 'poll');
