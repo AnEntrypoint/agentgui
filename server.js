@@ -1106,11 +1106,7 @@ function compressAndSend(req, res, statusCode, contentType, body) {
     res.end(raw);
     return;
   }
-  if (acceptsEncoding(req, 'br')) {
-    const compressed = zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });
-    res.writeHead(statusCode, { ...baseHeaders, 'Content-Encoding': 'br', 'Content-Length': compressed.length });
-    res.end(compressed);
-  } else if (acceptsEncoding(req, 'gzip')) {
+  if (acceptsEncoding(req, 'gzip')) {
     const compressed = zlib.gzipSync(raw, { level: 6 });
     res.writeHead(statusCode, { ...baseHeaders, 'Content-Encoding': 'gzip', 'Content-Length': compressed.length });
     res.end(compressed);
@@ -3282,12 +3278,7 @@ function serveFile(filePath, res, req) {
         : 'public, max-age=3600, must-revalidate';
 
       const sendCached = (cached) => {
-        const wantsBr = acceptsEncoding(req, 'br');
-        const wantsGz = acceptsEncoding(req, 'gzip');
-        if (wantsBr && cached.br) {
-          res.writeHead(200, { 'Content-Type': contentType, 'Content-Encoding': 'br', 'Content-Length': cached.br.length, 'ETag': etag, 'Cache-Control': cacheControl });
-          res.end(cached.br);
-        } else if (wantsGz && cached.gz) {
+        if (acceptsEncoding(req, 'gzip') && cached.gz) {
           res.writeHead(200, { 'Content-Type': contentType, 'Content-Encoding': 'gzip', 'Content-Length': cached.gz.length, 'ETag': etag, 'Cache-Control': cacheControl });
           res.end(cached.gz);
         } else {
@@ -3302,15 +3293,14 @@ function serveFile(filePath, res, req) {
       fs.readFile(filePath, (err2, raw) => {
         if (err2) { res.writeHead(500); res.end('Server error'); return; }
         if (raw.length < 860) {
-          const entry = { raw, br: null, gz: null };
+          const entry = { raw, gz: null };
           _assetCache.set(etag, entry);
           sendCached(entry);
           return;
         }
-        // Pre-compress once, cache both encodings
-        const br = zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });
+        // Pre-compress once with gzip, cache it
         const gz = zlib.gzipSync(raw, { level: 6 });
-        const entry = { raw, br, gz };
+        const entry = { raw, gz };
         _assetCache.set(etag, entry);
         sendCached(entry);
       });
@@ -3323,7 +3313,7 @@ function serveFile(filePath, res, req) {
     if (err) { res.writeHead(500); res.end('Server error'); return; }
     const etag = generateETag(stats);
     if (!watch && _htmlCache && _htmlCacheEtag === etag) {
-      res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'Content-Encoding': 'br', 'Content-Length': _htmlCache.length });
+      res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'Content-Encoding': 'gzip', 'Content-Length': _htmlCache.length });
       res.end(_htmlCache);
       return;
     }
@@ -3337,13 +3327,10 @@ function serveFile(filePath, res, req) {
       if (watch) {
         content += `\n<script>(function(){const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'${BASE_URL}/hot-reload');ws.onmessage=e=>{if(JSON.parse(e.data).type==='reload')location.reload()};})();</script>`;
       }
-      if (acceptsEncoding(req, 'br')) {
-        const compressed = zlib.brotliCompressSync(Buffer.from(content), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });
-        if (!watch) { _htmlCache = compressed; _htmlCacheEtag = etag; }
-        res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'Content-Encoding': 'br', 'Content-Length': compressed.length });
-        res.end(compressed);
-      } else {
-        compressAndSend(req, res, 200, contentType, content);
+      compressAndSend(req, res, 200, contentType, content);
+      if (!watch && acceptsEncoding(req, 'gzip')) {
+        _htmlCache = zlib.gzipSync(Buffer.from(content), { level: 6 });
+        _htmlCacheEtag = etag;
       }
     });
   });
