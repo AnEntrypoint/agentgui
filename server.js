@@ -3724,8 +3724,10 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
         if (entry) entry.pid = pid;
       },
       onProcess: (proc) => {
-        // Store process handle for steering
+        // Store process handle for steering - both maps so steer handler always finds it
         activeProcessesByConvId.set(conversationId, proc);
+        const entry = activeExecutions.get(conversationId);
+        if (entry) entry.proc = proc;
       }
     };
 
