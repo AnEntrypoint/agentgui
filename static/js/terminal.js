@@ -21,8 +21,8 @@
   }
 
   function wsSend(obj) {
-    if (window.wsManager && window.wsManager.send) {
-      window.wsManager.send(obj);
+    if (window.wsManager && window.wsManager.sendMessage) {
+      window.wsManager.sendMessage(obj);
     }
   }
 
