@@ -166,17 +166,30 @@ if (fs.existsSync(fsbrowseAppJSPath)) {
   try {
     let appContent = fs.readFileSync(fsbrowseAppJSPath, 'utf8');
 
-    // Check if theme sync is already patched
-    if (appContent.includes('setupThemeSync')) {
-      console.log('[PATCH] fsbrowse theme sync already patched');
+    // Ensure postMessage theme listener is present (storage events don't fire in same-window iframes)
+    if (appContent.includes('theme-change')) {
+      console.log('[PATCH] fsbrowse postMessage theme sync already present');
+    } else if (appContent.includes('setupThemeSync')) {
+      // setupThemeSync exists but lacks postMessage support - inject it
+      appContent = appContent.replace(
+        "    // Watch for storage changes from other tabs/windows\n    window.addEventListener('storage', e => {\n      if (e.key === 'gmgui-theme') syncTheme();\n    });",
+        "    // Watch for storage changes from other tabs/windows\n    window.addEventListener('storage', e => {\n      if (e.key === 'gmgui-theme') syncTheme();\n    });\n\n    // Watch for postMessage from parent window (same-window iframes don't receive storage events)\n    window.addEventListener('message', e => {\n      if (e.data && e.data.type === 'theme-change' && e.data.theme) syncTheme(e.data.theme);\n    });"
+      );
+      // Also make syncTheme accept an explicit theme argument
+      appContent = appContent.replace(
+        'const syncTheme = () => {\n      const theme = localStorage.getItem(\'gmgui-theme\') ||',
+        'const syncTheme = (theme) => {\n      theme = theme || localStorage.getItem(\'gmgui-theme\') ||'
+      );
+      fs.writeFileSync(fsbrowseAppJSPath, appContent, 'utf8');
+      console.log('[PATCH] fsbrowse postMessage theme sync injected');
     } else {
-      // Inject setupThemeSync call and method
+      // No setupThemeSync at all - inject full method
       const themeSyncMethod = `
   setupThemeSync() {
     // Sync theme from parent window/localStorage if available
-    const syncTheme = () => {
-      const theme = localStorage.getItem('gmgui-theme') ||
-                    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    const syncTheme = (theme) => {
+      theme = theme || localStorage.getItem('gmgui-theme') ||
+              (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
       document.documentElement.className = theme;
       document.documentElement.setAttribute('data-theme', theme);
     };
@@ -188,23 +201,19 @@ if (fs.existsSync(fsbrowseAppJSPath)) {
       if (e.key === 'gmgui-theme') syncTheme();
     });
 
+    // Watch for postMessage from parent window (same-window iframes don't receive storage events)
+    window.addEventListener('message', e => {
+      if (e.data && e.data.type === 'theme-change' && e.data.theme) syncTheme(e.data.theme);
+    });
+
     // Watch for media query changes
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncTheme);
   },`;
 
-      // Add setupThemeSync call to init()
       appContent = appContent.replace(
         'async init() {',
         'async init() {\n    this.setupThemeSync();'
       );
-
-      // Add setupThemeSync method after init()
-      appContent = appContent.replace(
-        'async init() {\n    this.setupThemeSync();\n    this.setupDragDrop();',
-        'async init() {\n    this.setupThemeSync();\n    this.setupDragDrop();'
-      );
-
-      // Insert the method after the api() method
       appContent = appContent.replace(
         'api(path) {\n    return `${this.basePath}${path}`;\n  },',
         'api(path) {\n    return `${this.basePath}${path}`;\n  },' + themeSyncMethod

@@ -44,6 +44,12 @@ class ThemeManager {
     document.documentElement.classList.add(theme);
     localStorage.setItem(this.THEME_KEY, theme);
     this.updateThemeIcon(theme);
+
+    // Notify embedded iframes (storage events don't fire in same window)
+    const msg = { type: 'theme-change', theme };
+    document.querySelectorAll('iframe').forEach(iframe => {
+      try { iframe.contentWindow.postMessage(msg, '*'); } catch (_) {}
+    });
   }
 
   toggleTheme() {
