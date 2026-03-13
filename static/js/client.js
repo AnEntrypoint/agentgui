@@ -1156,6 +1156,8 @@ class AgentGUIClient {
       if (indicator) {
         indicator.innerHTML = `<span style="color:var(--color-error);">Error: ${this.escapeHtml(data.error || 'Unknown error')}</span>`;
       }
+      // Remove all thinking blocks on error
+      streamingEl.querySelectorAll('.block-thinking').forEach(block => block.remove());
     } else {
       const outputEl3 = document.getElementById('output');
       const messagesEl3 = outputEl3 && outputEl3.querySelector('.conversation-messages');
@@ -1218,6 +1220,9 @@ class AgentGUIClient {
       streamingEl.classList.remove('streaming-message');
       const prevTextEl = streamingEl.querySelector('.streaming-text-current');
       if (prevTextEl) prevTextEl.classList.remove('streaming-text-current');
+
+      // Remove all thinking blocks (block-thinking elements)
+      streamingEl.querySelectorAll('.block-thinking').forEach(block => block.remove());
 
       const ts = document.createElement('div');
       ts.className = 'message-timestamp';
