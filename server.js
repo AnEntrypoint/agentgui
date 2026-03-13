@@ -302,7 +302,7 @@ const activeProcessesByRunId = new Map();
 const activeProcessesByConvId = new Map(); // Store process handles by conversationId for steering
 const steeringTimeouts = new Map(); // Track timeout handles for process cleanup
 const checkpointManager = new CheckpointManager(queries);
-const STUCK_AGENT_THRESHOLD_MS = 600000;
+const STUCK_AGENT_THRESHOLD_MS = 1800000;
 const NO_PID_GRACE_PERIOD_MS = 60000;
 const DEFAULT_RATE_LIMIT_COOLDOWN_MS = 60000;
 
@@ -4613,7 +4613,7 @@ function performAgentHealthCheck() {
         debugLog(`[HEALTH] Agent PID ${entry.pid} for conv ${conversationId} has no activity for ${Math.round((now - entry.lastActivity) / 1000)}s`);
         // Kill stuck agent and clear streaming state
         try { process.kill(entry.pid, 'SIGTERM'); } catch (e) {}
-        markAgentDead(conversationId, entry, 'Agent was stuck (no activity for 10 minutes)');
+        markAgentDead(conversationId, entry, 'Agent was stuck (no activity for 30 minutes)');
       }
     } else {
       if (now - entry.startTime > NO_PID_GRACE_PERIOD_MS) {
