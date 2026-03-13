@@ -1176,14 +1176,11 @@ const server = http.createServer(async (req, res) => {
 
     if (pathOnly === '/api/conversations' && req.method === 'GET') {
       const conversations = queries.getConversationsList();
-      // Filter out stale streaming state: check both activeExecutions AND database active sessions
+      // Filter out stale streaming state using a single bulk query instead of N+1 per-conversation queries
+      const activeSessionConvIds = new Set(queries.getActiveSessionConversationIds());
       for (const conv of conversations) {
-        if (conv.isStreaming) {
-          const hasActiveSession = queries.getSessionsByStatus(conv.id, 'active').length > 0 ||
-                                   queries.getSessionsByStatus(conv.id, 'pending').length > 0;
-          if (!activeExecutions.has(conv.id) && !hasActiveSession) {
-            conv.isStreaming = 0;
-          }
+        if (conv.isStreaming && !activeExecutions.has(conv.id) && !activeSessionConvIds.has(conv.id)) {
+          conv.isStreaming = 0;
         }
       }
             sendJSON(req, res, 200, { conversations });
@@ -3259,6 +3256,12 @@ function generateETag(stats) {
   return `"${stats.mtimeMs.toString(36)}-${stats.size.toString(36)}"`;
 }
 
+// In-memory cache: etag -> { br: Buffer, gz: Buffer, raw: Buffer }
+const _assetCache = new Map();
+// Cached processed HTML (invalidated on hot-reload or server restart)
+let _htmlCache = null;
+let _htmlCacheEtag = null;
+
 function serveFile(filePath, res, req) {
   const ext = path.extname(filePath).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
@@ -3272,43 +3275,77 @@ function serveFile(filePath, res, req) {
         res.end();
         return;
       }
-      const headers = {
-        'Content-Type': contentType,
-        'Content-Length': stats.size,
-        'ETag': etag,
-        'Cache-Control': ['.js', '.css'].includes(ext) ? 'public, max-age=0, must-revalidate' : 'public, max-age=3600, must-revalidate'
+      const isJsCss = ['.js', '.css'].includes(ext);
+      // Use long cache + ETag for immutable assets; browser only re-requests on server restart
+      const cacheControl = isJsCss
+        ? 'public, max-age=31536000, immutable'
+        : 'public, max-age=3600, must-revalidate';
+
+      const sendCached = (cached) => {
+        const wantsBr = acceptsEncoding(req, 'br');
+        const wantsGz = acceptsEncoding(req, 'gzip');
+        if (wantsBr && cached.br) {
+          res.writeHead(200, { 'Content-Type': contentType, 'Content-Encoding': 'br', 'Content-Length': cached.br.length, 'ETag': etag, 'Cache-Control': cacheControl });
+          res.end(cached.br);
+        } else if (wantsGz && cached.gz) {
+          res.writeHead(200, { 'Content-Type': contentType, 'Content-Encoding': 'gzip', 'Content-Length': cached.gz.length, 'ETag': etag, 'Cache-Control': cacheControl });
+          res.end(cached.gz);
+        } else {
+          res.writeHead(200, { 'Content-Type': contentType, 'Content-Length': cached.raw.length, 'ETag': etag, 'Cache-Control': cacheControl });
+          res.end(cached.raw);
+        }
       };
-      if (acceptsEncoding(req, 'br') && stats.size > 860) {
-        const stream = fs.createReadStream(filePath);
-        headers['Content-Encoding'] = 'br';
-        delete headers['Content-Length'];
-        res.writeHead(200, headers);
-        stream.pipe(zlib.createBrotliCompress({ params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } })).pipe(res);
-      } else if (acceptsEncoding(req, 'gzip') && stats.size > 860) {
-        const stream = fs.createReadStream(filePath);
-        headers['Content-Encoding'] = 'gzip';
-        delete headers['Content-Length'];
-        res.writeHead(200, headers);
-        stream.pipe(zlib.createGzip({ level: 6 })).pipe(res);
-      } else {
-        res.writeHead(200, headers);
-        fs.createReadStream(filePath).pipe(res);
-      }
+
+      const cached = _assetCache.get(etag);
+      if (cached) { sendCached(cached); return; }
+
+      fs.readFile(filePath, (err2, raw) => {
+        if (err2) { res.writeHead(500); res.end('Server error'); return; }
+        if (raw.length < 860) {
+          const entry = { raw, br: null, gz: null };
+          _assetCache.set(etag, entry);
+          sendCached(entry);
+          return;
+        }
+        // Pre-compress once, cache both encodings
+        const br = zlib.brotliCompressSync(raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });
+        const gz = zlib.gzipSync(raw, { level: 6 });
+        const entry = { raw, br, gz };
+        _assetCache.set(etag, entry);
+        sendCached(entry);
+      });
     });
     return;
   }
 
-  fs.readFile(filePath, (err, data) => {
+  // HTML: cache processed result, invalidate when file changes
+  fs.stat(filePath, (err, stats) => {
     if (err) { res.writeHead(500); res.end('Server error'); return; }
-    let content = data.toString();
-    const baseTag = `<script>window.__BASE_URL='${BASE_URL}';window.__SERVER_VERSION='${PKG_VERSION}';</script>`;
-    content = content.replace('<head>', `<head>\n  <base href="${BASE_URL}/">\n  ` + baseTag);
-    content = content.replace(/(href|src)="vendor\//g, `$1="${BASE_URL}/vendor/`);
-    content = content.replace(/(src)="\/gm\/js\//g, `$1="${BASE_URL}/js/`);
-    if (watch) {
-      content += `\n<script>(function(){const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'${BASE_URL}/hot-reload');ws.onmessage=e=>{if(JSON.parse(e.data).type==='reload')location.reload()};})();</script>`;
+    const etag = generateETag(stats);
+    if (!watch && _htmlCache && _htmlCacheEtag === etag) {
+      res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'Content-Encoding': 'br', 'Content-Length': _htmlCache.length });
+      res.end(_htmlCache);
+      return;
     }
-    compressAndSend(req, res, 200, contentType, content);
+    fs.readFile(filePath, (err2, data) => {
+      if (err2) { res.writeHead(500); res.end('Server error'); return; }
+      let content = data.toString();
+      const baseTag = `<script>window.__BASE_URL='${BASE_URL}';window.__SERVER_VERSION='${PKG_VERSION}';</script>`;
+      content = content.replace('<head>', `<head>\n  <base href="${BASE_URL}/">\n  ` + baseTag);
+      content = content.replace(/(href|src)="vendor\//g, `$1="${BASE_URL}/vendor/`);
+      content = content.replace(/(src)="\/gm\/js\//g, `$1="${BASE_URL}/js/`);
+      if (watch) {
+        content += `\n<script>(function(){const ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+'${BASE_URL}/hot-reload');ws.onmessage=e=>{if(JSON.parse(e.data).type==='reload')location.reload()};})();</script>`;
+      }
+      if (acceptsEncoding(req, 'br')) {
+        const compressed = zlib.brotliCompressSync(Buffer.from(content), { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 } });
+        if (!watch) { _htmlCache = compressed; _htmlCacheEtag = etag; }
+        res.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store', 'Content-Encoding': 'br', 'Content-Length': compressed.length });
+        res.end(compressed);
+      } else {
+        compressAndSend(req, res, 200, contentType, content);
+      }
+    });
   });
 }
 
@@ -4395,7 +4432,12 @@ if (watch) {
       const fp = path.join(staticDir, file);
       if (watchedFiles.has(fp)) return;
       fs.watchFile(fp, { interval: 100 }, (curr, prev) => {
-        if (curr.mtime > prev.mtime) hotReloadClients.forEach(c => { if (c.readyState === 1) c.send(JSON.stringify({ type: 'reload' })); });
+        if (curr.mtime > prev.mtime) {
+          _assetCache.clear();
+          _htmlCache = null;
+          _htmlCacheEtag = null;
+          hotReloadClients.forEach(c => { if (c.readyState === 1) c.send(JSON.stringify({ type: 'reload' })); });
+        }
       });
       watchedFiles.set(fp, true);
     });

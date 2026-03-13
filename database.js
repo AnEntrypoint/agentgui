@@ -938,6 +938,13 @@ export const queries = {
     return stmt.all();
   },
 
+  getActiveSessionConversationIds() {
+    const stmt = prep(
+      "SELECT DISTINCT conversationId FROM sessions WHERE status IN ('active', 'pending')"
+    );
+    return stmt.all().map(r => r.conversationId);
+  },
+
   getSessionsByConversation(conversationId, limit = 10, offset = 0) {
     const stmt = prep(
       'SELECT * FROM sessions WHERE conversationId = ? ORDER BY started_at DESC LIMIT ? OFFSET ?'

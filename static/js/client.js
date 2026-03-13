@@ -130,12 +130,12 @@ class AgentGUIClient {
         await this.connectWebSocket();
       }
 
-      // Load initial data
-      await this.loadAgents();
-      await this.loadConversations();
-
-      // Check speech model status
-      await this.checkSpeechStatus();
+      // Load initial data in parallel - none of these depend on each other
+      await Promise.all([
+        this.loadAgents(),
+        this.loadConversations(),
+        this.checkSpeechStatus()
+      ]);
 
       // Enable controls for initial interaction
       this.enableControls();
