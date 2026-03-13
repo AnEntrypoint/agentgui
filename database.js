@@ -479,6 +479,10 @@ try {
     db.exec('ALTER TABLE sessions ADD COLUMN interrupt TEXT');
     console.log('[Migration] Added interrupt column to sessions');
   }
+  if (!sessColsACP.includes('claudeSessionId')) {
+    db.exec('ALTER TABLE sessions ADD COLUMN claudeSessionId TEXT');
+    console.log('[Migration] Added claudeSessionId column to sessions');
+  }
 
   // Create ACP tables
   db.exec(`
@@ -679,9 +683,13 @@ export const queries = {
     };
   },
 
-  setClaudeSessionId(conversationId, claudeSessionId) {
+  setClaudeSessionId(conversationId, claudeSessionId, sessionId = null) {
     const stmt = prep('UPDATE conversations SET claudeSessionId = ?, updated_at = ? WHERE id = ?');
     stmt.run(claudeSessionId, Date.now(), conversationId);
+    // Also track on the current AgentGUI session so we can clean up all sessions on delete
+    if (sessionId) {
+      prep('UPDATE sessions SET claudeSessionId = ? WHERE id = ?').run(claudeSessionId, sessionId);
+    }
   },
 
   getClaudeSessionId(conversationId) {
@@ -1023,9 +1031,14 @@ export const queries = {
     const conv = this.getConversation(id);
     if (!conv) return false;
 
-    // Delete associated Claude Code session file if it exists
-    if (conv.claudeSessionId) {
-      this.deleteClaudeSessionFile(conv.claudeSessionId);
+    // Delete all Claude Code session files for this conversation (all executions)
+    const sessionClaudeIds = prep('SELECT DISTINCT claudeSessionId FROM sessions WHERE conversationId = ? AND claudeSessionId IS NOT NULL').all(id).map(r => r.claudeSessionId);
+    // Also include the current claudeSessionId on the conversation record
+    if (conv.claudeSessionId && !sessionClaudeIds.includes(conv.claudeSessionId)) {
+      sessionClaudeIds.push(conv.claudeSessionId);
+    }
+    for (const csid of sessionClaudeIds) {
+      this.deleteClaudeSessionFile(csid);
     }
 
     const deleteStmt = db.transaction(() => {
@@ -1086,6 +1099,17 @@ export const queries = {
             }
           }
 
+          // Also delete the session subdirectory (contains subagents/, tool-results/)
+          const sessionDir = path.join(projectPath, sessionId);
+          if (fs.existsSync(sessionDir)) {
+            try {
+              fs.rmSync(sessionDir, { recursive: true, force: true });
+              console.log(`[deleteClaudeSessionFile] Deleted Claude session dir: ${sessionDir}`);
+            } catch (dirErr) {
+              console.error(`[deleteClaudeSessionFile] Failed to delete session dir ${sessionDir}:`, dirErr.message);
+            }
+          }
+
           return true;
         }
       }
@@ -1099,12 +1123,14 @@ export const queries = {
 
   deleteAllConversations() {
     try {
-      const conversations = prep('SELECT id, claudeSessionId FROM conversations').all();
-
-      for (const conv of conversations) {
-        if (conv.claudeSessionId) {
-          this.deleteClaudeSessionFile(conv.claudeSessionId);
-        }
+      // Delete all Claude session files tracked per-session and per-conversation
+      const allClaudeSessionIds = prep('SELECT DISTINCT claudeSessionId FROM sessions WHERE claudeSessionId IS NOT NULL').all().map(r => r.claudeSessionId);
+      const convClaudeIds = prep('SELECT DISTINCT claudeSessionId FROM conversations WHERE claudeSessionId IS NOT NULL').all().map(r => r.claudeSessionId);
+      for (const csid of convClaudeIds) {
+        if (!allClaudeSessionIds.includes(csid)) allClaudeSessionIds.push(csid);
+      }
+      for (const csid of allClaudeSessionIds) {
+        this.deleteClaudeSessionFile(csid);
       }
 
       const deleteAllStmt = db.transaction(() => {
