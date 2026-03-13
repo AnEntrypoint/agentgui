@@ -136,23 +136,35 @@ class StreamingRenderer {
 
   /**
    * Check if event is a duplicate
+   * For streaming_progress events, use seq+sessionId for precise dedup
+   * For other events, use type+id or type+sessionId
    */
   isDuplicate(event) {
     const key = this.getEventKey(event);
     if (!key) return false;
 
-    const lastTime = this.dedupMap.get(key);
-    const now = Date.now();
+    const lastSeq = this.dedupMap.get(key);
 
-    if (lastTime && (now - lastTime) < 100) {
-      return true;
+    // For streaming_progress with seq, compare seq numbers directly
+    if (event.type === 'streaming_progress' && event.seq !== undefined && lastSeq !== undefined) {
+      if (event.seq <= lastSeq) {
+        return true; // Same or older seq = duplicate
+      }
+      this.dedupMap.set(key, event.seq);
+      return false;
+    }
+
+    // For other events, use time-based dedup
+    const now = Date.now();
+    if (lastSeq && typeof lastSeq === 'number' && lastSeq > now - 500) {
+      return true; // Recent duplicate
     }
 
     this.dedupMap.set(key, now);
     if (this.dedupMap.size > 5000) {
-      const cutoff = now - 1000;
-      for (const [k, t] of this.dedupMap) {
-        if (t < cutoff) this.dedupMap.delete(k);
+      const cutoff = now - 5000;
+      for (const [k, v] of this.dedupMap) {
+        if (typeof v === 'number' && v < cutoff) this.dedupMap.delete(k);
       }
     }
     return false;
@@ -160,10 +172,15 @@ class StreamingRenderer {
 
   /**
    * Generate deduplication key for event
+   * Use sessionId:seq for streaming_progress, fallback to type:id
    */
   getEventKey(event) {
     if (!event.type) return null;
-    return `${event.type}:${event.id || event.sessionId || ''}`;
+    // For streaming events, use sessionId as primary key
+    if (event.sessionId) {
+      return `${event.sessionId}:${event.type}`;
+    }
+    return `${event.type}:${event.id || ''}`;
   }
 
   /**

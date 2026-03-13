@@ -480,8 +480,14 @@ class WebSocketManager {
   }
 
   resubscribeAll() {
+    // After reconnect, query server state for all conversations with active subscriptions
+    // This ensures client streaming state matches server state
+    const conversationIds = new Set();
     for (const key of this.activeSubscriptions) {
       const [type, id] = key.split(':');
+      if (type === 'conversation') {
+        conversationIds.add(id);
+      }
       const msg = { type: 'subscribe', timestamp: Date.now() };
       if (type === 'session') msg.sessionId = id;
       else msg.conversationId = id;
@@ -489,6 +495,21 @@ class WebSocketManager {
         this.ws.send(window._codec ? window._codec.encode(msg) : msgpackr.pack(msg));
         this.stats.totalMessagesSent++;
       } catch (_) {}
+    }
+
+    // After resubscribing, query streaming state for each conversation
+    // This prevents stale UI state after network hiccup
+    if (conversationIds.size > 0) {
+      conversationIds.forEach(convId => {
+        this.sendMessage({
+          type: 'conv.get',
+          id: convId,
+          timestamp: Date.now()
+        }).catch(() => {
+          // Silently ignore query failures - server will send streaming_start
+          // on subscription confirmation if execution is active
+        });
+      });
     }
   }
 

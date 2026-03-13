@@ -3356,6 +3356,9 @@ function createChunkBatcher() {
   return { add, drain };
 }
 
+// Global broadcast sequence counter for event ordering
+let broadcastSeq = 0;
+
 function parseRateLimitResetTime(text) {
   const match = text.match(/resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*\(?(UTC|[A-Z]{2,4})\)?/i);
   if (!match) return 300;
