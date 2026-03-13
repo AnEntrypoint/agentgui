@@ -3879,6 +3879,8 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
       return;
     }
 
+    const isSessionConflict = error.exitCode === null && eventCount === 0;
+
     broadcastSync({
       type: 'streaming_error',
       sessionId,
@@ -3888,16 +3890,19 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
       exitCode: error.exitCode,
       stderrText: error.stderrText,
       recoverable: elapsed < 60000,
+      isSessionConflict,
       timestamp: Date.now()
     });
 
-    const errorMessage = queries.createMessage(conversationId, 'assistant', `Error: ${error.message}`);
-    broadcastSync({
-      type: 'message_created',
-      conversationId,
-      message: errorMessage,
-      timestamp: Date.now()
-    });
+    if (!isSessionConflict) {
+      const errorMessage = queries.createMessage(conversationId, 'assistant', `Error: ${error.message}`);
+      broadcastSync({
+        type: 'message_created',
+        conversationId,
+        message: errorMessage,
+        timestamp: Date.now()
+      });
+    }
   } finally {
     batcher.drain();
     // Use atomic cleanup but only if not in rate limit recovery
