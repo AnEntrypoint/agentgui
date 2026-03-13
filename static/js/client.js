@@ -1228,6 +1228,8 @@ class AgentGUIClient {
     const outputEl2 = document.getElementById('output');
     if (outputEl2) {
       outputEl2.querySelectorAll('.streaming-indicator').forEach(ind => ind.remove());
+      // Remove session start/complete blocks that clutter the chat
+      outputEl2.querySelectorAll('.event-streaming-start, .event-streaming-complete').forEach(block => block.remove());
     }
     const streamingEl = document.getElementById(`streaming-${sessionId}`);
     if (streamingEl) {
