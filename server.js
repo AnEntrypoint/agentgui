@@ -3728,7 +3728,6 @@ async function processMessageWithStreaming(conversationId, messageId, sessionId,
         activeProcessesByConvId.set(conversationId, proc);
         const entry = activeExecutions.get(conversationId);
         if (entry) entry.proc = proc;
-        console.log(`[onProcess] conv=${conversationId} pid=${proc.pid} stdin=${!!proc.stdin} entryUpdated=${!!entry}`);
       }
     };
 
