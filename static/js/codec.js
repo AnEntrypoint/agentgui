@@ -43,5 +43,5 @@ function decodeObj(obj) {
   return out;
 }
 
-export function encode(obj) { return msgpackr.pack(encodeObj(obj)); }
+export function encode(obj) { return msgpackr.pack(obj); }
 export function decode(buf) { return decodeObj(msgpackr.unpack(new Uint8Array(buf instanceof ArrayBuffer ? buf : buf))); }
