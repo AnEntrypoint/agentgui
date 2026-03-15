@@ -2695,11 +2695,6 @@ class AgentGUIClient {
 
       this._showSkeletonLoading(conversationId);
 
-      // Disable send button during skeleton loading to prevent race conditions
-      if (this.ui.sendButton) {
-        this.ui.sendButton.disabled = true;
-      }
-
       let fullData;
       try {
         fullData = await window.wsClient.rpc('conv.full', { id: conversationId, chunkLimit: 50 });
