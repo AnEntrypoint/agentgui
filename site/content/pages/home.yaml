@@ -1,0 +1,29 @@
+id: home
+title: Home
+hero:
+  heading: "agentgui"
+  subheading: "multi-agent GUI for AI coding assistants"
+  body: "Claude Code, Gemini CLI, OpenCode and more — all in one window. one npx, every coding agent. if you run more than one, this is what you've been missing."
+  badges:
+    - { label: "gui" }
+    - { label: "agents" }
+    - { label: "desktop" }
+    - { label: "gm-tools" }
+  ctas:
+    - { label: "GitHub", href: "https://github.com/AnEntrypoint/agentgui", primary: true }
+    - { label: "Install", href: "https://github.com/AnEntrypoint/agentgui#installation" }
+    - { label: "247420", href: "https://247420.xyz" }
+features:
+  heading: "Why agentgui"
+  items:
+    - { name: "gui", desc: "flagship trait of agentgui." }
+    - { name: "agents", desc: "core capability of agentgui." }
+    - { name: "desktop", desc: "core capability of agentgui." }
+quickstart:
+  heading: Quick start
+  lines:
+    - { kind: "cmt", text: "# install" }
+    - { kind: "cmd", text: "npx agentgui" }
+    - { kind: "cmt", text: "" }
+    - { kind: "cmt", text: "# source" }
+    - { kind: "cmd", text: "git clone https://github.com/AnEntrypoint/agentgui.git" }

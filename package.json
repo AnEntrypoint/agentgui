@@ -1,0 +1,44 @@
+{
+  "name": "agentgui",
+  "version": "1.0.1126",
+  "description": "Multi-agent ACP client with real-time communication",
+  "type": "module",
+  "main": "electron/main.js",
+  "bin": {
+    "agentgui": "./bin/gmgui.cjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnEntrypoint/agentgui.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AnEntrypoint/agentgui/issues"
+  },
+  "homepage": "https://github.com/AnEntrypoint/agentgui#readme",
+  "scripts": {
+    "start": "bun server.js || node server.js",
+    "dev": "node server.js --watch",
+    "test": "bun test.js && bun test-integration.js",
+    "postinstall": "node scripts/patch-fsbrowse.js && (cd node_modules/better-sqlite3 && node-gyp rebuild 2>/dev/null) || true",
+    "electron": "electron electron/main.js",
+    "electron:dev": "PORT=3000 electron electron/main.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^2.1.37",
+    "@google/gemini-cli": "latest",
+    "@kilocode/cli": "latest",
+    "better-sqlite3": "^12.9.0",
+    "busboy": "^1.6.0",
+    "ccsniff": "github:AnEntrypoint/ccsniff#main",
+    "express": "^5.2.1",
+    "fsbrowse": "latest",
+    "lru-cache": "^11.2.7",
+    "opencode-ai": "^1.2.15",
+    "webjsx": "^0.0.73",
+    "ws": "^8.14.2",
+    "xstate": "^5.32.0"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0"
+  }
+}

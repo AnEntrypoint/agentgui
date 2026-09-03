@@ -1,0 +1,17 @@
+title: "agentgui"
+tagline: "multi-agent GUI for AI coding assistants"
+description: "Claude Code, Gemini CLI, OpenCode and more — all in one window. one npx, every coding agent. if you run more than one, this is what you've been missing."
+repo: "https://github.com/AnEntrypoint/agentgui"
+url: "https://anentrypoint.github.io/agentgui"
+year: 2026
+keywords:
+  - "gui"
+  - "agents"
+  - "desktop"
+  - "247420"
+  - "anentrypoint"
+accent_from: "#bc8cff"
+accent_to: "#d2a8ff"
+glyph: "▣"
+code: "017"
+category: "gm-tools"

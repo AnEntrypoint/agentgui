@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" class="ds-247420" data-theme="dark" data-typescale="app">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>agentgui</title>
+  <meta name="description" content="agentgui - multi-agent client with same-origin server, in-process ccsniff history, and ACP chat.">
+  <!-- The GUI lives in the anentrypoint-design kit and is vendored locally under
+       ./vendor/anentrypoint-design so the shipped UI is PREDICTABLE: it does not
+       silently shift when the upstream package publishes, and it works offline
+       (the markdown stack still fetches marked/dompurify/prismjs on first chat
+       render). Update flow: edit the kit at c:\dev\anentrypoint-design, run
+       `node scripts/build.mjs`, copy dist/247420.{js,css} here, then publish the
+       kit so unpkg stays in sync. -->
+  <link rel="stylesheet" href="./vendor/anentrypoint-design/247420.css">
+  <!-- Resolve the saved theme BEFORE first paint, synchronously (not type=module,
+       which would defer until the kit's module graph loads) - otherwise a user
+       with a stored 'paper'/light preference sees the hardcoded data-theme="dark"
+       shell flash before the kit's theme.js applies their real choice. Mirrors
+       theme.js's own KEY/VALID set; keep in sync if that module changes. -->
+  <script>
+    (function () {
+      try {
+        var v = window.localStorage.getItem('247420:theme');
+        var valid = { auto: 1, paper: 1, ink: 1, thebird: 1 };
+        document.documentElement.setAttribute('data-theme', valid[v] ? v : 'auto');
+      } catch (e) {}
+    })();
+  </script>
+  <script type="importmap">
+    { "imports": { "anentrypoint-design": "./vendor/anentrypoint-design/247420.js" } }
+  </script>
+  <!-- Preload the whole module graph so the 300KB kit fetch starts in parallel
+       with app.js instead of after its parse; preconnect warms the jsdelivr
+       DNS+TLS the markdown stack needs on first chat render. -->
+  <link rel="modulepreload" href="./vendor/anentrypoint-design/247420.js">
+  <link rel="modulepreload" href="./js/backend.js">
+  <link rel="modulepreload" href="./js/codec.js">
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <!-- Preconnect alone still leaves the marked/dompurify ESM fetch+parse as a
+       full round trip AFTER the kit loads, on the first chat markdown render
+       (escaped-text -> rendered-markdown swap). modulepreload starts that
+       fetch in parallel with everything else instead of waiting for
+       markdown.js to reach its dynamic import. -->
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/marked@15.0.12/+esm" crossorigin>
+  <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/dompurify@3.2.6/+esm" crossorigin>
+  <!-- prism-core is a classic UMD <script src>, not an ES module (loaded via
+       highlight.js's loadScript, not import) - modulepreload is the wrong hint
+       type for it; preload as=script starts the same parallel fetch instead. -->
+  <link rel="preload" as="script" href="https://cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-core.min.js" crossorigin>
+  <!-- No design content lives here. Every agentgui application-surface style
+       (pills, cwd bar, resume banner, health chips, settings grid, history
+       empty state, boot splash, scrollbar theming, focus rings, print) now
+       lives in the kit at ../design/app-surfaces.css and ships in the vendored
+       247420.css bundle, scoped under .ds-247420. The kit owns all design. -->
+</head>
+<body>
+  <div id="app"><div class="boot-splash" role="status">loading agentgui…</div></div>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentGUI - Live Demo Preview</title>
+  <meta name="description" content="See what AgentGUI looks like on your machine - a non-interactive preview of the Gmail-inspired multi-agent interface.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=JetBrains+Mono:wght@400;500;600&family=Google+Sans:wght@300;400;500;700&display=swap">
+  <style>
+    /* ---- Page chrome ---- */
+    :root {
+      --paper: #EFE9DD; --ink: #0B0B09; --green: #247420; --green-2: #92CEAC;
+      --panel-0: var(--paper); --panel-1: #f6f1e7; --panel-2: #ece5d8; --panel-3: #ddd4c3;
+      --panel-text: var(--ink); --panel-text-2: #4a473f; --panel-text-3: #6d675b;
+      --panel-accent: var(--green); --panel-accent-fg: #fff;
+      --ff-display: 'Archivo Black', system-ui, sans-serif;
+      --ff-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+      --ff-ui: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --panel-0: #0B0B09; --panel-1: #141411; --panel-2: #1f1f1a; --panel-3: #2a2a23;
+        --panel-text: #EFE9DD; --panel-text-2: #d2cab9; --panel-text-3: #afa797;
+        --panel-accent: var(--green-2); --panel-accent-fg: #0B0B09;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100vh; }
+    body {
+      background: var(--panel-0);
+      color: var(--panel-text);
+      font-family: var(--ff-mono);
+      font-size: 13px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ---- Page layout ---- */
+    .page { display: flex; flex-direction: column; min-height: 100vh; }
+
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      height: 40px;
+      background: var(--panel-2);
+      display: flex; align-items: center;
+      padding: 0 16px; gap: 16px;
+      font-size: 13px; flex-shrink: 0;
+    }
+    .brand { font-family: var(--ff-display); font-size: 14px; color: var(--panel-text); text-transform: lowercase; letter-spacing: -0.01em; }
+    .brand .slash { color: var(--panel-text-3); margin: 0 4px; font-family: var(--ff-mono); font-weight: 400; }
+    .topbar nav { margin-left: auto; display: flex; gap: 2px; }
+    .topbar nav a { color: var(--panel-text-2); text-decoration: none; padding: 6px 10px; font-size: 12px; }
+    .topbar nav a:hover { background: var(--panel-3); color: var(--panel-text); }
+    .topbar nav a.active { background: var(--panel-accent); color: var(--panel-accent-fg); }
+
+    .content { flex: 1; max-width: 1360px; margin: 0 auto; padding: 48px 24px 80px; width: 100%; }
+
+    .hero { margin-bottom: 48px; text-align: center; }
+    .hero h1 {
+      font-family: var(--ff-display); font-size: clamp(28px, 4vw, 48px);
+      line-height: 1.05; letter-spacing: -0.02em;
+      color: var(--panel-text); margin: 0 0 12px; text-transform: lowercase;
+    }
+    .hero p { color: var(--panel-text-2); font-size: 13px; margin: 0 0 8px; }
+    .hero .sub { font-size: 12px; color: var(--panel-text-3); }
+
+    /* ---- Browser mockup ---- */
+    .mockup-wrap {
+      margin: 0 auto;
+      max-width: 1200px;
+      filter: drop-shadow(0 24px 48px rgba(0,0,0,0.28));
+    }
+
+    .browser-chrome {
+      background: #e8e8e8;
+      border-radius: 10px 10px 0 0;
+      padding: 10px 12px 0;
+      display: flex; align-items: center; gap: 8px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .browser-chrome { background: #3a3a3c; }
+    }
+    .browser-dots { display: flex; gap: 6px; margin-right: 4px; }
+    .browser-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .dot-red   { background: #ff5f57; }
+    .dot-yellow{ background: #ffbd2e; }
+    .dot-green { background: #28c840; }
+    .browser-bar {
+      flex: 1;
+      height: 26px;
+      background: #fff;
+      border-radius: 6px;
+      display: flex; align-items: center;
+      padding: 0 10px;
+      font-family: var(--ff-mono); font-size: 11px; color: #888;
+      gap: 6px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .browser-bar { background: #555; color: #ccc; }
+    }
+    .browser-bar svg { width: 12px; height: 12px; opacity: 0.5; flex-shrink: 0; }
+
+    .browser-viewport {
+      background: #f6f8fc;
+      border-radius: 0 0 10px 10px;
+      overflow: hidden;
+      height: 620px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .browser-viewport { background: #202124; }
+    }
+
+    /* ---- Gmail-skin app shell (inside viewport) ---- */
+    .app-shell {
+      display: grid;
+      grid-template-columns: 72px 280px 1fr;
+      height: 100%;
+      font-family: var(--ff-ui);
+      font-size: 14px;
+    }
+
+    /* Gmail tokens */
+    .app-shell {
+      --gm-surface: #f6f8fc;
+      --gm-panel:   #ffffff;
+      --gm-hover:   #f1f3f4;
+      --gm-active-bg:   #d3e3fd;
+      --gm-active-text: #0b57d0;
+      --gm-border:  #e0e0e0;
+      --gm-text-1:  #202124;
+      --gm-text-2:  #5f6368;
+      --gm-text-3:  #9aa0a6;
+      --gm-blue:    #1a73e8;
+      --gm-shadow1: 0 1px 2px rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+      --gm-shadow2: 0 1px 3px rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
+      --gm-pill:    9999px;
+      --gm-r-lg:    16px;
+    }
+    @media (prefers-color-scheme: dark) {
+      .app-shell {
+        --gm-surface: #202124;
+        --gm-panel:   #292a2d;
+        --gm-hover:   #35363a;
+        --gm-active-bg:   #1e3a5f;
+        --gm-active-text: #8ab4f8;
+        --gm-border:  #3c4043;
+        --gm-text-1:  #e8eaed;
+        --gm-text-2:  #bdc1c6;
+        --gm-text-3:  #9aa0a6;
+        --gm-shadow1: 0 1px 2px rgba(0,0,0,.4), 0 1px 3px 1px rgba(0,0,0,.2);
+        --gm-shadow2: 0 1px 3px rgba(0,0,0,.4), 0 4px 8px 3px rgba(0,0,0,.2);
+      }
+    }
+
+    /* Nav rail */
+    .nav-rail {
+      background: var(--gm-surface);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 8px 0; gap: 4px;
+      border-right: 1px solid var(--gm-border);
+    }
+    .nav-item {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; width: 56px; min-height: 56px; padding: 8px 4px;
+      border-radius: 16px; cursor: default;
+      color: var(--gm-text-2); transition: background 0.15s;
+    }
+    .nav-item.active { background: var(--gm-active-bg); color: var(--gm-active-text); }
+    .nav-item svg { width: 20px; height: 20px; }
+    .nav-label { font-size: 10px; font-weight: 500; letter-spacing: 0; line-height: 1; text-align: center; }
+
+    .nav-compose {
+      width: 56px; min-height: 56px;
+      background: var(--gm-panel);
+      box-shadow: var(--gm-shadow1);
+      border-radius: 16px;
+      margin-bottom: 8px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 4px; color: var(--gm-text-1); font-size: 10px; font-weight: 500; cursor: default;
+    }
+    .nav-compose svg { width: 20px; height: 20px; }
+
+    /* Sidebar */
+    .sidebar {
+      background: var(--gm-surface);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      border-right: 1px solid var(--gm-border);
+    }
+    .sidebar-hdr {
+      padding: 12px 12px 8px;
+      font-family: var(--ff-ui); font-size: 18px; font-weight: 400;
+      color: var(--gm-text-2);
+    }
+    .sidebar-search {
+      margin: 0 10px 8px;
+      height: 36px;
+      background: var(--gm-panel);
+      border: 1px solid var(--gm-border);
+      border-radius: var(--gm-pill);
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 14px;
+      box-shadow: var(--gm-shadow1);
+      color: var(--gm-text-3); font-size: 13px;
+    }
+    .sidebar-search svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+    .conv-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+    .conv-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      padding: 0 16px;
+      margin: 0 8px 2px;
+      height: 52px;
+      border-radius: var(--gm-pill);
+      cursor: default;
+      gap: 8px;
+    }
+    .conv-item:hover, .conv-item.hov { background: var(--gm-hover); }
+    .conv-item.active { background: var(--gm-active-bg); }
+    .conv-title {
+      font-size: 13px; font-weight: 600;
+      color: var(--gm-text-1);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      line-height: 1.4;
+    }
+    .conv-item.active .conv-title { color: var(--gm-active-text); }
+    .conv-meta {
+      font-size: 11px; color: var(--gm-text-3);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .conv-time {
+      font-size: 11px; color: var(--gm-text-3);
+      flex-shrink: 0;
+    }
+    .conv-item.active .conv-meta,
+    .conv-item.active .conv-time { color: var(--gm-active-text); opacity: 0.7; }
+
+    .streaming-dot {
+      display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+      background: #34a853; margin-right: 4px; vertical-align: middle;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    /* Main panel */
+    .main {
+      display: flex; flex-direction: column;
+      background: var(--gm-panel);
+      overflow: hidden;
+    }
+
+    .main-header {
+      height: 64px; min-height: 64px;
+      background: var(--gm-surface);
+      border-bottom: 1px solid var(--gm-border);
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 16px;
+      flex-shrink: 0;
+    }
+    .hdr-hamburger {
+      width: 40px; height: 40px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--gm-text-2); flex-shrink: 0;
+    }
+    .hdr-hamburger svg { width: 20px; height: 20px; }
+
+    .hdr-search {
+      flex: 1; max-width: 720px; margin: 0 auto;
+      position: relative;
+    }
+    .hdr-search-inner {
+      display: flex; align-items: center; gap: 0;
+      height: 40px;
+      background: var(--gm-panel);
+      border: 1px solid var(--gm-border);
+      border-radius: var(--gm-pill);
+      padding: 0 16px 0 42px;
+      box-shadow: var(--gm-shadow1);
+      font-size: 14px; color: var(--gm-text-3);
+    }
+    .hdr-search svg {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      width: 18px; height: 18px; color: var(--gm-text-2); pointer-events: none;
+    }
+
+    .hdr-actions {
+      display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+    }
+    .hdr-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--gm-text-2);
+    }
+    .hdr-btn svg { width: 20px; height: 20px; }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #34a853;
+    }
+    .status-label { font-size: 11px; color: var(--gm-text-3); }
+
+    /* Messages */
+    .messages-area {
+      flex: 1; overflow-y: auto;
+      padding: 16px 0;
+      background: var(--gm-panel);
+    }
+    .messages-inner { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+    .msg {
+      margin-bottom: 8px;
+      padding: 12px 16px;
+      border: 1px solid var(--gm-border);
+      border-radius: 12px;
+      background: var(--gm-panel);
+      box-shadow: var(--gm-shadow1);
+    }
+    .msg-user {
+      background: #e8f0fe;
+      border-color: #c5d6f9;
+      margin-left: auto;
+      max-width: 75%;
+    }
+    @media (prefers-color-scheme: dark) {
+      .msg-user { background: #1e3a5f; border-color: #2d5a9e; }
+    }
+    .msg-role {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gm-text-2); margin-bottom: 6px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .msg-role-badge {
+      display: inline-block; padding: 1px 7px; border-radius: 4px;
+      background: #e8f0fe; color: #1a73e8; font-size: 10px; font-weight: 600;
+    }
+    @media (prefers-color-scheme: dark) {
+      .msg-role-badge { background: #1e3a5f; color: #8ab4f8; }
+    }
+    .msg-body {
+      font-size: 14px; line-height: 1.65; color: var(--gm-text-1);
+    }
+    .msg-body code {
+      background: #f1f3f4; border-radius: 4px; padding: 1px 6px;
+      font-family: var(--ff-mono); font-size: 12px; color: #c53929;
+    }
+    @media (prefers-color-scheme: dark) {
+      .msg-body code { background: #35363a; color: #f28b82; }
+    }
+    .msg-body pre {
+      background: #1e293b; border-radius: 8px; padding: 12px 14px;
+      overflow-x: auto; margin: 8px 0;
+    }
+    .msg-body pre code {
+      background: transparent; padding: 0; color: #e2e8f0;
+      font-size: 12px; line-height: 1.6;
+    }
+    .msg-ts { font-size: 11px; color: var(--gm-text-3); margin-top: 6px; }
+
+    /* Tool use block */
+    .tool-block {
+      border: 1px solid var(--gm-border); border-radius: 8px; overflow: hidden;
+      margin-bottom: 8px; font-size: 12px;
+    }
+    .tool-header {
+      padding: 6px 12px;
+      background: #f1f3f4;
+      display: flex; align-items: center; gap: 8px;
+      color: var(--gm-text-2);
+    }
+    @media (prefers-color-scheme: dark) {
+      .tool-header { background: #35363a; }
+    }
+    .tool-name { font-family: var(--ff-mono); font-weight: 600; color: var(--gm-text-1); }
+    .tool-ok { color: #34a853; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .tool-body {
+      padding: 8px 12px;
+      background: #292a2d;
+      font-family: var(--ff-mono); font-size: 11px;
+      color: #9aa0a6; white-space: pre; overflow-x: auto;
+    }
+
+    /* Streaming status */
+    .streaming-bar {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 20px;
+      background: #202124;
+      border-radius: 9999px;
+      box-shadow: var(--gm-shadow2);
+      font-size: 13px; color: #e8eaed;
+      width: fit-content; margin: 0 auto 12px;
+    }
+    .streaming-dots { display: flex; gap: 4px; }
+    .streaming-dots span {
+      width: 6px; height: 6px; border-radius: 50%; background: #8ab4f8;
+      animation: bounce 1.2s ease-in-out infinite;
+    }
+    .streaming-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .streaming-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce { 0%,80%,100%{transform:scale(0.8);opacity:0.5} 40%{transform:scale(1.1);opacity:1} }
+    .streaming-agent { color: #8ab4f8; font-weight: 600; }
+
+    /* Input area */
+    .input-area {
+      padding: 12px 24px 20px;
+      border-top: 1px solid var(--gm-border);
+      background: var(--gm-panel);
+      flex-shrink: 0;
+    }
+    .input-card {
+      background: var(--gm-panel);
+      border: 1px solid var(--gm-border);
+      border-radius: var(--gm-r-lg);
+      box-shadow: var(--gm-shadow2);
+      overflow: hidden;
+    }
+    .input-text {
+      padding: 14px 16px;
+      font-family: var(--ff-ui); font-size: 14px;
+      color: var(--gm-text-3);
+      min-height: 52px; display: flex; align-items: center;
+    }
+    .input-toolbar {
+      padding: 6px 10px;
+      border-top: 1px solid var(--gm-hover);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .input-chips { display: flex; gap: 6px; }
+    .chip {
+      height: 28px; padding: 0 12px;
+      background: var(--gm-hover); border-radius: var(--gm-pill);
+      font-size: 12px; color: var(--gm-text-1);
+      display: flex; align-items: center; gap: 4px;
+    }
+    .chip svg { width: 12px; height: 12px; }
+    .input-actions { display: flex; gap: 4px; align-items: center; }
+    .icon-btn {
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--gm-text-2);
+    }
+    .icon-btn svg { width: 18px; height: 18px; }
+    .send-btn {
+      background: var(--gm-blue); color: #fff;
+      height: 36px; padding: 0 16px;
+      border-radius: var(--gm-pill);
+      display: flex; align-items: center; gap: 6px;
+      font-size: 13px; font-weight: 500;
+    }
+    .send-btn svg { width: 16px; height: 16px; }
+
+    /* ---- Below-fold sections ---- */
+    .features { margin-top: 64px; }
+    .features h2 {
+      font-family: var(--ff-display); font-size: 24px; text-transform: lowercase;
+      letter-spacing: -0.01em; margin: 0 0 24px; color: var(--panel-text);
+    }
+    .feat-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+    }
+    .feat-card {
+      background: var(--panel-1); padding: 20px 18px;
+      border: 1px solid var(--panel-text);
+    }
+    .feat-card:hover { transform: translate(-1px,-1px); box-shadow: 3px 3px 0 var(--panel-text); }
+    .feat-icon { font-size: 22px; margin-bottom: 8px; }
+    .feat-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; color: var(--panel-text); }
+    .feat-desc { font-size: 12px; color: var(--panel-text-2); line-height: 1.5; }
+
+    .install-section { margin-top: 48px; }
+    .install-section h2 {
+      font-family: var(--ff-display); font-size: 24px; text-transform: lowercase;
+      letter-spacing: -0.01em; margin: 0 0 16px; color: var(--panel-text);
+    }
+    .install-cmd {
+      display: inline-flex; align-items: center; gap: 12px;
+      background: var(--panel-1); border: 1px solid var(--panel-accent);
+      padding: 10px 18px; font-family: var(--ff-mono); font-size: 14px;
+      color: var(--panel-accent);
+    }
+    .install-note { font-size: 12px; color: var(--panel-text-3); margin-top: 8px; }
+
+    /* ---- Footer ---- */
+    .footer {
+      height: 24px; background: var(--panel-accent); color: var(--panel-accent-fg);
+      display: flex; align-items: center; padding: 0 14px; gap: 14px;
+      font-family: var(--ff-mono); font-size: 11px; flex-shrink: 0;
+      margin-top: auto;
+    }
+    .footer .spread { flex: 1; }
+    .footer a { color: inherit; text-decoration: none; }
+    .footer a:hover { text-decoration: underline; }
+
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-thumb { background: var(--panel-2); border-radius: 4px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ---- Top bar ---- -->
+  <header class="topbar">
+    <span class="brand">247420<span class="slash">/</span>agentgui</span>
+    <nav>
+      <a href="index.html">home</a>
+      <a href="demo.html" class="active">demo</a>
+      <a href="https://github.com/AnEntrypoint/agentgui">github</a>
+      <a href="https://www.npmjs.com/package/agentgui">npm</a>
+    </nav>
+  </header>
+
+  <!-- ---- Main content ---- -->
+  <main class="content">
+
+    <section class="hero">
+      <h1>see it running</h1>
+      <p>A non-interactive preview of agentgui on a typical machine.</p>
+      <p class="sub">Gmail-inspired layout · Claude Code · real project · real output</p>
+    </section>
+
+    <!-- ---- Browser mockup ---- -->
+    <div class="mockup-wrap">
+
+      <!-- Browser chrome -->
+      <div class="browser-chrome">
+        <div class="browser-dots">
+          <div class="browser-dot dot-red"></div>
+          <div class="browser-dot dot-yellow"></div>
+          <div class="browser-dot dot-green"></div>
+        </div>
+        <div class="browser-bar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          localhost:3000/gm/
+        </div>
+      </div>
+
+      <!-- Viewport -->
+      <div class="browser-viewport">
+        <div class="app-shell">
+
+          <!-- Nav rail -->
+          <nav class="nav-rail">
+            <div class="nav-compose">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              Compose
+            </div>
+            <div class="nav-item active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+              <span class="nav-label">Chats</span>
+            </div>
+            <div class="nav-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+              <span class="nav-label">Archived</span>
+            </div>
+            <div class="nav-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              <span class="nav-label">Tools</span>
+            </div>
+          </nav>
+
+          <!-- Sidebar -->
+          <div class="sidebar">
+            <div class="sidebar-hdr">agentgui</div>
+            <div class="sidebar-search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Search in chats
+            </div>
+            <div class="conv-list">
+              <div class="conv-item active">
+                <div>
+                  <div class="conv-title"><span class="streaming-dot"></span>Add Gmail layout</div>
+                  <div class="conv-meta">claude-code · sonnet-4-7</div>
+                </div>
+                <div class="conv-time">now</div>
+              </div>
+              <div class="conv-item hov">
+                <div>
+                  <div class="conv-title">Fix WebSocket race condition</div>
+                  <div class="conv-meta">claude-code · opus-4-7</div>
+                </div>
+                <div class="conv-time">2h</div>
+              </div>
+              <div class="conv-item">
+                <div>
+                  <div class="conv-title">Refactor db-queries into modules</div>
+                  <div class="conv-meta">claude-code · sonnet-4-6</div>
+                </div>
+                <div class="conv-time">yesterday</div>
+              </div>
+              <div class="conv-item">
+                <div>
+                  <div class="conv-title">Add XState tool-install machine</div>
+                  <div class="conv-meta">opencode · claude-4-7</div>
+                </div>
+                <div class="conv-time">Mon</div>
+              </div>
+              <div class="conv-item">
+                <div>
+                  <div class="conv-title">Brand bible chrome implementation</div>
+                  <div class="conv-meta">claude-code · sonnet-4-6</div>
+                </div>
+                <div class="conv-time">Sun</div>
+              </div>
+              <div class="conv-item">
+                <div>
+                  <div class="conv-title">OAuth Codex PKCE flow</div>
+                  <div class="conv-meta">claude-code · opus-4-5</div>
+                </div>
+                <div class="conv-time">Sat</div>
+              </div>
+              <div class="conv-item">
+                <div>
+                  <div class="conv-title">Gemini CLI integration</div>
+                  <div class="conv-meta">gemini · gemini-2.5-pro</div>
+                </div>
+                <div class="conv-time">Fri</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Main panel -->
+          <div class="main">
+            <!-- Header -->
+            <div class="main-header">
+              <div class="hdr-hamburger">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+              </div>
+              <div class="hdr-search">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <div class="hdr-search-inner">Search in chats</div>
+              </div>
+              <div class="hdr-actions">
+                <div class="hdr-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <div class="hdr-btn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/></svg>
+                </div>
+                <div class="status-dot"></div>
+                <span class="status-label">connected</span>
+              </div>
+            </div>
+
+            <!-- Messages -->
+            <div class="messages-area">
+              <div class="messages-inner">
+
+                <div class="msg msg-user">
+                  <div class="msg-role">You</div>
+                  <div class="msg-body">Make the GUI as Gmail-like as achievable. Add a nav rail, move search to the header, style conversation rows like email list items.</div>
+                  <div class="msg-ts">10:42 AM</div>
+                </div>
+
+                <div class="tool-block">
+                  <div class="tool-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    <span class="tool-name">Read</span>
+                    <span style="flex:1;font-size:11px;color:#9aa0a6">static/css/main.css</span>
+                    <span class="tool-ok">[ok] ok</span>
+                  </div>
+                  <div class="tool-body">read 620 lines · sidebar · main-panel · conversation-item · input-card</div>
+                </div>
+
+                <div class="tool-block">
+                  <div class="tool-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    <span class="tool-name">Read</span>
+                    <span style="flex:1;font-size:11px;color:#9aa0a6">static/css/brand-bible.css</span>
+                    <span class="tool-ok">[ok] ok</span>
+                  </div>
+                  <div class="tool-body">read 449 lines · design tokens · panel vars · typography</div>
+                </div>
+
+                <div class="tool-block">
+                  <div class="tool-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <span class="tool-name">Write</span>
+                    <span style="flex:1;font-size:11px;color:#9aa0a6">static/css/gmail-skin.css</span>
+                    <span class="tool-ok">[ok] written</span>
+                  </div>
+                  <div class="tool-body">363 lines · grid layout · nav-rail · gm-* tokens · pill rows · search bar</div>
+                </div>
+
+                <div class="tool-block">
+                  <div class="tool-header">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <span class="tool-name">Edit</span>
+                    <span style="flex:1;font-size:11px;color:#9aa0a6">static/index.html</span>
+                    <span class="tool-ok">[ok] updated</span>
+                  </div>
+                  <div class="tool-body">added .nav-rail · .header-search-wrap · loaded gmail-skin.css</div>
+                </div>
+
+                <div class="msg">
+                  <div class="msg-role">
+                    <span class="msg-role-badge">claude-code</span>
+                    Claude Code · sonnet-4-7
+                  </div>
+                  <div class="msg-body">
+                    Done. Here's what changed:<br><br>
+                    - <strong>Three-column grid</strong> - icon nav rail (72px) -> conversation list (280px) -> main panel<br>
+                    - <strong>Nav rail</strong> with Compose FAB + Chats / Archived / Tools icons, pill hover/active states<br>
+                    - <strong>Header search bar</strong> - prominent pill input spanning the header, syncs to sidebar search<br>
+                    - <strong>Conversation rows</strong> - bold title, muted meta + timestamp, pill hover highlight in Google blue<br>
+                    - <strong>Input card</strong> - rounded corners, elevation shadow, Google-blue send pill<br>
+                    - <strong>Soft borders</strong> - <code>#e0e0e0</code> hairlines + drop shadows instead of brand-bible outlines
+                  </div>
+                  <div class="msg-ts">10:43 AM</div>
+                </div>
+
+              </div>
+
+              <!-- Streaming indicator -->
+              <div class="streaming-bar">
+                <div class="streaming-dots">
+                  <span></span><span></span><span></span>
+                </div>
+                <span class="streaming-agent">Claude Code</span>
+                <span style="color:#bdc1c6">is thinking...</span>
+                <span style="color:#8ab4f8;font-weight:500;cursor:default;font-size:12px">Cancel</span>
+              </div>
+
+            </div>
+
+            <!-- Input area -->
+            <div class="input-area">
+              <div class="input-card">
+                <div class="input-text">message agentgui...</div>
+                <div class="input-toolbar">
+                  <div class="input-chips">
+                    <div class="chip">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      claude-code
+                    </div>
+                    <div class="chip">claude-sonnet-4-7</div>
+                  </div>
+                  <div class="input-actions">
+                    <div class="icon-btn">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    </div>
+                    <div class="send-btn">
+                      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                      Send
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div><!-- /main -->
+
+        </div><!-- /app-shell -->
+      </div><!-- /viewport -->
+    </div><!-- /mockup-wrap -->
+
+    <!-- ---- Features section ---- -->
+    <section class="features">
+      <h2>what you get</h2>
+      <div class="feat-grid">
+        <div class="feat-card">
+          <div class="feat-icon">⚡</div>
+          <div class="feat-title">Real-time streaming</div>
+          <div class="feat-desc">Watch tokens arrive live. Tool calls, thinking blocks, and results rendered as they happen via WebSocket.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🤖</div>
+          <div class="feat-title">14 supported agents</div>
+          <div class="feat-desc">Claude Code, Gemini CLI, OpenCode, Kilo, Codex, Goose and more. Auto-detected from PATH at startup.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🗂️</div>
+          <div class="feat-title">Persistent SQLite history</div>
+          <div class="feat-desc">Every conversation, session, and event stored locally in <code>~/.gmgui/data.db</code>. Resume any conversation.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🎨</div>
+          <div class="feat-title">Gmail-inspired UI</div>
+          <div class="feat-desc">Icon nav rail, header search, email-row conversation list, elevated input card. Light and dark modes.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🔄</div>
+          <div class="feat-title">Queue &amp; steer</div>
+          <div class="feat-desc">Queue messages while the agent is running. Steer mid-session with a single click - no need to wait.</div>
+        </div>
+        <div class="feat-card">
+          <div class="feat-icon">🧩</div>
+          <div class="feat-title">Plugin system</div>
+          <div class="feat-desc">Server-side plugins for auth, tools, workflow and more. Hot-reload in watch mode. Zero restart required.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- Install section ---- -->
+    <section class="install-section">
+      <h2>get started</h2>
+      <div class="install-cmd">$ npx agentgui</div>
+      <p class="install-note">Requires Node.js 18+. Opens on http://localhost:3000/gm/ - no account, no cloud, runs entirely local.</p>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span>main</span>
+    <span>- agentgui</span>
+    <span class="spread"></span>
+    <a href="https://github.com/AnEntrypoint/agentgui">github</a>
+    <span>- 247420 / mmxxvi</span>
+  </footer>
+
+</div>
+</body>
+</html>
