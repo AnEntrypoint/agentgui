@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "gm-skill": {
+      "source": "AnEntrypoint/gm",
+      "sourceType": "github",
+      "skillPath": "gm-starter/skills/gm-skill/SKILL.md",
+      "computedHash": "1dafb7fc5158ae95a211a34c6ba2e053398b20d900e0306664230bcc48062d62"
+    }
+  }
+}

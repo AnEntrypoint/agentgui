@@ -1,0 +1,102 @@
+## 🎯 agentgui v1.0.811 — Multi-agent ACP client with real-time communication
+
+**Runtime:** node (pnpm)
+
+## 🚀 Quick Start
+
+`node server.js --watch`
+
+# 103f 27.9kL 1343fn 31cls cx2.6
+*Legend: f=files L=lines fn=functions cls=classes cx=avg-complexity | file:line:name(NL)=location Np=params | ↑N=imports-from ↓N=imported-by (N)=occurrences (+N)=more | 🔄circular 🏝️isolated 🔥complex 📋duplicated 📁large*
+
+**Langs:** JS:99% JSON:0%
+
+## 🛠️ Tech Stack
+
+**Stack:** Express, Zod
+**Patterns:** Date.now(335), sendJSON(225), prep(185), this.escapeHtml(157), document.createElement(142), broadcastSync(140)
+**Top IDs:** type(839), data(811), error(724), conversationId(624), message(572), req(563)
+
+## ⚡ Code Patterns
+
+**Async:** async(622), await(270), Promise(15)
+**Errors:** try/catch(457), throw(120)
+**Internal calls:** Date.now(335), sendJSON(225), prep(185), this.escapeHtml(157), document.createElement(142), broadcastSync(140), document.getElementById(138), assign(106)
+
+## 🔗 I/O & Integration
+
+**Env vars:** AGENTGUI_BASE_URL, BASE_URL, BUN_BE_BUN, BUN_INSTALL, CODEX_HOME, DEBUG, GITHUB_USER, GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET, HOME, HOT_RELOAD, NPM_CACHE, PASSWORD, PORT, PORTABLE_DATA_DIR, PORTABLE_EXE_DIR, RATE_LIMIT_MAX, SHELL, STARTUP_CWD, _, npm_config_cache, npm_execpath
+**HTTP:** fetch(29)
+**Storage:** SQL(204), files(240), JSON(175)
+**Events:** emit(48), listen(289)
+
+## 📊 Code Organization
+
+**Large files:** js/client.js:3479L, server.js:3407L, js/streaming-renderer.js:2422L, lib/db-queries.js:1412L, lib/claude-runner.js:1266L, static/app.js:968L (+17)
+**Long funcs:** lib/db-queries.js:3:createQueries(1410L), server.js:1838:processMessageWithStreaming(539L), js/client.js:2798:loadConversationMessages(284L), lib/ws-handlers-conv.js:19:register(264L), lib/claude-runner.js:276:_runACPOnce(261L), js/client.js:439:setupUI(233L) (+71)
+**Many params:** lib/db-queries.js:3:createQueries(101p), lib/ws-handlers-run.js:4:register(31p), lib/routes-tools.js:3:register(27p), acp-queries.js:8:createACPQueries(24p), lib/ws-handlers-conv.js:19:register(21p), lib/ws-handlers-util.js:9:register(20p) (+31)
+**Classes:** lib/pm2-manager.js:0:PM2Manager, lib/plugin-loader.js:0:PluginLoader, lib/claude-runner.js:0:AgentRunner, lib/claude-runner.js:0:AgentRegistry, lib/checkpoint-manager.js:0:CheckpointManager, lib/ws-protocol.js:0:WsRouter, js/syntax-highlighter.js:0:SyntaxHighlighter, js/image-loader.js:0:ImageLoader (+16)
+
+## 🔄 Architecture
+
+**L0 [pure exports]:** tool-install-machine(7↓), execution-machine(5↓), tool-version(4↓), agent-discovery(4↓), oauth-common(4↓), speech(3↓), codec(3↓), acp-server-machine(3↓) (+15)
+**L3 [pure imports]:** server(43↑), agent-registry-configs(1↑)
+**Cross-module:** server.js→lib, server.js→database.js, database.js→lib
+**Hubs:** server(43↑0↓), tool-install-machine(0↑7↓), tool-manager(4↑1↓), routes-oauth(4↑1↓), execution-machine(0↑5↓)
+**External:** xstate, module, bun:sqlite, zod, ws, lru-cache
+
+## 🔌 API Surface
+
+**Exported fns:** claude-runner.js:1196:runClaudeWithStreaming(1p), speech.js:9:ttsCacheKey(1p), speech.js:13:ttsCacheGet(1p), speech.js:17:ttsCacheSet(1p), ws-handlers-run.js:4:register(31p)
+**Classes:** PM2Manager, PluginLoader, AgentRunner, AgentRegistry, CheckpointManager, WsRouter (+18)
+**Entry files:** ws-handlers-run, routes-threads, tool-install-machine, claude-runner, agent-descriptors (+18)
+
+## 🚨 Issues
+
+- 🔥 Complex funcs: db-queries.js:3:createQueries(1410L), server.js:1838:processMessageWithStreaming(539L), client.js:2798:loadConversationMessages(284L), ws-handlers-conv.js:19:register(264L) (+24)
+- 📁 Large files: lib/db-queries.js:1412L, lib/claude-runner.js:1266L, server.js:3407L (+7)
+- 📋 80 duplicated groups
+- 🔐 hardcoded secrets in server.js:1760
+- 🔐 SQL injection in acp-queries.js:142, acp-queries.js:143, acp-queries.js:176, acp-queries.js:177, db-queries.js:479, db-queries.js:480 (+2)
+
+## 🧹 Dead Code & Tests
+
+**Orphaned:** git-plugin.js, state-barrier.js, copy-vendor.js, dialogs.js, recording-machine.js, pm2-monitor.js (+46)
+**Tests:** 0/103 (0%)
+
+## 📦 Modules
+
+- lib: 58f, 111cx, 34↑77↓
+- static: 35f, 0cx, 0↑0↓
+- bin: 1f, 0cx, 0↑0↓
+- electron: 1f, 0cx, 0↑0↓
+- scripts: 3f, 0cx, 0↑0↓
+
+## 📄 File Index
+
+**acp-queries.js** 182L fn: createACPQueries, createThread, getThread, patchThread (+17)
+**bin/gmgui.cjs** 79L fn: gmgui
+**database.js** 650L fn: getDataDir, initSchema, migrateFromJson, migrateToACP (+2)
+**ecosystem.config.cjs** 22L exports: [script], [interpreter], [watch], [env], [apps]
+**electron/main.js** 83L fn: startServer, pollReady, attempt, createWindow
+**lib/acp-protocol.js** 91L fn: normalizeContentBlock, extractToolResultContent, handleSessionUpdate, createACPProtocolHandler
+**lib/acp-sdk-manager.js** 199L fn: log, resolveCommand, resetIdleTimer, clearIdleTimer (+14)
+**lib/acp-server-machine.js** 166L fn: calcBackoff, purgeOldRestarts, getOrCreate, get (+6)
+**lib/agent-descriptors.js** 47L fn: buildDescriptor, initializeDescriptors, getAgentDescriptor, getAllDescriptors
+**lib/agent-discovery.js** 168L fn: findCommand, queryACPServerAgents, discoverAgents, discoverExternalACPServers (+1)
+**lib/agent-registry-configs.js** 125L fn: parseClaudeOutput, registerAllAgents, buildArgs, buildArgs
+**lib/checkpoint-manager.js** 182L exports: [CheckpointManager] fn: constructor, loadCheckpoint, injectCheckpointEvents, copyCheckpointChunks (+5)
+**lib/claude-runner.js** 1266L exports: [runClaudeWithStreaming] fn: getSpawnOptions, resolveCommand, constructor, defaultBuildArgs (+23)
+**lib/codec.js** 4L fn: encode, decode
+**lib/db-queries.js** 1412L fn: createQueries, createConversation, getConversation, getAllConversations (+90)
+**lib/execution-machine.js** 182L fn: notifyListeners, getOrCreate, get, remove (+8)
+**lib/gm-agent-configs.js** 77L fn: log, runInstaller, installGMAgentConfigs, forceReinstallGMAgentConfigs
+**lib/jsonl-watcher.js** 253L fn: constructor, start, stop, removeConversation (+13)
+**lib/model-download-machine.js** 107L fn: getActor, send, snapshot, isDownloading (+4)
+**lib/oauth-codex.js** 164L exports: [CODEX_AUTH_FILE], [CODEX_HOME] fn: generatePkce, parseJwtEmail, saveCodexCredentials, getCodexOAuthStatus (+5)
+*+83 more files*
+
+Git: branch: main, 1 uncommitted
+Hot: package.json(50), server.js(18), client.js(10), index.html(6), db-queries.js(6), main.css(5)
+Tooling: GitHub Actions (build-platforms.yml, docker-publish.yml, gh-pages.yml, publish-release.yml), Docker
+Conv[JS]: 4-space, single quotes, semicolons, named exports, relative imports, kebab-case files
