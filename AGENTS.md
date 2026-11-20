@@ -20,7 +20,7 @@ Modelled on AnEntrypoint/sharesies. Keep these properties when changing it:
 - Startup latency is not a relay bug. On the dev container the interactive rc (`/config/.bashrc` sources `~/beforestart`) takes about 5 s before bash reads input, so the first keystrokes sit in the PTY until then. Check with `TERM=dumb` or `--norc` before blaming the relay.
 - MAX_SESSIONS is 50. Exceeding it returns 429.
 - The child environment drops `PASSWORD`. Never pass it to the shell.
-- `ENABLE_TERMINAL=1` and `PASSWORD` are both required. Without them the HTTP routes return 403 and the upgrade is refused.
+- Terminals are on by default and require `PASSWORD`. Without `PASSWORD`, or with `ENABLE_TERMINAL=0`, the HTTP routes return 403 and the upgrade is refused.
 
 ## Auth (lib/http-handler.js, lib/auth.js)
 

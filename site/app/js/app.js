@@ -8,7 +8,7 @@ installStyles().catch(() => {});
 
 const { PageHeader, Btn, Spinner, Alert, FileGrid, sortFiles, FileToolbar, RootsPicker, BreadcrumbPath, FileViewer, FilePreviewPane, FilePreviewCode, FilePreviewText, FilePreviewMedia, PromptDialog, ConfirmDialog, DropZone, UploadProgress, BulkBar, toast } = C;
 
-const DISABLED_COPY = 'Terminals are disabled. Start the server with PASSWORD and ENABLE_TERMINAL=1.';
+const DISABLED_COPY = 'Terminals are disabled. Start the server with PASSWORD set and ENABLE_TERMINAL not set to 0.';
 
 const state = {
   backend: B.getBackend(),

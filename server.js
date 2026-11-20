@@ -15,7 +15,7 @@ const BASE_URL = (process.env.BASE_URL || '/gm').replace(/\/+/g, '/').replace(/\
 const staticDir = path.join(rootDir, 'site', 'app');
 const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX || '3000', 10);
 const rateLimitMap = new LRUCache({ max: 1000, ttl: 60000 });
-const terminalEnabled = () => !!process.env.PASSWORD && process.env.ENABLE_TERMINAL === '1';
+const terminalEnabled = () => !!process.env.PASSWORD && process.env.ENABLE_TERMINAL !== '0';
 
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err.message);
@@ -45,5 +45,5 @@ server.on('error', (err) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`agentgui terminal host: http://localhost:${PORT}${BASE_URL}/ (terminals ${terminalEnabled() ? 'enabled' : 'disabled: needs PASSWORD and ENABLE_TERMINAL=1'})`);
+  console.log(`agentgui terminal host: http://localhost:${PORT}${BASE_URL}/ (terminals ${terminalEnabled() ? 'enabled' : 'disabled: needs PASSWORD and ENABLE_TERMINAL not set to 0'})`);
 });

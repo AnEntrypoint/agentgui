@@ -24,7 +24,7 @@ function freePort() {
 async function startServer({ terminals }) {
   const port = await freePort();
   const env = { ...process.env, PORT: String(port), BASE_URL: '/gm', STARTUP_CWD: root, PASSWORD };
-  if (terminals) env.ENABLE_TERMINAL = '1'; else delete env.ENABLE_TERMINAL;
+  if (terminals) delete env.ENABLE_TERMINAL; else env.ENABLE_TERMINAL = '0';
   const child = spawn(process.execPath, ['server.js'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
   child.stdout.on('data', (d) => { log += d; });
@@ -193,7 +193,7 @@ test('closing a session via DELETE kills it and it disappears', async () => {
   assert.equal((await api(server, 'GET', `/api/terminal/sessions/${s.json.sid}`)).status, 404);
 });
 
-test('terminals stay disabled without ENABLE_TERMINAL=1', async () => {
+test('terminals stay disabled with ENABLE_TERMINAL=0', async () => {
   const off = await startServer({ terminals: false });
   try {
     const r = await api(off, 'POST', '/api/terminal/sessions', { cols: 80, rows: 24 });

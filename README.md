@@ -9,7 +9,7 @@ A multi-tab terminal host with a file manager, in one Node process and one HTML 
 
 ```bash
 npm install
-PASSWORD='choose-a-password' ENABLE_TERMINAL=1 npm start
+PASSWORD='choose-a-password' npm start
 ```
 
 Open `http://localhost:3000/gm/` (the app is served under `BASE_URL`, default `/gm`).
@@ -23,7 +23,7 @@ Use Node, not Bun: the PTY library runs under Node only.
 | `PORT` | `3000` | Listen port. |
 | `BASE_URL` | `/gm` | Path prefix the app is served under. |
 | `PASSWORD` | unset | When set, every route requires it (Basic, `Authorization: Bearer`, `?token=`, or the `agentgui_token` cookie). |
-| `ENABLE_TERMINAL` | unset | Terminals are refused unless this is `1` and `PASSWORD` is set. |
+| `ENABLE_TERMINAL` | unset (on) | Terminals are on whenever `PASSWORD` is set. `0` turns them off. |
 | `STARTUP_CWD` | server cwd | Default directory for new terminals and the default Files root when `PASSWORD` is set. |
 | `FS_ROOTS` | unset | Extra Files roots, separated by the platform path delimiter. |
 | `FS_ALLOW_CWD` | unset | `1` exposes the server cwd as a Files root without a password. |
