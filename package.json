@@ -4,6 +4,9 @@
   "description": "Multi-tab browser terminal host with a file manager",
   "type": "module",
   "main": "server.js",
+  "bin": {
+    "agentgui": "server.js"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/AnEntrypoint/agentgui.git"
