@@ -30,6 +30,15 @@ Modelled on AnEntrypoint/sharesies. Keep these properties when changing it:
 - Do not send `Authorization: Bearer` from same-origin app fetches. Behind an nginx Basic-Auth proxy, a Bearer header replaces the browser's cached Basic credentials and the proxy rejects the request before it reaches agentgui. Use `?token=` for app fetches.
 - Mutating methods (POST, PUT, DELETE) need `Sec-Fetch-Site` same-origin or none, or `application/json`, or an Authorization header, and a matching Origin when one is present.
 
+## Behind nginx at /gm/ (test/relay.test.mjs, BASE_URL=/gm)
+
+- `BASE_URL` (default `/gm`) is stripped from HTTP and upgrade paths, so the routes stay `/api/terminal/*` after the prefix is removed. The Origin check compares the Origin host with the Host header, so the proxy must forward `Host $host`.
+- A browser's first Basic login sets `agentgui_token`. That cookie must be accepted by the terminal GET, POST and DELETE routes on the public host with a matching Origin and `Sec-Fetch-Site: same-origin`.
+- The socket is gated only by `?token=` and Origin. An nginx Basic challenge on `/gm/api/terminal/sessions/<16 hex>` makes a browser socket fail, so that location must have `auth_basic off`. The cookie alone must not open the socket (it is refused with 401).
+- `GET /gm/api/terminal/sessions` answering 200 when authenticated is the signal that a terminal build is running. Do not change that status.
+- Without `TRUST_PROXY=1`, every client behind nginx shares the 127.0.0.1 rate-limit bucket, and each failed login adds 100 to it.
+- Node's `fetch` drops a `Host` header override. Tests that need a public Host use `node:http`.
+
 ## Files (lib/http-routes/*)
 
 - Every path goes through `confineToRoots` with `fs.realpath` re-confinement, so a symlink pointing outside an allowed root fails closed.

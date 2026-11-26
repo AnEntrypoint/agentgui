@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,9 +54,10 @@ async function api(s, method, route, body) {
   return { status: r.status, json: await r.json().catch(() => null) };
 }
 
-function openTerminal(s, sid, { token = PASSWORD, origin } = {}) {
-  const headers = origin ? { origin } : {};
-  const ws = new WebSocket(`ws://127.0.0.1:${s.port}/gm/api/terminal/sessions/${sid}?token=${encodeURIComponent(token)}`, { headers });
+function openTerminal(s, sid, { token = PASSWORD, origin, headers: extra = {} } = {}) {
+  const headers = { ...(origin ? { origin } : {}), ...extra };
+  const query = token === null ? '' : `?token=${encodeURIComponent(token)}`;
+  const ws = new WebSocket(`ws://127.0.0.1:${s.port}/gm/api/terminal/sessions/${sid}${query}`, { headers });
   const view = { out: '', exit: null, closed: false, error: null };
   ws.on('message', (data, isBinary) => {
     if (isBinary) view.out += data.toString('utf8');
@@ -191,6 +193,51 @@ test('closing a session via DELETE kills it and it disappears', async () => {
   assert.equal((await api(server, 'DELETE', `/api/terminal/sessions/${s.json.sid}`)).status, 200);
   await waitFor(() => v.closed, 'socket closed after DELETE');
   assert.equal((await api(server, 'GET', `/api/terminal/sessions/${s.json.sid}`)).status, 404);
+});
+
+const PUBLIC_HOST = 'buildesk.acc.l-inc.co.za';
+const publicHeaders = (extra = {}) => ({ Host: PUBLIC_HOST, Origin: `https://${PUBLIC_HOST}`, 'Sec-Fetch-Site': 'same-origin', ...extra });
+
+function viaNginx(method, route, headers, body) {
+  return new Promise((resolve, reject) => {
+    const req = http.request({ host: '127.0.0.1', port: server.port, method, path: route, headers }, (res) => {
+      let text = '';
+      res.on('data', (c) => { text += c; });
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+test('behind nginx an unauthenticated page request gets the Basic challenge', async () => {
+  const r = await viaNginx('GET', '/gm/', publicHeaders());
+  assert.equal(r.status, 401);
+  assert.match(r.headers['www-authenticate'], /^Basic /);
+});
+
+test('a Basic login sets the cookie that terminal routes accept from the public host', async () => {
+  const basic = 'Basic ' + Buffer.from(`abc:${PASSWORD}`).toString('base64');
+  const page = await viaNginx('GET', '/gm/', publicHeaders({ Authorization: basic }));
+  assert.equal(page.status, 200);
+  const cookie = (page.headers['set-cookie'] || []).map((c) => c.split(';')[0]).find((c) => c.startsWith('agentgui_token='));
+  assert.ok(cookie, 'login sets agentgui_token');
+  const created = await viaNginx('POST', '/gm/api/terminal/sessions', publicHeaders({ Cookie: cookie, 'Content-Type': 'application/json' }), JSON.stringify({ cols: 80, rows: 24 }));
+  assert.equal(created.status, 200);
+  const sid = JSON.parse(created.text).sid;
+  assert.equal((await viaNginx('GET', '/gm/api/terminal/sessions', publicHeaders({ Cookie: cookie }))).status, 200);
+  assert.equal((await viaNginx('DELETE', `/gm/api/terminal/sessions/${sid}`, publicHeaders({ Cookie: cookie }))).status, 200);
+});
+
+test('behind nginx the socket accepts the token from the public host and refuses the cookie alone', async () => {
+  const s = await api(server, 'POST', '/api/terminal/sessions', { cols: 80, rows: 24 });
+  const sid = s.json.sid;
+  const withToken = openTerminal(server, sid, { headers: publicHeaders() });
+  await withToken.opened;
+  withToken.ws.close();
+  const cookieOnly = openTerminal(server, sid, { token: null, headers: publicHeaders({ Cookie: `agentgui_token=${PASSWORD}` }) });
+  await assert.rejects(cookieOnly.opened, /HTTP 401/);
+  await api(server, 'DELETE', `/api/terminal/sessions/${sid}`);
 });
 
 test('terminals stay disabled with ENABLE_TERMINAL=0', async () => {
