@@ -18,7 +18,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node --test test/relay.test.mjs"
+    "test": "node --test test/relay.test.mjs",
+    "check:gm-terminal": "node scripts/witness-gm-terminal.mjs",
+    "check": "npm test && npm run check:gm-terminal"
   },
   "engines": {
     "node": ">=20"

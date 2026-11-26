@@ -64,4 +64,4 @@ Modelled on AnEntrypoint/sharesies. Keep these properties when changing it:
 - Comments are forbidden in code. Anything that cannot be expressed in code belongs here, compressed to a rule.
 - Work on main in the shared checkout. Do not clone scratch copies.
 - Commit and push only when the task asks, under the lanmower identity.
-- Run `npm test` before reporting a server change as done. Run `node --check` on any JS file you touched.
+- Run `npm run check` before reporting a server change as done. It runs `npm test` and the `/gm/` terminal witness (`scripts/witness-gm-terminal.mjs`), which spawns its own server with a random password and never touches a live host. Run `node --check` on any JS file you touched.
