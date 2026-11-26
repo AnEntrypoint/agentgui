@@ -36,7 +36,7 @@ Modelled on AnEntrypoint/sharesies. Keep these properties when changing it:
 - A browser's first Basic login sets `agentgui_token`. That cookie must be accepted by the terminal GET, POST and DELETE routes on the public host with a matching Origin and `Sec-Fetch-Site: same-origin`.
 - The socket is gated only by `?token=` and Origin. An nginx Basic challenge on `/gm/api/terminal/sessions/<16 hex>` makes a browser socket fail, so that location must have `auth_basic off`. The cookie alone must not open the socket (it is refused with 401).
 - `GET /gm/api/terminal/sessions` answering 200 when authenticated is the signal that a terminal build is running. Do not change that status.
-- Without `TRUST_PROXY=1`, every client behind nginx shares the 127.0.0.1 rate-limit bucket, and each failed login adds 100 to it.
+- The rate-limit key is the client address. `X-Forwarded-For` is read (its last hop, which nginx appends) only when the socket peer is loopback, so nginx on the same host gets per-client buckets. `TRUST_PROXY=1` forces it on and `TRUST_PROXY=0` turns it off. Without this, every client behind nginx shares one 127.0.0.1 bucket, and failed logins from one client refuse all others with 429. A local process that reaches port 9897 directly can choose its own key; that is accepted.
 - Node's `fetch` drops a `Host` header override. Tests that need a public Host use `node:http`.
 
 ## Files (lib/http-routes/*)

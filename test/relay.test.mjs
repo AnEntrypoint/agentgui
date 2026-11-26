@@ -25,6 +25,7 @@ function freePort() {
 async function startServer({ terminals }) {
   const port = await freePort();
   const env = { ...process.env, PORT: String(port), BASE_URL: '/gm', STARTUP_CWD: root, PASSWORD };
+  delete env.TRUST_PROXY;
   if (terminals) delete env.ENABLE_TERMINAL; else env.ENABLE_TERMINAL = '0';
   const child = spawn(process.execPath, ['server.js'], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = '';
@@ -198,9 +199,9 @@ test('closing a session via DELETE kills it and it disappears', async () => {
 const PUBLIC_HOST = 'buildesk.acc.l-inc.co.za';
 const publicHeaders = (extra = {}) => ({ Host: PUBLIC_HOST, Origin: `https://${PUBLIC_HOST}`, 'Sec-Fetch-Site': 'same-origin', ...extra });
 
-function viaNginx(method, route, headers, body) {
+function viaNginx(s, method, route, headers, body) {
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port: server.port, method, path: route, headers }, (res) => {
+    const req = http.request({ host: '127.0.0.1', port: s.port, method, path: route, headers }, (res) => {
       let text = '';
       res.on('data', (c) => { text += c; });
       res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, text }));
@@ -211,22 +212,22 @@ function viaNginx(method, route, headers, body) {
 }
 
 test('behind nginx an unauthenticated page request gets the Basic challenge', async () => {
-  const r = await viaNginx('GET', '/gm/', publicHeaders());
+  const r = await viaNginx(server, 'GET', '/gm/', publicHeaders());
   assert.equal(r.status, 401);
   assert.match(r.headers['www-authenticate'], /^Basic /);
 });
 
 test('a Basic login sets the cookie that terminal routes accept from the public host', async () => {
   const basic = 'Basic ' + Buffer.from(`abc:${PASSWORD}`).toString('base64');
-  const page = await viaNginx('GET', '/gm/', publicHeaders({ Authorization: basic }));
+  const page = await viaNginx(server, 'GET', '/gm/', publicHeaders({ Authorization: basic }));
   assert.equal(page.status, 200);
   const cookie = (page.headers['set-cookie'] || []).map((c) => c.split(';')[0]).find((c) => c.startsWith('agentgui_token='));
   assert.ok(cookie, 'login sets agentgui_token');
-  const created = await viaNginx('POST', '/gm/api/terminal/sessions', publicHeaders({ Cookie: cookie, 'Content-Type': 'application/json' }), JSON.stringify({ cols: 80, rows: 24 }));
+  const created = await viaNginx(server, 'POST', '/gm/api/terminal/sessions', publicHeaders({ Cookie: cookie, 'Content-Type': 'application/json' }), JSON.stringify({ cols: 80, rows: 24 }));
   assert.equal(created.status, 200);
   const sid = JSON.parse(created.text).sid;
-  assert.equal((await viaNginx('GET', '/gm/api/terminal/sessions', publicHeaders({ Cookie: cookie }))).status, 200);
-  assert.equal((await viaNginx('DELETE', `/gm/api/terminal/sessions/${sid}`, publicHeaders({ Cookie: cookie }))).status, 200);
+  assert.equal((await viaNginx(server, 'GET', '/gm/api/terminal/sessions', publicHeaders({ Cookie: cookie }))).status, 200);
+  assert.equal((await viaNginx(server, 'DELETE', `/gm/api/terminal/sessions/${sid}`, publicHeaders({ Cookie: cookie }))).status, 200);
 });
 
 test('behind nginx the socket accepts the token from the public host and refuses the cookie alone', async () => {
@@ -238,6 +239,20 @@ test('behind nginx the socket accepts the token from the public host and refuses
   const cookieOnly = openTerminal(server, sid, { token: null, headers: publicHeaders({ Cookie: `agentgui_token=${PASSWORD}` }) });
   await assert.rejects(cookieOnly.opened, /HTTP 401/);
   await api(server, 'DELETE', `/api/terminal/sessions/${sid}`);
+});
+
+test('behind the proxy one client failed logins do not refuse another client', async () => {
+  const s = await startServer({ terminals: true });
+  try {
+    const basic = (pw) => 'Basic ' + Buffer.from(`abc:${pw}`).toString('base64');
+    for (let i = 0; i < 40; i += 1) {
+      await viaNginx(s, 'GET', '/gm/', publicHeaders({ Authorization: basic('wrong'), 'X-Forwarded-For': '203.0.113.7' }));
+    }
+    const other = await viaNginx(s, 'GET', '/gm/', publicHeaders({ Authorization: basic(PASSWORD), 'X-Forwarded-For': '203.0.113.8' }));
+    assert.equal(other.status, 200);
+  } finally {
+    stopServer(s);
+  }
 });
 
 test('terminals stay disabled with ENABLE_TERMINAL=0', async () => {
